@@ -1,0 +1,93 @@
+# Ghosst — CI/CD: every push to main → test → auto-bump build number
+# → build release APK → publish a GitHub Release (always marked "latest",
+# fixed asset name so the download URL never changes).
+name: Release APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write # create releases + push the version-bump commit
+
+# One release build at a time — versions stay monotonic.
+concurrency:
+  group: release-apk
+  cancel-in-progress: false
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Quality gate — a failing test stops the release (and the bump).
+      - name: Run tests
+        run: flutter test
+
+      # version: 1.0.0+3 → 1.0.0+4 (x.y.z is bumped by hand, +N is CI's).
+      # The [skip ci] tag stops this commit from triggering another build.
+      - name: Bump build number
+        run: |
+          VER=$(grep -E '^version:' pubspec.yaml | awk '{print $2}')
+          BASE=${VER%%+*}
+          BUILD=${VER##*+}
+          if [ "$BASE" = "$VER" ]; then BUILD=0; fi
+          NEW=$((BUILD + 1))
+          sed -i "s/^version: .*/version: ${BASE}+${NEW}/" pubspec.yaml
+          echo "APP_VERSION=${BASE}+${NEW}" >> "$GITHUB_ENV"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pubspec.yaml
+          git commit -m "chore: bump version to ${BASE}+${NEW} [skip ci]"
+          for i in 1 2 3; do
+            if git push origin HEAD:main; then break; fi
+            if [ "$i" = "3" ]; then echo "push failed 3x" >&2; exit 1; fi
+            git pull --rebase origin main
+            sleep 5
+          done
+          echo "BUMP_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      # Fixed name → stable download URL: .../releases/latest/download/Ghosst.apk
+      - name: Collect APK
+        run: cp build/app/outputs/flutter-apk/app-release.apk Ghosst.apk
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TAG="v${APP_VERSION}"
+          NOTES="Ghosst **v${APP_VERSION}**"
+          NOTES="${NOTES}"$'\n'"Commit: \`${GITHUB_SHA:0:7}\`"
+          NOTES="${NOTES}"$'\n'"Build: ${RUN_URL}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # Re-run of an already-published version — replace the asset.
+            gh release upload "$TAG" Ghosst.apk --clobber
+          else
+            gh release create "$TAG" Ghosst.apk \
+              --title "Ghosst v${APP_VERSION}" \
+              --notes "$NOTES" \
+              --target "$BUMP_SHA" \
+              --latest
+          fi

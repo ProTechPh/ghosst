@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand canvas pulled from the Ghosst emblem (teal-black). -->
+    <color name="splash_bg">#050B0E</color>
+    <color name="ic_launcher_background">#050B0E</color>
+</resources>
