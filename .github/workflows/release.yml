@@ -123,15 +123,30 @@ jobs:
           BUILD="${APP_VERSION##*+}"
 
           HEADERS=(-H "X-Appwrite-Project: 6ac4baef0010879da982" -H "X-Appwrite-Key: ${APPWRITE_API_KEY}")
-          DOCS="https://sgp.cloud.appwrite.io/v1/databases/ghosst/collections/updates/documents"
+          # Support both standard cloud.appwrite.io and sgp region
+          ENDPOINT="https://cloud.appwrite.io/v1"
+          DOCS="${ENDPOINT}/databases/ghosst/collections/updates/documents"
 
           # Validate the key before doing anything — a 401/403 means the secret
           # needs to be refreshed in the repo settings; warn and skip rather than
           # failing a release that already succeeded.
-          HTTP=$(curl -sS -o /dev/null -w "%{http_code}" "${HEADERS[@]}" "${DOCS}?limit=1")
+          HTTP_BODY=$(curl -sS -w "\nHTTP_STATUS:%{http_code}" "${HEADERS[@]}" "${DOCS}?limit=1" || true)
+          HTTP=$(echo "$HTTP_BODY" | grep "HTTP_STATUS:" | cut -d':' -f2)
+          BODY_RESP=$(echo "$HTTP_BODY" | grep -v "HTTP_STATUS:")
+
           if [ "$HTTP" = "401" ] || [ "$HTTP" = "403" ]; then
-            echo "::warning::Appwrite API key is invalid or lacks permission (HTTP ${HTTP}). Refresh the APPWRITE_API_KEY repo secret. Forced-update gate NOT published — the GitHub Release above is unaffected."
-            exit 0
+            # Try SGP endpoint if standard failed with 401
+            SGP_ENDPOINT="https://sgp.cloud.appwrite.io/v1"
+            SGP_DOCS="${SGP_ENDPOINT}/databases/ghosst/collections/updates/documents"
+            SGP_HTTP_BODY=$(curl -sS -w "\nHTTP_STATUS:%{http_code}" "${HEADERS[@]}" "${SGP_DOCS}?limit=1" || true)
+            SGP_HTTP=$(echo "$SGP_HTTP_BODY" | grep "HTTP_STATUS:" | cut -d':' -f2)
+            if [ "$SGP_HTTP" = "200" ]; then
+              DOCS="$SGP_DOCS"
+              HTTP="200"
+            else
+              echo "::warning::Appwrite API check failed (global: HTTP ${HTTP}, sgp: HTTP ${SGP_HTTP}). Response: ${BODY_RESP}. Forced-update gate NOT published."
+              exit 0
+            fi
           fi
           if [ "$HTTP" != "200" ]; then
             echo "::warning::Appwrite health-check returned HTTP ${HTTP}. Forced-update gate NOT published."
