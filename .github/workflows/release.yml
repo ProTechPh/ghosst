@@ -125,6 +125,19 @@ jobs:
           HEADERS=(-H "X-Appwrite-Project: 6ac4baef0010879da982" -H "X-Appwrite-Key: ${APPWRITE_API_KEY}")
           DOCS="https://sgp.cloud.appwrite.io/v1/databases/ghosst/collections/updates/documents"
 
+          # Validate the key before doing anything — a 401/403 means the secret
+          # needs to be refreshed in the repo settings; warn and skip rather than
+          # failing a release that already succeeded.
+          HTTP=$(curl -sS -o /dev/null -w "%{http_code}" "${HEADERS[@]}" "${DOCS}?limit=1")
+          if [ "$HTTP" = "401" ] || [ "$HTTP" = "403" ]; then
+            echo "::warning::Appwrite API key is invalid or lacks permission (HTTP ${HTTP}). Refresh the APPWRITE_API_KEY repo secret. Forced-update gate NOT published — the GitHub Release above is unaffected."
+            exit 0
+          fi
+          if [ "$HTTP" != "200" ]; then
+            echo "::warning::Appwrite health-check returned HTTP ${HTTP}. Forced-update gate NOT published."
+            exit 0
+          fi
+
           # Retire previous announcements — exactly one active doc should exist.
           IDS=$(curl -sS -f "${HEADERS[@]}" "${DOCS}?limit=100" | jq -r --arg k '$id' '.documents[] | .[$k]')
           for id in $IDS; do
