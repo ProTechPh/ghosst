@@ -49,6 +49,11 @@ dependency_overrides:
   # against current Flutter (removed v1 embedding 'Registrar' API). 5.x keeps
   # the FlutterWebAuth2.authenticate / FlutterWebAuth2Options API appwrite uses.
   flutter_web_auth_2: ^5.1.0
+  # file_picker 10.x requires web ^1.1.0; appwrite 12.x resolves web ^0.5.0
+  # (via web_socket_channel 2.4.5). On Android the web package is dead code
+  # (conditional on dart.library.html), so forcing 1.x is safe for APK builds.
+  web: ^1.1.0
+  web_socket_channel: ^3.0.0
 
 dev_dependencies:
   flutter_test:
