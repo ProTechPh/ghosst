@@ -179,8 +179,10 @@ At launch the app reads the active announcement; when `versionCode` is
 higher than its own build number the whole UI is replaced by the blocking
 update gate (in-app download with progress → system install prompt — there
 is no dismiss; cancelling the install sheet lands back on the gate).
-Publish or stop announcements from **Admin → App update**: publishing
-retires the previous announcement, so exactly one `active` doc should exist.
+Each publish retires the previous announcement, so exactly one `active`
+doc should exist. There is no publish UI in the app anymore — CI is the
+publisher (below), or insert/delete `updates` docs from the Appwrite
+console if you ever need to do it by hand.
 
 **CI publishes this automatically.** Every push to `main` that ships a
 release runs `.github/workflows/release.yml` → *Open forced-update gate*:
@@ -199,8 +201,8 @@ the fixed download URL
    MediaFire page) if you don't want to serve the APK from GitHub.
 
 Until the secret exists the step is skipped (the release itself still
-succeeds) and you can keep publishing manually from **Admin → App update** —
-which also stays useful as a manual override.
+succeeds) and no gate opens — insert an `updates` doc from the Appwrite
+console if you need to force an update before the secret is set.
 
 ## 3. Team
 
@@ -341,10 +343,10 @@ flutter run
 - [ ] `claim` function redeployed (it must contain the app-claim route) and
       each published APK/file product has a working MediaFire link.
 - [ ] `updates` collection created (Read → users; Create/Delete → admins)
-      before publishing any forced update from the Admin tab.
+      before any release that should open the forced-update gate.
 - [ ] Repo secret `APPWRITE_API_KEY` set, so releases **auto-open** the
-      forced-update gate (without it CI skips the gate step — publish
-      manually from Admin → App update instead).
+      forced-update gate (without it CI skips the gate step — insert the
+      `updates` doc from the Appwrite console instead).
 - [ ] Product costs / reward amount reviewed.
 
 ## Troubleshooting

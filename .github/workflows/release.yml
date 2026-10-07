@@ -91,6 +91,7 @@ jobs:
               --notes "$NOTES" \
               --target "$BUMP_SHA" \
               --latest
+          fi
 
       # Auto-open the forced-update gate so every older build blocks at
       # launch and downloads this APK — no manual Admin step.

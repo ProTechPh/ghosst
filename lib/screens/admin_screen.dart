@@ -63,14 +63,6 @@ class _AdminScreenState extends State<AdminScreen> {
   final editLink = TextEditingController();
   final editDurations = TextEditingController();
 
-  // ---- Forced app update ----
-  /// Currently published announcement (null = nobody is being forced).
-  UpdateInfo? _currentUpdate;
-  final updVersion = TextEditingController();
-  final updName = TextEditingController();
-  final updUrl = TextEditingController();
-  final updMessage = TextEditingController();
-
   /// Local image paths picked for the "New product" form (uploaded on create).
   List<String> pickedPaths = [];
 
@@ -98,10 +90,6 @@ class _AdminScreenState extends State<AdminScreen> {
     editFileSize.dispose();
     editLink.dispose();
     editDurations.dispose();
-    updVersion.dispose();
-    updName.dispose();
-    updUrl.dispose();
-    updMessage.dispose();
     super.dispose();
   }
 
@@ -181,19 +169,15 @@ class _AdminScreenState extends State<AdminScreen> {
       message = '';
     });
     try {
-      // Announcement for the App update card — best-effort, never fails load.
-      final updFuture = Backend.checkForcedUpdate();
       final results = await Future.wait<Object>([
         Backend.allProducts(),
         // Best-effort: the panel still works if `keys` can't be read.
         Backend.listKeys().catchError((_) => <StockEntry>[]),
       ]);
-      final upd = await updFuture;
       if (!mounted) return;
       setState(() {
         products = results[0] as List<Product>;
         keys = results[1] as List<StockEntry>;
-        _currentUpdate = upd;
         loading = false;
       });
     } catch (e) {
@@ -1225,67 +1209,6 @@ class _AdminScreenState extends State<AdminScreen> {
     ],
   );
 
-  /// Publishes the forced-update announcement (retires any previous one).
-  Future<void> _publishUpdate() async {
-    final code = int.tryParse(updVersion.text.trim());
-    final url = updUrl.text.trim();
-    if (code == null || code <= 0) {
-      setState(() => message = 'Enter the new build number (a whole number).');
-      return;
-    }
-    if (url.isEmpty) {
-      setState(() => message = 'Paste the download link for the new APK.');
-      return;
-    }
-    setState(() {
-      busy = true;
-      message = '';
-    });
-    try {
-      await Backend.publishUpdate(
-        versionCode: code,
-        versionName: updName.text.trim(),
-        url: url,
-        message: updMessage.text.trim(),
-      );
-      updVersion.clear();
-      updName.clear();
-      updUrl.clear();
-      updMessage.clear();
-      await _load();
-      if (mounted) {
-        setState(
-          () => message =
-              'Forcing build $code — every older version now '
-              'blocks at launch.',
-        );
-      }
-    } catch (e) {
-      if (mounted) setState(() => message = 'Publish failed: $e');
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
-  /// Stops forcing the update — older builds are let back in.
-  Future<void> _stopUpdate() async {
-    setState(() {
-      busy = true;
-      message = '';
-    });
-    try {
-      await Backend.clearUpdates();
-      await _load();
-      if (mounted) {
-        setState(() => message = 'Update requirement removed.');
-      }
-    } catch (e) {
-      if (mounted) setState(() => message = 'Could not stop: $e');
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     if (loading) return const Center(child: CircularProgressIndicator());
@@ -1452,107 +1375,6 @@ class _AdminScreenState extends State<AdminScreen> {
           ),
           const SizedBox(height: 10),
         ],
-
-        const SizedBox(height: 16),
-
-        // ---- Forced app update ----
-        SectionLabel('App update'),
-        GlowCard(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (_currentUpdate == null)
-                const Text(
-                  'Not forcing any update right now.',
-                  style: TextStyle(color: AppColors.textDim, fontSize: 13),
-                )
-              else ...[
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.system_update_rounded,
-                      size: 19,
-                      color: AppColors.gold,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Forcing build ${_currentUpdate!.versionCode}'
-                        '${_currentUpdate!.versionName.trim().isEmpty ? '' : ' (${_currentUpdate!.versionName.trim()})'}',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 5),
-                const Padding(
-                  padding: EdgeInsets.only(left: 29),
-                  child: Text(
-                    'Blocks launch on every older build until installed.',
-                    style: TextStyle(color: AppColors.textDim, fontSize: 12),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                NeonButton(
-                  dense: true,
-                  outline: true,
-                  glow: false,
-                  onPressed: busy ? null : _stopUpdate,
-                  child: const Text('Stop forcing update'),
-                ),
-                Divider(
-                  height: 26,
-                  color: Colors.white.withValues(alpha: 0.08),
-                ),
-              ],
-              TextField(
-                controller: updVersion,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  hintText: 'New build number (from 1.0.0+N → N)',
-                  prefixIcon: Icon(Icons.numbers),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: updName,
-                decoration: const InputDecoration(
-                  hintText: 'Version label — e.g. 1.0.1',
-                  prefixIcon: Icon(Icons.label_outlined),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: updUrl,
-                decoration: const InputDecoration(
-                  hintText: 'Download link for the new APK',
-                  prefixIcon: Icon(Icons.link),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: updMessage,
-                minLines: 2,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  hintText: "What's new (optional) — shown on the gate",
-                  prefixIcon: Icon(Icons.notes),
-                ),
-              ),
-              const SizedBox(height: 12),
-              NeonButton(
-                expand: true,
-                dense: true,
-                onPressed: busy ? null : _publishUpdate,
-                child: const Text('Publish forced update'),
-              ),
-            ],
-          ),
-        ),
 
         const SizedBox(height: 16),
 
