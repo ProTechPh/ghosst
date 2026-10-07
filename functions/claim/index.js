@@ -4,7 +4,8 @@
  * Routes on the request:
  *   - query ?signature=<AdMob SSV signature>               -> verified reward callback
  *   - body { action: "simulate" }                          -> rejected (debug path removed)
- *   - body { productId }                                   -> license claim
+ *   - body { productId }                                   -> license claim (type=key)
+ *                                                          -> download unlock (type=apk|file)
  *
  * Called by the Flutter app via Functions.createExecution (synchronous) and
  * by Google AdMob via the function's HTTP domain URL.
@@ -15,8 +16,10 @@
  *
  * Env vars: COINS_PER_REWARD (fallback reward when callback omits reward_amount)
  *
- * Returns: { ok: true, key } | { ok: false, error }   (claim)
- *          text "ok" | "error" ...                    (SSV, per Google spec)
+ * Returns: { ok: true, key }                     (license claim)
+ *          { ok: true, downloadUrl, type }       (app-store claim)
+ *          { ok: false, error }                  (either)
+ *          text "ok" | "error" ...               (SSV, per Google spec)
  */
 
 const crypto = require('crypto');
@@ -31,6 +34,9 @@ const COL = {
   keys: 'keys',
   claims: 'claims',
   adRewards: 'ad_rewards',
+  // MediaFire links for apk/file products (team:admins read/write only —
+  // this function is the only path that hands a link to a purchaser).
+  appFiles: 'app_files',
 };
 
 const GOOGLE_CERTS_URL = 'https://www.googleapis.com/identity/v1/certs';
@@ -254,6 +260,81 @@ function apiId() {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+/* ------------------------------------------------------------------ */
+/* Global critical-section lock (ad_rewards doc id `crit`)             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Every mutation of `coins` or key stock runs one-at-a-time behind this
+ * mutex. Balances are read-modify-write: without it, two truly simultaneous
+ * requests (claim × claim, claim × ad reward) could both pass the balance
+ * check from the SAME snapshot — granting two keys for one payment, or
+ * letting a reward overwrite a just-spent balance. A modded /
+ * GameGuardian-style client can only *fire requests faster*; serializing
+ * them costs legitimate users nothing and gives the cheater nothing.
+ *
+ * Mechanics (lives in `ad_rewards`, which is function-only — no setup):
+ *   acquire = insert doc `crit` (409 = held by someone else → wait),
+ *   release = delete it (best effort; `finally` always runs),
+ *   crashed holder = taken over after 30s.
+ * Waits up to ~2.25s for the holder, then gives up so the caller can ask
+ * the user to try again.
+ */
+const LOCK_ID = 'crit';
+const LOCK_STALE_MS = 30 * 1000;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function acquireLock(key, uid) {
+  const path = `/databases/${DB}/collections/${COL.adRewards}/documents`;
+  for (let attempt = 0; attempt < 15; attempt++) {
+    try {
+      await api('POST', path, {
+        key,
+        body: {
+          documentId: LOCK_ID,
+          data: {
+            userId: uid,
+            reward: 0,
+            nonce: 'LOCK',
+            createdAt: new Date().toISOString(),
+          },
+        },
+      });
+      return true;
+    } catch (e) {
+      if (e.status !== 409) throw e;
+      // Held — steal it back only when the holder crashed mid-flight.
+      try {
+        const doc = await api('GET', `${path}/${LOCK_ID}`, { key });
+        const age = Date.now() - Date.parse(doc.$createdAt);
+        if (!Number.isNaN(age) && age > LOCK_STALE_MS) {
+          await api('DELETE', `${path}/${LOCK_ID}`, { key });
+          continue; // removed — next iteration re-inserts
+        }
+      } catch (_) {
+        continue; // released/recreated between our calls — retry at once
+      }
+      await sleep(150);
+    }
+  }
+  return false;
+}
+
+async function releaseLock(key) {
+  try {
+    await api(
+      'DELETE',
+      `/databases/${DB}/collections/${COL.adRewards}/documents/${LOCK_ID}`,
+      { key },
+    );
+  } catch (_) {
+    // Best effort — the 30s stale takeover clears a leaked lock.
+  }
+}
+
 /** Create the profile doc on first reward. */
 async function ensureProfile(key, uid) {
   try {
@@ -306,6 +387,89 @@ async function credit(key, uid, amount) {
 /* Claim: spend coins, assign the oldest available key                 */
 /* ------------------------------------------------------------------ */
 
+/** Deduct [cost] coins from the user's profile (creating it on first use). */
+async function spendCoins(key, uid, user, coins, cost, profileExists) {
+  if (cost <= 0) return;
+  if (!profileExists) {
+    await api('POST', `/databases/${DB}/collections/${COL.profiles}/documents`, {
+      key,
+      body: {
+        documentId: uid,
+        data: { coins: Math.max(0, coins - cost), displayName: user.name || '' },
+        permissions: [`read("user:${uid}")`],
+      },
+    });
+    return;
+  }
+  await api(
+    'PATCH',
+    `/databases/${DB}/collections/${COL.profiles}/documents/${uid}`,
+    {
+      key,
+      body: {
+        data: { coins: coins - cost },
+        permissions: [`read("user:${uid}")`],
+      },
+    },
+  );
+}
+
+/** Write a `claims` document readable only by its owner. */
+async function recordClaim(key, uid, data) {
+  await api('POST', `/databases/${DB}/collections/${COL.claims}/documents`, {
+    key,
+    body: {
+      documentId: apiId(),
+      data,
+      permissions: [`read("user:${uid}")`],
+    },
+  });
+}
+
+/** App-store purchase: spend coins, unlock the MediaFire download link. */
+async function handleAppClaim(ctx, key, opts) {
+  const { log } = ctx;
+  const { uid, user, product, productId, cost, coins, profileExists, type } =
+    opts;
+
+  const list = await api(
+    'GET',
+    `/databases/${DB}/collections/${COL.appFiles}/documents`,
+    {
+      key,
+      queries: [
+        JSON.stringify({ method: 'equal', attribute: 'productId', values: [productId] }),
+        JSON.stringify({ method: 'limit', values: [1] }),
+      ],
+    },
+  );
+  const file = list.documents && list.documents[0];
+  const downloadUrl = file && file.url ? String(file.url) : '';
+  if (!downloadUrl) {
+    return ctx.res.json(
+      { ok: false, error: 'Download not configured' },
+      200,
+    );
+  }
+
+  await spendCoins(key, uid, user, coins, cost, profileExists);
+
+  const now = new Date().toISOString();
+  await recordClaim(key, uid, {
+    userId: uid,
+    productId,
+    productName: product.name || '',
+    keyId: (file.$id || productId).slice(0, 36),
+    keyText: type, // 'apk' | 'file' — keys store the license text instead
+    cost,
+    createdAt: now,
+    downloadUrl,
+  });
+
+  log(`app claim ok user=${uid} product=${productId} type=${type} cost=${cost}`);
+  return ctx.res.json({ ok: true, downloadUrl, type, cost });
+}
+
 async function handleClaim(context, key, params) {
   const { req, res, log, error } = context;
 
@@ -340,7 +504,66 @@ async function handleClaim(context, key, params) {
   if (product.active === false) {
     return res.json({ ok: false, error: 'Product disabled' }, 200);
   }
-  const cost = Number(product.cost || 0);
+  let cost = Number(product.cost || 0);
+
+  // 2b. Duration option (key products with admin-defined pools).
+  const duration = String(params.duration || '').trim();
+  let durationLabel = '';
+  if (duration) {
+    let options = [];
+    try {
+      options = product.durations ? JSON.parse(product.durations) : [];
+    } catch (_) {
+      options = [];
+    }
+    const opt = Array.isArray(options)
+      ? options.find(
+          (o) => o && String(o.label || '').trim() === duration,
+        )
+      : null;
+    if (!opt) {
+      return res.json({ ok: false, error: 'Invalid duration option' }, 200);
+    }
+    durationLabel = String(opt.label || '').trim();
+    if (opt.cost != null && Number(opt.cost) >= 0) {
+      cost = Number(opt.cost);
+    }
+  }
+
+  // Serialize every coins/key mutation. Coins are read-modify-write, so two
+  // simultaneous requests could both pass the balance check from the same
+  // snapshot and grant two keys for one payment (or let an ad reward
+  // overwrite a just-spent balance). A modded client can only fire requests
+  // faster — running them one at a time costs legitimate users nothing.
+  const locked = await acquireLock(key, uid);
+  if (!locked) {
+    return res.json(
+      { ok: false, error: 'Busy right now — try again in a second' },
+      200,
+    );
+  }
+  try {
+    return await finishClaim(context, key, {
+      uid,
+      user,
+      product,
+      productId,
+      cost,
+      durationLabel,
+    });
+  } finally {
+    await releaseLock(key);
+  }
+}
+
+/**
+ * Balance check → key pick → spend → claim record. Every line here mutates
+ * coins or stock, so it only ever runs under the global lock (see
+ * [acquireLock]); [handleClaim] wraps this call and releases afterwards.
+ */
+async function finishClaim(context, key, opts) {
+  const { res, log } = context;
+  const { uid, user, product, productId, cost, durationLabel } = opts;
 
   // 3. Load profile (coins).
   let coins = 0;
@@ -364,6 +587,21 @@ async function handleClaim(context, key, params) {
     );
   }
 
+  // 3b. App-store product (APK / file) → unlock the MediaFire download.
+  const type = String(product.type || 'key');
+  if (type !== 'key') {
+    return handleAppClaim(context, key, {
+      uid,
+      user,
+      product,
+      productId,
+      cost,
+      coins,
+      profileExists,
+      type,
+    });
+  }
+
   // 4. Pick the oldest available key.
   const list = await api(
     'GET',
@@ -374,13 +612,31 @@ async function handleClaim(context, key, params) {
         // Modern Appwrite expects JSON query objects (see appwrite lib/query.dart)
         JSON.stringify({ method: 'equal', attribute: 'productId', values: [productId] }),
         JSON.stringify({ method: 'equal', attribute: 'status', values: ['available'] }),
+        // Duration pool: only keys the admin tagged for this option.
+        ...(durationLabel
+          ? [
+              JSON.stringify({
+                method: 'equal',
+                attribute: 'duration',
+                values: [durationLabel],
+              }),
+            ]
+          : []),
         JSON.stringify({ method: 'orderAsc', attribute: '$createdAt' }),
         JSON.stringify({ method: 'limit', values: [1] }),
       ],
     },
   );
   if (!list.documents || list.documents.length === 0) {
-    return res.json({ ok: false, error: 'Out of stock' }, 200);
+    return res.json(
+      {
+        ok: false,
+        error: durationLabel
+          ? `Out of stock for ${durationLabel}`
+          : 'Out of stock',
+      },
+      200,
+    );
   }
   const keyDoc = list.documents[0];
   const keyText = keyDoc.key;
@@ -400,48 +656,24 @@ async function handleClaim(context, key, params) {
   );
 
   // 6. Deduct coins (create profile on first claim).
-  if (!profileExists) {
-    await api('POST', `/databases/${DB}/collections/${COL.profiles}/documents`, {
-      key,
-      body: {
-        documentId: uid,
-        data: { coins: Math.max(0, coins - cost), displayName: user.name || '' },
-        permissions: [`read("user:${uid}")`],
-      },
-    });
-  } else {
-    await api(
-      'PATCH',
-      `/databases/${DB}/collections/${COL.profiles}/documents/${uid}`,
-      {
-        key,
-        body: {
-          data: { coins: coins - cost },
-          permissions: [`read("user:${uid}")`],
-        },
-      },
-    );
-  }
+  await spendCoins(key, uid, user, coins, cost, profileExists);
 
   // 7. Record the claim (readable only by the owner).
-  await api('POST', `/databases/${DB}/collections/${COL.claims}/documents`, {
-    key,
-    body: {
-      documentId: apiId(),
-      data: {
-        userId: uid,
-        productId,
-        productName: product.name || '',
-        keyId: keyDoc.$id,
-        keyText,
-        cost,
-        createdAt: now,
-      },
-      permissions: [`read("user:${uid}")`],
-    },
+  await recordClaim(key, uid, {
+    userId: uid,
+    productId,
+    productName: product.name || '',
+    keyId: keyDoc.$id,
+    keyText,
+    cost,
+    createdAt: now,
+    ...(durationLabel ? { duration: durationLabel } : {}),
   });
 
-  log(`claim ok user=${uid} product=${productId} cost=${cost}`);
+  log(
+    `claim ok user=${uid} product=${productId} cost=${cost}` +
+      (durationLabel ? ` duration=${durationLabel}` : ''),
+  );
   return res.json({ ok: true, key: keyText, cost });
 }
 
@@ -523,39 +755,64 @@ async function handleReward(context, key, params) {
       (legacy && (legacy.transaction_id || legacy.nonce || legacy.jti)) ||
       '';
 
-    // Idempotency: one ad_rewards document per reward grant.
-    const dedupeKey =
-      docIdFrom(txId) ||
-      docIdFrom(`${uid}-${tsRaw || Date.now()}`) ||
-      `cb-${Date.now()}`;
-
-    // Try to record the callback first — duplicate = already credited.
-    try {
-      await api('POST', `/databases/${DB}/collections/${COL.adRewards}/documents`, {
-        key,
-        body: {
-          documentId: dedupeKey,
-          data: {
-            userId: uid,
-            reward: amount,
-            nonce: String(txId || ''),
-            adUnit: String(params.ad_unit || ''),
-            eventTime: String(tsRaw || ''),
-            createdAt: new Date().toISOString(),
-          },
-        },
-      });
-    } catch (e) {
-      if (e.status === 409) {
-        log(`duplicate SSV callback ignored (${dedupeKey})`);
-        return res.text('ok', 200);
-      }
-      throw e;
+    // Serialize against claims & other rewards: credit() is a
+    // read-modify-write of the same balance every mutation touches.
+    const locked = await acquireLock(key, uid);
+    if (!locked) {
+      // Non-200 → Google retries the callback shortly (dedupe untouched).
+      return res.text('error', 500);
     }
+    try {
+      // Idempotency: one ad_rewards document per reward grant.
+      const dedupeKey =
+        docIdFrom(txId) ||
+        docIdFrom(`${uid}-${tsRaw || Date.now()}`) ||
+        `cb-${Date.now()}`;
 
-    const total = await credit(key, uid, amount);
-    log(`reward user=${uid} +${amount} total=${total} nonce=${dedupeKey}`);
-    return res.text('ok', 200);
+      // Try to record the callback first — duplicate = already credited.
+      try {
+        await api('POST', `/databases/${DB}/collections/${COL.adRewards}/documents`, {
+          key,
+          body: {
+            documentId: dedupeKey,
+            data: {
+              userId: uid,
+              reward: amount,
+              nonce: String(txId || ''),
+              adUnit: String(params.ad_unit || ''),
+              eventTime: String(tsRaw || ''),
+              createdAt: new Date().toISOString(),
+            },
+          },
+        });
+      } catch (e) {
+        if (e.status === 409) {
+          log(`duplicate SSV callback ignored (${dedupeKey})`);
+          return res.text('ok', 200);
+        }
+        throw e;
+      }
+
+      let total;
+      try {
+        total = await credit(key, uid, amount);
+      } catch (ce) {
+        // Never strand the dedupe record in front of a failed credit —
+        // drop it so Google's retry can run the grant again.
+        try {
+          await api(
+            'DELETE',
+            `/databases/${DB}/collections/${COL.adRewards}/documents/${dedupeKey}`,
+            { key },
+          );
+        } catch (_) {}
+        throw ce;
+      }
+      log(`reward user=${uid} +${amount} total=${total} nonce=${dedupeKey}`);
+      return res.text('ok', 200);
+    } finally {
+      await releaseLock(key);
+    }
   } catch (e) {
     error(e && e.stack ? e.stack : String(e));
     // Unexpected failure: 500 lets Google retry the callback (up to 5×).

@@ -1,6 +1,7 @@
 # Ghosst — CI/CD: every push to main → test → auto-bump build number
 # → build release APK → publish a GitHub Release (always marked "latest",
-# fixed asset name so the download URL never changes).
+# fixed asset name so the download URL never changes)
+# → open the forced-update gate in Appwrite (all older builds hard-block).
 name: Release APK
 
 on:
@@ -90,4 +91,51 @@ jobs:
               --notes "$NOTES" \
               --target "$BUMP_SHA" \
               --latest
+
+      # Auto-open the forced-update gate so every older build blocks at
+      # launch and downloads this APK — no manual Admin step.
+      # One-time setup: Appwrite API key (documents read/create/delete on the
+      # `updates` collection) stored as repo secret APPWRITE_API_KEY.
+      # Optional secret UPDATE_URL overrides the download link (e.g. MediaFire).
+      - name: Open forced-update gate (Appwrite)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
+          UPDATE_URL: ${{ secrets.UPDATE_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$APPWRITE_API_KEY" ]; then
+            echo "::notice::APPWRITE_API_KEY not set — skipping the forced-update gate. Add the Appwrite API key as a repo secret to auto-open it on every release (the release above is unaffected)."
+            exit 0
           fi
+
+          GATE_URL="${UPDATE_URL:-https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/Ghosst.apk}"
+          if [ -z "$UPDATE_URL" ] && [ "$(gh api "repos/${GITHUB_REPOSITORY}" --jq .private)" = "true" ]; then
+            echo "::warning::Repo is private — the app can't download the APK from GitHub releases anonymously. Make the repo public or set the UPDATE_URL secret. Gate NOT published."
+            exit 0
+          fi
+
+          # 1.0.0+4 → name 1.0.0, build 4 (set by the bump step).
+          BASE="${APP_VERSION%%+*}"
+          BUILD="${APP_VERSION##*+}"
+
+          HEADERS=(-H "X-Appwrite-Project: 6ac4baef0010879da982" -H "X-Appwrite-Key: ${APPWRITE_API_KEY}")
+          DOCS="https://sgp.cloud.appwrite.io/v1/databases/ghosst/collections/updates/documents"
+
+          # Retire previous announcements — exactly one active doc should exist.
+          IDS=$(curl -sS -f "${HEADERS[@]}" "${DOCS}?limit=100" | jq -r --arg k '$id' '.documents[] | .[$k]')
+          for id in $IDS; do
+            curl -sS -f "${HEADERS[@]}" -X DELETE "${DOCS}/${id}" > /dev/null
+          done
+
+          # Publish this build as the new forced update.
+          BODY=$(jq -n \
+            --argjson versionCode "$BUILD" \
+            --arg versionName "$BASE" \
+            --arg url "$GATE_URL" \
+            --arg message "Required update — install the latest Ghosst to keep using the app." \
+            '{versionCode: $versionCode, versionName: $versionName, url: $url, message: $message, active: true}')
+          NEW_ID=$(curl -sS -f "${HEADERS[@]}" -H "Content-Type: application/json" \
+            -X POST -d "$BODY" "$DOCS" | jq -r '."$id"')
+          echo "Forced-update gate open: build ${BUILD} (${BASE}) → ${GATE_URL} (doc ${NEW_ID})"

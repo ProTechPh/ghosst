@@ -19,10 +19,17 @@ class _EarnScreenState extends State<EarnScreen> {
   bool busy = false;
   String status = '';
 
+  /// Server-poll verification state — drives the determinate progress bar
+  /// so the waiting screen visibly moves instead of sitting on a dead line.
+  bool verifying = false;
+  double verifyProgress = 0;
+
   @override
   void initState() {
     super.initState();
+    // Both earn formats preloaded so either button responds instantly.
     _ads.preload();
+    _ads.preloadRewardedInterstitial();
   }
 
   @override
@@ -31,7 +38,9 @@ class _EarnScreenState extends State<EarnScreen> {
     super.dispose();
   }
 
-  Future<void> _watchAd() async {
+  /// [instant] picks the rewarded interstitial (second earn method);
+  /// both reward coins through the same SSV callback.
+  Future<void> _watchAd({bool instant = false}) async {
     final user = await Backend.currentUser();
     if (user == null) {
       setState(() => status = 'Sign in first.');
@@ -41,28 +50,42 @@ class _EarnScreenState extends State<EarnScreen> {
       busy = true;
       status = 'Loading ad…';
     });
+
+    void onError(String e) {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          status = e;
+        });
+      }
+    }
+
+    void onClosed() {
+      // _verify keeps busy=true until verification finishes.
+      if (mounted && status == 'Loading ad…') {
+        setState(() {
+          busy = false;
+          status = 'Ad closed before a reward was earned.';
+        });
+      }
+    }
+
     try {
-      await _ads.show(
-        userId: user.$id,
-        onEarned: (_) => _verify(),
-        onError: (e) {
-          if (mounted) {
-            setState(() {
-              busy = false;
-              status = e;
-            });
-          }
-        },
-        onClosed: () {
-          // _verify keeps busy=true until verification finishes.
-          if (mounted && status == 'Loading ad…') {
-            setState(() {
-              busy = false;
-              status = 'Ad closed before a reward was earned.';
-            });
-          }
-        },
-      );
+      if (instant) {
+        await _ads.showRewardedInterstitial(
+          userId: user.$id,
+          onEarned: (_) => _verify(),
+          onError: onError,
+          onClosed: onClosed,
+        );
+      } else {
+        await _ads.show(
+          userId: user.$id,
+          onEarned: (_) => _verify(),
+          onError: onError,
+          onClosed: onClosed,
+        );
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -76,18 +99,30 @@ class _EarnScreenState extends State<EarnScreen> {
   /// Called from onEarned (ad still on screen). Polls the profile until
   /// AdMob's SSV callback has credited the coins server-side.
   Future<void> _verify() async {
-    setState(() => status = 'Reward earned — verifying with server…');
+    setState(() {
+      verifying = true;
+      verifyProgress = 0;
+      status = 'Reward earned — verifying with server…';
+    });
     final before = widget.coins;
     for (var i = 0; i < 23; i++) {
       await Future.delayed(const Duration(seconds: 2));
       final now = await Backend.coins().catchError((_) => before);
       if (mounted) {
-        setState(() => status = 'Verifying reward… ($i)');
+        setState(() {
+          status = 'Verifying reward…';
+          verifyProgress = (i + 1) / 23;
+        });
       }
       if (now > before) {
-        await widget.onRefresh();
+        try {
+          await widget.onRefresh();
+        } catch (_) {
+          // Balance already refreshed by the poll — never strand `busy`.
+        }
         if (mounted) {
           setState(() {
+            verifying = false;
             busy = false;
             status = 'Coins added!';
           });
@@ -97,9 +132,9 @@ class _EarnScreenState extends State<EarnScreen> {
     }
     if (mounted) {
       setState(() {
+        verifying = false;
         busy = false;
-        status =
-            'Verification is taking longer than usual. Your coins will be added automatically once Google confirms the reward.';
+        status = 'Verification is taking longer than usual. Your coins will be added automatically once your reward is confirmed.';
       });
     }
   }
@@ -131,8 +166,11 @@ class _EarnScreenState extends State<EarnScreen> {
                   gradient: kGoldGradient,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.monetization_on_rounded,
-                    color: Color(0xFF422006), size: 30),
+                child: const Icon(
+                  Icons.monetization_on_rounded,
+                  color: Color(0xFF422006),
+                  size: 30,
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -194,30 +232,67 @@ class _EarnScreenState extends State<EarnScreen> {
             decoration: BoxDecoration(
               color: statusColor.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(14),
-              border:
-                  Border.all(color: statusColor.withValues(alpha: 0.35)),
+              border: Border.all(color: statusColor.withValues(alpha: 0.35)),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  success
-                      ? Icons.check_circle_rounded
-                      : Icons.info_outline_rounded,
-                  size: 18,
-                  color: statusColor,
+                Row(
+                  children: [
+                    if (busy)
+                      SizedBox(
+                        width: 17,
+                        height: 17,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.1,
+                          color: statusColor,
+                        ),
+                      )
+                    else
+                      Icon(
+                        success
+                            ? Icons.check_circle_rounded
+                            : Icons.info_outline_rounded,
+                        size: 18,
+                        color: statusColor,
+                      ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        status,
+                        style: TextStyle(
+                          color: statusColor,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    status,
+                if (verifying) ...[
+                  const SizedBox(height: 12),
+                  // Determinate bar (attempt n of 23) — the waiting state
+                  // visibly moves instead of freezing on one line of text.
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(99),
+                    child: LinearProgressIndicator(
+                      value: verifyProgress,
+                      minHeight: 6,
+                      backgroundColor: AppColors.surfaceHigh,
+                      valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Hang tight — verifying your reward, usually under a minute.',
                     style: TextStyle(
-                      color: statusColor,
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w600,
+                      color: statusColor.withValues(alpha: 0.8),
+                      fontSize: 11.5,
                       height: 1.4,
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -226,29 +301,67 @@ class _EarnScreenState extends State<EarnScreen> {
         // ---- CTA ----
         NeonButton(
           expand: true,
-          onPressed: busy ? null : _watchAd,
+          onPressed: busy ? null : () => _watchAd(),
           child: busy
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2.4, color: Colors.white),
+              ? Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      status == 'Loading ad…'
+                          ? 'Loading ad…'
+                          : 'Verifying reward…',
+                    ),
+                  ],
                 )
               : const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.play_circle_rounded,
-                        size: 20, color: Colors.white),
+                    Icon(
+                      Icons.play_circle_rounded,
+                      size: 20,
+                      color: Colors.white,
+                    ),
                     SizedBox(width: 8),
                     Text('Watch ad & earn coins'),
                   ],
                 ),
         ),
+        const SizedBox(height: 12),
+        // Second earn method — rewarded interstitial (same SSV payout).
+        NeonButton(
+          expand: true,
+          outline: true,
+          glow: false,
+          onPressed: busy ? null : () => _watchAd(instant: true),
+          child: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.flash_on_rounded, size: 18, color: AppColors.cyan),
+              SizedBox(width: 8),
+              Text('Instant ad & earn coins'),
+            ],
+          ),
+        ),
         const SizedBox(height: 14),
         const Text(
-          'Rewards are verified by Google (SSV) and credited to your balance within a few minutes.',
+          'Rewards are verified before being credited to your balance within a few minutes.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.textDim, fontSize: 12.5, height: 1.5),
+          style: TextStyle(
+            color: AppColors.textDim,
+            fontSize: 12.5,
+            height: 1.5,
+          ),
         ),
       ],
     );

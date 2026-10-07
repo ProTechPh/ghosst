@@ -3,6 +3,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'premium.dart';
 import 'screens/admin_screen.dart';
@@ -12,7 +13,9 @@ import 'screens/my_keys_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/store_screen.dart';
+import 'screens/update_screen.dart';
 import 'screens/wallet_screen.dart';
+import 'services/ad_service.dart';
 import 'services/backend.dart';
 import 'sign_in.dart';
 import 'sign_up.dart';
@@ -40,10 +43,7 @@ class MyApp extends StatelessWidget {
           const Positioned.fill(child: GrainOverlay()),
         ],
       ),
-      home: Scaffold(
-        backgroundColor: AppColors.bg,
-        body: const _AppEntry(),
-      ),
+      home: Scaffold(backgroundColor: AppColors.bg, body: const _AppEntry()),
     );
   }
 }
@@ -59,14 +59,79 @@ class _AppEntry extends StatefulWidget {
 
 class _AppEntryState extends State<_AppEntry> {
   bool _splash = true;
+  final _ads = AdService();
+
+  /// Forced-update gate — set when the launch check finds a newer build.
+  UpdateInfo? _pendingUpdate;
+  int _currentBuild = 0;
+  late final Future<void> _updateCheck;
+
+  @override
+  void initState() {
+    super.initState();
+    // Runs in parallel with the intro so the verdict (gate or all-clear) is
+    // ready the moment the splash finishes — bounded by an 8s timeout.
+    _updateCheck = _checkUpdate();
+  }
+
+  @override
+  void dispose() {
+    _ads.dispose();
+    super.dispose();
+  }
+
+  /// Asks the backend for a forced update and compares it to this build.
+  /// Any failure (offline, collection missing, signed out) = no gate —
+  /// a broken check must never brick the launch.
+  Future<void> _checkUpdate() async {
+    UpdateInfo? info;
+    try {
+      info = await Backend.checkForcedUpdate().timeout(
+        const Duration(seconds: 8),
+      );
+    } catch (_) {
+      info = null;
+    }
+    var build = 0;
+    try {
+      final pkg = await PackageInfo.fromPlatform();
+      build = int.tryParse(pkg.buildNumber) ?? 0;
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _currentBuild = build;
+      if (info != null && info.versionCode > build) _pendingUpdate = info;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    final blocked = _pendingUpdate != null;
     return Stack(
       children: [
-        const SafeArea(child: Router()),
+        // The gate replaces the entire router — nothing to pop, no UI to
+        // reach while a newer build is waiting.
+        SafeArea(
+          child: blocked
+              ? UpdateRequiredScreen(
+                  info: _pendingUpdate!,
+                  currentBuild: _currentBuild,
+                )
+              : const Router(),
+        ),
         if (_splash)
-          SplashScreen(onDone: () => setState(() => _splash = false)),
+          SplashScreen(
+            onDone: () async {
+              // Hold the intro until the update verdict is in (≤8s) so the
+              // gate is already mounted underneath when the splash lifts.
+              await _updateCheck;
+              if (!mounted) return;
+              setState(() => _splash = false);
+              // Passive app-open ad right after the intro — profit only,
+              // never over the update gate and never touches the balance.
+              if (_pendingUpdate == null) _ads.showAppOpen();
+            },
+          ),
       ],
     );
   }
@@ -180,10 +245,75 @@ class _HomeShellState extends State<HomeShell> {
   bool loading = true;
   String display = '';
 
+  /// Passive formats (banner + interstitial) — profit only, no coins.
+  final _ads = AdService();
+  BannerAd? _banner;
+  bool _bannerWanted = false;
+  int _tabSwitches = 0;
+  DateTime? _lastInterstitial;
+
+  /// Interstitial cadence: every other tab switch, at most once per cooldown
+  /// (and never right at launch — the app-open ad already ran).
+  static const _interCooldown = Duration(seconds: 45);
+
   @override
   void initState() {
     super.initState();
+    // First interstitial can only appear after the cooldown, not on open.
+    _lastInterstitial = DateTime.now();
     _refresh();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // MediaQuery is available here (not in initState) — load the banner once.
+    if (!_bannerWanted) {
+      _bannerWanted = true;
+      _loadBanner();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ads.dispose();
+    _banner?.dispose();
+    super.dispose();
+  }
+
+  /// Adaptive banner sized to the screen width, parked above the nav pill.
+  Future<void> _loadBanner() async {
+    final width = MediaQuery.sizeOf(context).width.round();
+    final size =
+        await AdSize.getLargeAnchoredAdaptiveBannerAdSize(width) ??
+        AdSize.banner;
+    if (!mounted) return;
+    late final BannerAd ad;
+    ad = BannerAd(
+      adUnitId: AdUnits.banner,
+      size: size,
+      request: const AdRequest(),
+      listener: BannerAdListener(
+        onAdLoaded: (_) {
+          if (mounted) setState(() => _banner = ad);
+        },
+        onAdFailedToLoad: (a, _) => a.dispose(),
+      ),
+    );
+    await ad.load();
+  }
+
+  /// Fire-and-forget interstitial on tab changes (passive — no coins).
+  void _maybeShowInterstitial() {
+    _tabSwitches++;
+    final now = DateTime.now();
+    final cooled =
+        _lastInterstitial == null ||
+        now.difference(_lastInterstitial!) >= _interCooldown;
+    if (_tabSwitches % 2 != 0 || !cooled) return;
+    _lastInterstitial = now;
+    // ignore: unawaited_futures
+    _ads.showInterstitial();
   }
 
   Future<void> _refresh() async {
@@ -191,7 +321,9 @@ class _HomeShellState extends State<HomeShell> {
       Backend.coins().catchError((_) => 0),
       Backend.isAdmin().catchError((_) => false),
       Backend.currentUser()
-          .then((u) => (u?.name.isNotEmpty ?? false) ? u!.name : (u?.email ?? ''))
+          .then(
+            (u) => (u?.name.isNotEmpty ?? false) ? u!.name : (u?.email ?? ''),
+          )
           .catchError((_) => ''),
     ]);
     if (!mounted) return;
@@ -252,10 +384,13 @@ class _HomeShellState extends State<HomeShell> {
     final destinations = <_NavItem>[
       _NavItem(Icons.storefront_outlined, Icons.storefront, 'Store'),
       _NavItem(Icons.play_circle_outline, Icons.play_circle, 'Earn'),
-      _NavItem(Icons.key_outlined, Icons.key, 'My Keys'),
+      _NavItem(Icons.shopping_bag_outlined, Icons.shopping_bag, 'Purchases'),
       if (isAdmin)
         _NavItem(
-            Icons.admin_panel_settings_outlined, Icons.admin_panel_settings, 'Admin'),
+          Icons.admin_panel_settings_outlined,
+          Icons.admin_panel_settings,
+          'Admin',
+        ),
     ];
 
     final safeIndex = tab.clamp(0, pages.length - 1);
@@ -300,10 +435,7 @@ class _HomeShellState extends State<HomeShell> {
             actions: [
               Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: CoinPill(
-                  coins: coins,
-                  onTap: _openWallet,
-                ),
+                child: CoinPill(coins: coins, onTap: _openWallet),
               ),
               Padding(
                 padding: const EdgeInsets.only(right: 14),
@@ -341,15 +473,31 @@ class _HomeShellState extends State<HomeShell> {
             ],
           ),
           // IndexedStack keeps each tab's state (scroll position, loaded data).
-          body: IndexedStack(
-            index: safeIndex,
-            children: pages,
-          ),
-          // Floating glass pill — never an edge-to-edge Material bar.
-          bottomNavigationBar: _GlassNavBar(
-            index: safeIndex,
-            items: destinations,
-            onSelected: (i) => setState(() => tab = i),
+          body: IndexedStack(index: safeIndex, children: pages),
+          // Banner strip sits above the floating pill (visible on every tab);
+          // only mounts once loaded, so a failed ad leaves no empty gap.
+          bottomNavigationBar: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_banner != null)
+                SizedBox(
+                  width: _banner!.size.width.toDouble(),
+                  height: _banner!.size.height.toDouble(),
+                  child: ColoredBox(
+                    color: AppColors.bg,
+                    child: AdWidget(ad: _banner!),
+                  ),
+                ),
+              // Floating glass pill — never an edge-to-edge Material bar.
+              _GlassNavBar(
+                index: safeIndex,
+                items: destinations,
+                onSelected: (i) {
+                  setState(() => tab = i);
+                  _maybeShowInterstitial();
+                },
+              ),
+            ],
           ),
         ),
       ],

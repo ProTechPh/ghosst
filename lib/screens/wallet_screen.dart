@@ -66,6 +66,10 @@ class _WalletScreenState extends State<WalletScreen> {
   /// `ad_rewards` collection stays server-side only.
   int get _earnedEst => _balance + _spent;
 
+  /// Distinct apps/files purchased — download claims grouped by product.
+  int get _appsOwned =>
+      _claims.where((c) => c.isDownload).map((c) => c.productId).toSet().length;
+
   List<_Tx> get _timeline {
     final entries = <_Tx>[
       for (final c in _claims)
@@ -89,8 +93,7 @@ class _WalletScreenState extends State<WalletScreen> {
     return entries;
   }
 
-  String _date(String iso) =>
-      iso.length >= 10 ? iso.substring(0, 10) : iso;
+  String _date(String iso) => iso.length >= 10 ? iso.substring(0, 10) : iso;
 
   @override
   Widget build(BuildContext context) {
@@ -117,7 +120,9 @@ class _WalletScreenState extends State<WalletScreen> {
                     ScrollReveal(
                       child: DoubleBezel(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 22, vertical: 24),
+                          horizontal: 22,
+                          vertical: 24,
+                        ),
                         glowColor: AppColors.gold,
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
@@ -137,8 +142,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                   ),
                                   const SizedBox(height: 10),
                                   Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.end,
+                                    crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
                                       AnimatedCounter(
                                         value: _balance,
@@ -150,8 +154,10 @@ class _WalletScreenState extends State<WalletScreen> {
                                         ),
                                       ),
                                       const Padding(
-                                        padding:
-                                            EdgeInsets.only(left: 8, bottom: 7),
+                                        padding: EdgeInsets.only(
+                                          left: 8,
+                                          bottom: 7,
+                                        ),
                                         child: Text(
                                           'coins',
                                           style: TextStyle(
@@ -173,12 +179,16 @@ class _WalletScreenState extends State<WalletScreen> {
                                 gradient: const LinearGradient(
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
-                                  colors: [Color(0xFFFDE68A), Color(0xFFF59E0B)],
+                                  colors: [
+                                    Color(0xFFFDE68A),
+                                    Color(0xFFF59E0B),
+                                  ],
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: AppColors.gold
-                                        .withValues(alpha: 0.35),
+                                    color: AppColors.gold.withValues(
+                                      alpha: 0.35,
+                                    ),
                                     blurRadius: 34,
                                     spreadRadius: -6,
                                   ),
@@ -225,6 +235,16 @@ class _WalletScreenState extends State<WalletScreen> {
                                 icon: Icons.key_outlined,
                               ),
                             ),
+                            const SizedBox(height: 12),
+                            ScrollReveal(
+                              delay: const Duration(milliseconds: 360),
+                              child: _miniCard(
+                                label: 'APPS OWNED',
+                                value: '$_appsOwned',
+                                color: AppColors.green,
+                                icon: Icons.phone_iphone_rounded,
+                              ),
+                            ),
                           ],
                         );
                         if (narrow) {
@@ -236,13 +256,18 @@ class _WalletScreenState extends State<WalletScreen> {
                             ],
                           );
                         }
-                        return Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(flex: 13, child: tall),
-                            const SizedBox(width: 12),
-                            Expanded(flex: 10, child: column),
-                          ],
+                        // Stretch both columns to a shared height so the
+                        // earned card fills the column instead of leaving a
+                        // hole above the third mini stat.
+                        return IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(flex: 13, child: tall),
+                              const SizedBox(width: 12),
+                              Expanded(flex: 10, child: column),
+                            ],
+                          ),
                         );
                       },
                     ),
@@ -259,8 +284,7 @@ class _WalletScreenState extends State<WalletScreen> {
                         child: EmptyState(
                           icon: Icons.history,
                           title: 'No activity yet',
-                          message:
-                              'Watch ads to earn coins, then claim your first key.',
+                          message: 'Watch ads to earn coins, then claim your first key.',
                         ),
                       )
                     else
@@ -302,67 +326,88 @@ class _WalletScreenState extends State<WalletScreen> {
     final ratio = _earnedEst == 0 ? 0.0 : _spent / _earnedEst;
     return DoubleBezel(
       padding: const EdgeInsets.all(20),
+      // Two groups + spaceBetween: identical in loose height, and when the
+      // stats row stretches this card the bar drops to the bottom edge.
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text(
-            'EARNED (EST.)',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 2.2,
-              color: AppColors.textDim,
-            ),
-          ),
-          const SizedBox(height: 10),
-          AnimatedCounter(
-            value: _earnedEst,
-            style: const TextStyle(
-              fontSize: 27,
-              fontWeight: FontWeight.w700,
-              color: AppColors.cyan,
-              height: 1.1,
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'balance + everything spent',
-            style: TextStyle(fontSize: 11.5, color: AppColors.textDim),
-          ),
-          const SizedBox(height: 18),
-          // spent-vs-kept hairline bar
-          ClipRRect(
-            borderRadius: BorderRadius.circular(99),
-            child: Stack(
-              children: [
-                Container(
-                  height: 5,
-                  color: Colors.white.withValues(alpha: 0.07),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'EARNED (EST.)',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 2.2,
+                  color: AppColors.textDim,
                 ),
-                FractionallySizedBox(
-                  widthFactor: ratio.clamp(0.0, 1.0),
-                  child: Container(
-                    height: 5,
-                    decoration: BoxDecoration(
-                      gradient: kNeonGradient,
-                      borderRadius: BorderRadius.circular(99),
+              ),
+              const SizedBox(height: 10),
+              AnimatedCounter(
+                value: _earnedEst,
+                style: const TextStyle(
+                  fontSize: 27,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.cyan,
+                  height: 1.1,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'balance + everything spent',
+                style: TextStyle(fontSize: 11.5, color: AppColors.textDim),
+              ),
+            ],
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 18),
+              // spent-vs-kept hairline bar
+              ClipRRect(
+                borderRadius: BorderRadius.circular(99),
+                child: Stack(
+                  children: [
+                    Container(
+                      height: 5,
+                      color: Colors.white.withValues(alpha: 0.07),
+                    ),
+                    FractionallySizedBox(
+                      widthFactor: ratio.clamp(0.0, 1.0),
+                      child: Container(
+                        height: 5,
+                        decoration: BoxDecoration(
+                          gradient: kNeonGradient,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${(ratio * 100).round()}% spent',
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      color: AppColors.textDim,
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '${(ratio * 100).round()}% spent',
-                style: const TextStyle(fontSize: 10.5, color: AppColors.textDim),
-              ),
-              Text(
-                '${100 - (ratio * 100).round()}% kept',
-                style: const TextStyle(fontSize: 10.5, color: AppColors.textDim),
+                  Text(
+                    '${100 - (ratio * 100).round()}% kept',
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      color: AppColors.textDim,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

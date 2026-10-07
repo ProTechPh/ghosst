@@ -1,8 +1,10 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import '../appwrite_client.dart';
 import '../premium.dart';
+import '../services/ad_service.dart';
 import '../services/backend.dart';
 import '../theme.dart';
 import 'product_detail.dart';
@@ -40,22 +42,72 @@ class _StoreScreenState extends State<StoreScreen>
   bool loading = true;
   String error = '';
 
+  /// Which shelf is showing: `'key'` (licenses) or `'app'` (APK/file).
+  String _tab = 'key';
+
+  /// True after the first Keys↔Apps switch — product cards then render
+  /// instantly (no ScrollReveal mount delay), which is what made the shelf
+  /// swap feel laggy.
+  bool _switchedShelf = false;
+
+  /// Product ids the signed-in user already bought (repeat buys are disabled
+  /// for app-store items — they'd spend coins on a link they already own).
+  Set<String> owned = {};
+
   /// Soft pulse for the skeleton placeholders (opacity only).
   late final AnimationController _pulse = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 760),
   )..repeat(reverse: true);
 
+  /// Sponsored native card at the end of the shelf (passive revenue).
+  NativeAd? _nativeAd;
+  bool _nativeLoaded = false;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _loadNative();
   }
 
   @override
   void dispose() {
     _pulse.dispose();
+    _nativeAd?.dispose();
+    _nativeAd = null;
     super.dispose();
+  }
+
+  /// Medium native template, styled dark to match the store chrome.
+  /// Rendered only after [onAdLoaded] — a failed ad simply never shows.
+  void _loadNative() {
+    NativeAd(
+      adUnitId: AdUnits.native,
+      request: const AdRequest(),
+      listener: NativeAdListener(
+        onAdLoaded: (a) {
+          if (!mounted) return;
+          setState(() {
+            _nativeAd = a as NativeAd;
+            _nativeLoaded = true;
+          });
+        },
+        onAdFailedToLoad: (a, _) => a.dispose(),
+      ),
+      nativeTemplateStyle: NativeTemplateStyle(
+        templateType: TemplateType.medium,
+        mainBackgroundColor: AppColors.surface,
+        primaryTextStyle: NativeTemplateTextStyle(textColor: AppColors.text),
+        secondaryTextStyle: NativeTemplateTextStyle(
+          textColor: AppColors.textDim,
+        ),
+        callToActionTextStyle: NativeTemplateTextStyle(
+          textColor: const Color(0xFF04212A),
+          backgroundColor: AppColors.cyan,
+        ),
+      ),
+    ).load();
   }
 
   @override
@@ -79,13 +131,18 @@ class _StoreScreenState extends State<StoreScreen>
       // Stock counts are only readable by admins (team:admins can read `keys`).
       if (await Backend.isAdmin()) {
         for (final p in ps) {
-          counts[p.id] = await Backend.availableCount(p.id);
+          if (p.isKey) counts[p.id] = await Backend.availableCount(p.id);
         }
       }
+      // Owned set is best-effort — an empty set only loses the "Owned" badge.
+      final mine = await Backend.ownedProductIds().catchError(
+        (_) => <String>{},
+      );
       if (!mounted) return;
       setState(() {
         products = ps;
         stock = counts;
+        owned = mine;
         if (!silent) loading = false;
       });
     } catch (e) {
@@ -98,6 +155,11 @@ class _StoreScreenState extends State<StoreScreen>
     }
   }
 
+  /// Products on the current shelf.
+  List<Product> get _shelf => products
+      .where((p) => _tab == 'key' ? p.isKey : p.isDownloadable)
+      .toList();
+
   Future<void> _openDetail(Product p) async {
     await Navigator.push(
       context,
@@ -105,13 +167,14 @@ class _StoreScreenState extends State<StoreScreen>
         builder: (_) => ProductDetailScreen(
           product: p,
           coins: widget.coins,
-          stock: stock[p.id] ?? -1,
+          stock: p.isKey ? (stock[p.id] ?? -1) : -1,
           onRefresh: widget.onRefresh,
+          owned: owned.contains(p.id),
         ),
       ),
     );
     // Reload stock/availability after coming back (claim may have happened).
-    if (mounted) _load();
+    if (mounted) _load(silent: true);
   }
 
   @override
@@ -139,6 +202,8 @@ class _StoreScreenState extends State<StoreScreen>
       );
     }
 
+    final shelf = _shelf;
+
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
@@ -150,11 +215,13 @@ class _StoreScreenState extends State<StoreScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Eyebrow(text: 'License store'),
+                Eyebrow(text: _tab == 'key' ? 'License store' : 'App store'),
                 const SizedBox(height: 16),
-                const Text(
-                  'Spend coins,\nclaim keys',
-                  style: TextStyle(
+                Text(
+                  _tab == 'key'
+                      ? 'Spend coins,\nclaim keys'
+                      : 'Spend coins,\ndownload apps',
+                  style: const TextStyle(
                     fontSize: 30,
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.6,
@@ -162,9 +229,11 @@ class _StoreScreenState extends State<StoreScreen>
                   ),
                 ),
                 const SizedBox(height: 10),
-                const Text(
-                  'Every claim gives you a fresh, unused license key.',
-                  style: TextStyle(
+                Text(
+                  _tab == 'key'
+                      ? 'Every claim gives you a fresh, unused license key.'
+                      : 'Buy APKs and files with your ad coins, then download them here.',
+                  style: const TextStyle(
                     color: AppColors.textDim,
                     fontSize: 13.5,
                     height: 1.5,
@@ -172,6 +241,13 @@ class _StoreScreenState extends State<StoreScreen>
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: 18),
+
+          // ---- shelf switch (Keys | Apps) -------------------------------
+          ScrollReveal(
+            delay: const Duration(milliseconds: 60),
+            child: _segment(),
           ),
           const SizedBox(height: 22),
 
@@ -272,27 +348,50 @@ class _StoreScreenState extends State<StoreScreen>
           const SizedBox(height: 30),
 
           // ---- products -------------------------------------------------
-          const SectionLabel('AVAILABLE KEYS'),
-          if (products.isEmpty)
-            const ScrollReveal(
+          SectionLabel(_tab == 'key' ? 'AVAILABLE KEYS' : 'APPS & FILES'),
+          if (shelf.isEmpty)
+            ScrollReveal(
               child: EmptyState(
-                icon: Icons.storefront_outlined,
-                title: 'No products yet',
-                message: 'Check back soon — new keys drop regularly.',
+                icon: _tab == 'key'
+                    ? Icons.storefront_outlined
+                    : Icons.apps_outlined,
+                title: _tab == 'key' ? 'No products yet' : 'No apps yet',
+                message: _tab == 'key'
+                    ? 'Check back soon — new keys drop regularly.'
+                    : 'Apps and files you buy with coins show up here.',
               ),
             ),
-          for (var i = 0; i < products.length; i++) ...[
-            ScrollReveal(
-              delay: Duration(milliseconds: (60 * i).clamp(0, 400)),
-              child: _productCard(products[i]),
-            ),
+          for (var i = 0; i < shelf.length; i++) ...[
+            // Cinematic stagger only on the first entry — after a shelf
+            // switch, cards must appear instantly instead of remounting
+            // their reveal delay + 800ms fade.
+            if (_switchedShelf)
+              _productCard(shelf[i])
+            else
+              ScrollReveal(
+                delay: Duration(milliseconds: (60 * i).clamp(0, 400)),
+                child: _productCard(shelf[i]),
+              ),
             const SizedBox(height: 12),
           ],
           const SizedBox(height: 22),
-          const Center(
+
+          // ---- sponsored native ad ------------------------------------
+          if (shelf.isNotEmpty && _nativeLoaded && _nativeAd != null) ...[
+            const SectionLabel('Sponsored'),
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 350, maxHeight: 400),
+              child: AdWidget(ad: _nativeAd!),
+            ),
+            const SizedBox(height: 22),
+          ],
+
+          Center(
             child: Text(
-              'FRESH DROPS · DELIVERED INSTANTLY',
-              style: TextStyle(
+              _tab == 'key'
+                  ? 'FRESH DROPS · DELIVERED INSTANTLY'
+                  : 'MEDIAFIRE BACKED · DOWNLOADS ANY TIME',
+              style: const TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 2.4,
@@ -300,6 +399,89 @@ class _StoreScreenState extends State<StoreScreen>
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  // ---- Keys | Apps switch ---------------------------------------------
+  Widget _segment() {
+    const keys = 'key';
+    const apps = 'app';
+
+    Widget item(String id, String label, IconData icon) {
+      final on = _tab == id;
+      return Expanded(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            if (_tab == id) return;
+            setState(() {
+              _tab = id;
+              _switchedShelf = true;
+            });
+          },
+          child: AnimatedContainer(
+            // Snappier than kMotionBase (420ms) — the pill morph was part
+            // of the perceived lag when swapping shelves.
+            duration: const Duration(milliseconds: 240),
+            curve: kPremiumCurve,
+            height: 46,
+            decoration: BoxDecoration(
+              gradient: on ? kNeonGradient : null,
+              color: on ? null : Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: on
+                    ? Colors.white.withValues(alpha: 0.25)
+                    : Colors.white.withValues(alpha: 0.10),
+              ),
+              boxShadow: on
+                  ? [
+                      BoxShadow(
+                        color: AppColors.cyan.withValues(alpha: 0.28),
+                        blurRadius: 22,
+                        spreadRadius: -8,
+                      ),
+                    ]
+                  : const [],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 16,
+                  color: on ? Colors.white : AppColors.textDim,
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.1,
+                    color: on ? Colors.white : AppColors.textDim,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(21),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          item(keys, 'Keys', Icons.key_rounded),
+          item(apps, 'Apps', Icons.android_rounded),
         ],
       ),
     );
@@ -360,26 +542,43 @@ class _StoreScreenState extends State<StoreScreen>
           width: size,
           height: size,
           fit: BoxFit.cover,
-          errorBuilder: (context, e, s) => _thumbFallback(size),
+          errorBuilder: (context, e, s) => _thumbFallback(size, p),
         ),
       );
     }
-    return _thumbFallback(size);
+    return _thumbFallback(size, p);
   }
 
-  Widget _thumbFallback(double size) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          gradient: kTealGradient,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: const Icon(Icons.key_rounded, color: Colors.white, size: 26),
-      );
+  Widget _thumbFallback(double size, Product p) => Container(
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      gradient: p.isApk
+          ? kNeonGradient
+          : p.isFile
+          ? const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF2563EB), Color(0xFF7C3AED)],
+            )
+          : kTealGradient,
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: Icon(
+      p.isKey
+          ? Icons.key_rounded
+          : p.isApk
+          ? Icons.android_rounded
+          : Icons.insert_drive_file_rounded,
+      color: Colors.white,
+      size: 26,
+    ),
+  );
 
   Widget _productCard(Product p) {
-    final count = stock[p.id] ?? -1;
+    final count = p.isKey ? (stock[p.id] ?? -1) : -1;
     final desc = p.description.trim();
+    final isOwned = owned.contains(p.id);
 
     return PressableScale(
       scale: 0.98,
@@ -411,7 +610,9 @@ class _StoreScreenState extends State<StoreScreen>
                     Text(
                       desc,
                       style: const TextStyle(
-                          color: AppColors.textDim, fontSize: 12.5),
+                        color: AppColors.textDim,
+                        fontSize: 12.5,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -423,10 +624,30 @@ class _StoreScreenState extends State<StoreScreen>
                     children: [
                       NeonPill(
                         icon: Icons.monetization_on_rounded,
-                        label: '${p.cost} coins',
+                        label: p.hasDurations
+                            ? 'from ${p.durations.map((d) => d.cost).reduce((a, b) => a < b ? a : b)} coins'
+                            : '${p.cost} coins',
                         color: AppColors.gold,
                       ),
-                      if (count >= 0)
+                      if (p.isDownloadable)
+                        NeonPill(
+                          icon: p.isApk
+                              ? Icons.android_rounded
+                              : Icons.insert_drive_file_outlined,
+                          label: p.isApk
+                              ? (p.version.isEmpty ? 'APK' : 'APK ${p.version}')
+                              : (p.fileSize.isEmpty
+                                    ? 'FILE'
+                                    : 'FILE · ${p.fileSize}'),
+                          color: AppColors.cyan,
+                        ),
+                      if (isOwned)
+                        const NeonPill(
+                          icon: Icons.check_circle_rounded,
+                          label: 'Owned',
+                          color: AppColors.green,
+                        ),
+                      if (p.isKey && count >= 0)
                         count == 0
                             ? const NeonPill(
                                 icon: Icons.remove_shopping_cart_outlined,
@@ -452,8 +673,10 @@ class _StoreScreenState extends State<StoreScreen>
                 color: Colors.white.withValues(alpha: 0.06),
                 border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
               ),
-              child: const Icon(
-                CupertinoIcons.chevron_right,
+              child: Icon(
+                isOwned && p.isDownloadable
+                    ? Icons.download_rounded
+                    : CupertinoIcons.chevron_right,
                 size: 15,
                 color: AppColors.textDim,
               ),

@@ -339,7 +339,9 @@ class _IslandButtonState extends State<IslandButton> {
 
     final Widget button = Container(
       padding: EdgeInsets.symmetric(
-        horizontal: widget.dense ? 16 : 24,
+        // Dense buttons often sit side-by-side in a Row — keep the pill
+        // tight so the label keeps as much width as possible.
+        horizontal: widget.dense ? 14 : 24,
         vertical: widget.dense ? 11 : 17,
       ),
       decoration: BoxDecoration(
@@ -390,6 +392,22 @@ class _IslandButtonState extends State<IslandButton> {
                 color: labelColor,
               ),
             )
+          else if (widget.expand)
+            // Expanded buttons can be squeezed (e.g. side-by-side in a Row);
+            // shrink + ellipsize instead of overflowing.
+            Flexible(
+              child: Text(
+                widget.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: labelColor,
+                  fontSize: widget.dense ? 13.5 : 15,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            )
           else
             Text(
               widget.label,
@@ -400,7 +418,7 @@ class _IslandButtonState extends State<IslandButton> {
                 letterSpacing: 0.2,
               ),
             ),
-          const SizedBox(width: 14),
+          SizedBox(width: widget.dense ? 10 : 14),
           AnimatedSlide(
             offset: pressed ? const Offset(0.05, -0.05) : Offset.zero,
             duration: kMotionFast,
@@ -410,8 +428,8 @@ class _IslandButtonState extends State<IslandButton> {
               duration: kMotionFast,
               curve: kPremiumCurve,
               child: Container(
-                width: 30,
-                height: 30,
+                width: widget.dense ? 26 : 30,
+                height: widget.dense ? 26 : 30,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: isOutline

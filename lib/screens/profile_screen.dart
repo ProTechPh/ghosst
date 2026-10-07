@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../premium.dart';
 import '../services/backend.dart';
 import '../theme.dart';
+import 'my_apps_screen.dart';
 import 'wallet_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -18,7 +19,7 @@ class ProfileScreen extends StatefulWidget {
   /// Signs out of the session. The shell flips back to the landing page.
   final VoidCallback onSignOut;
 
-  /// Pops this route and activates a bottom-bar tab (e.g. My Keys).
+  /// Pops this route and activates a bottom-bar tab (e.g. My Purchases).
   final void Function(int tab) onGoToTab;
 
   @override
@@ -74,6 +75,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return created.length >= 10 ? created.substring(0, 10) : '';
   }
 
+  /// Distinct apps/files purchased — download claims grouped by product.
+  int get _appsOwned =>
+      _claims.where((c) => c.isDownload).map((c) => c.productId).toSet().length;
+
   static const _tiers = [
     (name: 'Newcomer', color: AppColors.textDim, min: 0),
     (name: 'Key Hunter', color: AppColors.cyan, min: 1),
@@ -102,9 +107,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _openWallet() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const WalletScreen()),
-    );
+    Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => const WalletScreen()));
+  }
+
+  void _openAppOwned() {
+    Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => const MyAppsScreen()));
   }
 
   @override
@@ -117,8 +126,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     final tier = _tiers[_tierIndex];
-    final nextTier =
-        _tierIndex < _tiers.length - 1 ? _tiers[_tierIndex + 1] : null;
+    final nextTier = _tierIndex < _tiers.length - 1
+        ? _tiers[_tierIndex + 1]
+        : null;
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -356,8 +366,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           nextTier == null
                               ? 'Top tier reached · ${_claims.length} keys collected'
                               : '${nextTier.min - _claims.length} more '
-                                  'key${nextTier.min - _claims.length == 1 ? '' : 's'} '
-                                  'to ${nextTier.name}',
+                                    'key${nextTier.min - _claims.length == 1 ? '' : 's'} '
+                                    'to ${nextTier.name}',
                           style: const TextStyle(
                             fontSize: 12,
                             color: AppColors.textDim,
@@ -381,7 +391,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     radius: 24,
                     outerPadding: const EdgeInsets.all(5),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 6),
+                      horizontal: 16,
+                      vertical: 6,
+                    ),
                     child: Column(
                       children: [
                         _menuRow(
@@ -396,11 +408,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           color: Colors.white.withValues(alpha: 0.06),
                         ),
                         _menuRow(
-                          icon: Icons.key_outlined,
+                          icon: Icons.shopping_bag_outlined,
                           color: AppColors.primary,
-                          label: 'My Keys',
-                          hint: '${_claims.length} claimed',
+                          label: 'My Purchases',
+                          hint: '${_claims.length} purchased',
                           onTap: () => widget.onGoToTab(2),
+                        ),
+                        Divider(
+                          height: 1,
+                          color: Colors.white.withValues(alpha: 0.06),
+                        ),
+                        _menuRow(
+                          icon: Icons.phone_iphone_rounded,
+                          color: AppColors.green,
+                          label: 'App Owned',
+                          hint: '$_appsOwned claimed',
+                          onTap: _openAppOwned,
                         ),
                         Divider(
                           height: 1,

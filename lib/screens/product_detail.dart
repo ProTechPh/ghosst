@@ -6,6 +6,7 @@ import '../appwrite_client.dart';
 import '../services/backend.dart';
 import '../theme.dart';
 import 'claim_reveal.dart';
+import 'download_screen.dart';
 
 /// Full product page: image carousel, description, YouTube embed, claim CTA.
 class ProductDetailScreen extends StatefulWidget {
@@ -15,6 +16,7 @@ class ProductDetailScreen extends StatefulWidget {
     required this.coins,
     required this.stock,
     required this.onRefresh,
+    this.owned = false,
   });
 
   final Product product;
@@ -26,6 +28,10 @@ class ProductDetailScreen extends StatefulWidget {
   /// Refreshes the app's coin balance / store state after a claim.
   final Future<void> Function() onRefresh;
 
+  /// True when the user already bought this product (app-store items are
+  /// single-purchase — the CTA becomes "Download" instead of "Buy").
+  final bool owned;
+
   @override
   State<ProductDetailScreen> createState() => _ProductDetailScreenState();
 }
@@ -36,6 +42,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   int _pageIdx = 0;
   bool claiming = false;
   WebViewController? _yt;
+
+  /// Duration option currently picked on the chip row (key products with
+  /// admin-defined options only — empty means the flat-cost claim).
+  String _durationLabel = '';
 
   /// Parsed video id (kept for the "Watch on YouTube" fallback).
   late final String? _ytId = _youtubeId(widget.product.youtubeUrl);
@@ -50,6 +60,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   @override
   void initState() {
     super.initState();
+    final p = widget.product;
+    if (p.hasDurations) _durationLabel = p.durations.first.label;
     final id = _ytId;
     if (id != null) {
       _yt = WebViewController()
@@ -114,14 +126,88 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     return null;
   }
 
+  /// URL from an earlier purchase (owned products never re-spend coins).
+  Future<String> _ownedUrl() async {
+    try {
+      final claims = await Backend.myClaims();
+      for (final c in claims) {
+        if (c.productId == widget.product.id && c.downloadUrl.isNotEmpty) {
+          return c.downloadUrl;
+        }
+      }
+    } catch (_) {
+      // Fall through — the admin can re-check the link if nothing is found.
+    }
+    return '';
+  }
+
+  Future<void> _openDownload() async {
+    final p = widget.product;
+    var url = _lastUrl;
+    if (url.isEmpty) url = await _ownedUrl();
+    if (url.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Download link not available yet')),
+        );
+      }
+      return;
+    }
+    _lastUrl = url;
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DownloadScreen(
+          url: url,
+          title: p.name,
+          kind: p.isApk ? 'apk' : 'file',
+          version: p.version,
+          fileSize: p.fileSize,
+          preferredName: p.isApk ? '${p.name}.apk' : '',
+          imageUrl: Backend.productThumbUrl(p.imageIds),
+          youtubeUrl: p.youtubeUrl,
+        ),
+      ),
+    );
+  }
+
+  /// The duration option matching [_durationLabel] (first option when the
+  /// label went stale), or null for flat-priced products.
+  ProductDuration? _selectedDuration(Product p) {
+    if (!p.hasDurations) return null;
+    for (final d in p.durations) {
+      if (d.label == _durationLabel) return d;
+    }
+    return p.durations.first;
+  }
+
+  /// URL of the most recent successful unlock (fresh link on every claim —
+  /// `Backend.claimApp` returns the current MediaFire URL).
+  String _lastUrl = '';
+
   Future<void> _claim() async {
     if (claiming) return;
+    final p = widget.product;
+    final isApp = p.isDownloadable;
+    final sel = _selectedDuration(p);
+    final duration = sel?.label ?? '';
+
     setState(() => claiming = true);
     final ok = await showClaimFlow(
       context: context,
-      product: widget.product,
+      product: p,
       balanceBefore: coins,
-      claim: () => Backend.claim(widget.product.id),
+      cost: sel?.cost ?? p.cost,
+      kind: isApp ? 'app' : 'key',
+      claim: () async {
+        if (!isApp) {
+          return Backend.claim(p.id, duration: duration);
+        }
+        final url = await Backend.claimApp(p.id);
+        _lastUrl = url;
+        return url;
+      },
     );
     if (!mounted) return;
     // New balance straight from the backend, then notify the shell.
@@ -134,21 +220,51 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     await widget.onRefresh();
     if (!mounted) return;
     if (ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Key claimed — saved to My Keys')),
-      );
+      if (isApp) {
+        if (_lastUrl.isEmpty) {
+          _lastUrl = await Backend.claimApp(p.id).catchError((_) => '');
+        }
+        if (!mounted) return;
+        if (_lastUrl.isNotEmpty) await _openDownload();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unlocked — download anytime from My Purchases'),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Key claimed — saved to My Purchases')),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final p = widget.product;
-    final affordable = coins >= p.cost;
-    final outOfStock = widget.stock == 0;
-    final canClaim = affordable && !outOfStock && !claiming;
+    final isApp = p.isDownloadable;
+    final isOwned = isApp && widget.owned;
+    final sel = _selectedDuration(p);
+    final cost = sel?.cost ?? p.cost;
+    final affordable = coins >= cost;
+    final outOfStock = p.isKey && widget.stock == 0;
+    final canClaim = isOwned
+        ? !claiming
+        : affordable && !outOfStock && !claiming;
+
+    final label = isOwned
+        ? 'Download'
+        : outOfStock
+        ? 'Out of stock'
+        : affordable
+        ? isApp
+              ? 'Buy & download · $cost coins'
+              : 'Claim key · $cost coins'
+        : 'Not enough coins';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Product details')),
+      appBar: AppBar(title: Text(isApp ? 'App details' : 'Product details')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
         children: [
@@ -170,10 +286,36 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             children: [
               NeonPill(
                 icon: Icons.monetization_on_rounded,
-                label: '${p.cost} coins',
+                label: '$cost coins',
                 color: AppColors.gold,
               ),
-              if (widget.stock >= 0)
+              if (isApp)
+                NeonPill(
+                  icon: p.isApk
+                      ? Icons.android_rounded
+                      : Icons.insert_drive_file_outlined,
+                  label: p.isApk ? 'APK' : 'FILE',
+                  color: AppColors.cyan,
+                ),
+              if (p.version.isNotEmpty)
+                NeonPill(
+                  icon: Icons.tag_rounded,
+                  label: p.version,
+                  color: AppColors.textDim,
+                ),
+              if (p.fileSize.isNotEmpty)
+                NeonPill(
+                  icon: Icons.data_usage_rounded,
+                  label: p.fileSize,
+                  color: AppColors.cyan,
+                ),
+              if (isOwned)
+                const NeonPill(
+                  icon: Icons.check_circle_rounded,
+                  label: 'Owned',
+                  color: AppColors.green,
+                ),
+              if (p.isKey && widget.stock >= 0)
                 widget.stock == 0
                     ? const NeonPill(
                         icon: Icons.remove_shopping_cart_outlined,
@@ -212,7 +354,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           // ---- youtube ----
           if (_yt != null) ...[
             const SizedBox(height: 20),
-            const SectionLabel('Video'),
+            SectionLabel(p.isDownloadable ? 'Tutorial' : 'Video'),
             GlowCard(
               padding: const EdgeInsets.all(6),
               child: Column(
@@ -247,13 +389,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ),
           ] else if (p.youtubeUrl.trim().isNotEmpty) ...[
             const SizedBox(height: 20),
-            const SectionLabel('Video'),
+            SectionLabel(p.isDownloadable ? 'Tutorial' : 'Video'),
             GlowCard(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.link_off_rounded,
-                      color: AppColors.gold, size: 20),
+                  const Icon(
+                    Icons.link_off_rounded,
+                    color: AppColors.gold,
+                    size: 20,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -261,9 +406,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       'https://youtu.be/… , https://www.youtube.com/watch?v=… '
                       'or https://www.youtube.com/shorts/…',
                       style: const TextStyle(
-                          color: AppColors.textDim,
-                          fontSize: 13,
-                          height: 1.45),
+                        color: AppColors.textDim,
+                        fontSize: 13,
+                        height: 1.45,
+                      ),
                     ),
                   ),
                 ],
@@ -271,35 +417,127 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ),
           ],
 
+          // ---- duration options ----
+          if (p.hasDurations) ...[
+            const SizedBox(height: 22),
+            const SectionLabel('Duration'),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final d in p.durations)
+                  _durationChip(
+                    label: d.label,
+                    cost: d.cost,
+                    selected: d.label == (sel?.label ?? ''),
+                    onTap: () => setState(() => _durationLabel = d.label),
+                  ),
+              ],
+            ),
+          ],
+
           // ---- claim ----
           const SizedBox(height: 24),
           NeonButton(
             expand: true,
-            onPressed: canClaim ? _claim : null,
+            onPressed: canClaim || isOwned
+                ? () {
+                    if (isOwned) {
+                      _openDownload();
+                    } else {
+                      _claim();
+                    }
+                  }
+                : null,
             child: claiming
                 ? const SizedBox(
                     width: 22,
                     height: 22,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2.4, color: Colors.white),
+                      strokeWidth: 2.4,
+                      color: Colors.white,
+                    ),
                   )
-                : Text(
-                    outOfStock
-                        ? 'Out of stock'
-                        : affordable
-                            ? 'Claim key · ${p.cost} coins'
-                            : 'Not enough coins',
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (isOwned) ...[
+                        const Icon(Icons.download_rounded, size: 17),
+                        const SizedBox(width: 7),
+                      ],
+                      Text(label),
+                    ],
                   ),
           ),
-          if (!affordable && !outOfStock) ...[
+          if (!isOwned && !affordable && !outOfStock) ...[
             const SizedBox(height: 10),
             Text(
-              'Watch ads on the Earn tab to get ${p.cost - coins} more coins.',
+              'Watch ads on the Earn tab to get ${cost - coins} more coins.',
+              style: const TextStyle(color: AppColors.textDim, fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+          ],
+          if (isApp && !isOwned) ...[
+            const SizedBox(height: 10),
+            Text(
+              'One purchase — you can re-download it any time from '
+              'My Purchases.',
               style: const TextStyle(color: AppColors.textDim, fontSize: 13),
               textAlign: TextAlign.center,
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  /// Selectable duration chip (durations block) — hardcoded styling because
+  /// this screen deliberately doesn't import premium.dart.
+  Widget _durationChip({
+    required String label,
+    required int cost,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.cyan.withValues(alpha: 0.12)
+              : AppColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? AppColors.cyan : AppColors.border,
+            width: selected ? 1.4 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+                color: selected ? AppColors.text : AppColors.textDim,
+              ),
+            ),
+            const SizedBox(width: 7),
+            Text(
+              '$cost',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: AppColors.gold,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -311,12 +549,20 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       return Container(
         height: 210,
         decoration: BoxDecoration(
-          gradient: kTealGradient,
+          gradient: widget.product.isApk ? kNeonGradient : kTealGradient,
           borderRadius: BorderRadius.circular(22),
           border: Border.all(color: AppColors.border),
         ),
-        child: const Center(
-          child: Icon(Icons.key_rounded, color: Colors.white, size: 64),
+        child: Center(
+          child: Icon(
+            widget.product.isKey
+                ? Icons.key_rounded
+                : widget.product.isApk
+                ? Icons.android_rounded
+                : Icons.insert_drive_file_rounded,
+            color: Colors.white,
+            size: 64,
+          ),
         ),
       );
     }
@@ -347,8 +593,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ),
               errorBuilder: (context, e, s) => Container(
                 color: AppColors.surfaceHigh,
-                child: const Icon(Icons.broken_image_outlined,
-                    color: AppColors.textDim, size: 42),
+                child: const Icon(
+                  Icons.broken_image_outlined,
+                  color: AppColors.textDim,
+                  size: 42,
+                ),
               ),
             ),
           ),
@@ -365,9 +614,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   width: i == _pageIdx ? 20 : 7,
                   height: 7,
                   decoration: BoxDecoration(
-                    color: i == _pageIdx
-                        ? AppColors.cyan
-                        : AppColors.border,
+                    color: i == _pageIdx ? AppColors.cyan : AppColors.border,
                     borderRadius: BorderRadius.circular(99),
                   ),
                 ),

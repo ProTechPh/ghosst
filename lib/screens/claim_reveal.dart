@@ -4,6 +4,7 @@ import 'package:appwrite/appwrite.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../premium.dart';
 import '../services/backend.dart';
@@ -16,22 +17,28 @@ enum _Phase { processing, success, failure }
 /// Opens immediately with a staged "securing" checklist while [claim]
 /// executes, then transitions to the key reveal (or an error state).
 /// Returns `true` once the caller should refresh its state.
+///
+/// [kind] is `'key'` (license reveal) or `'app'` (MediaFire download unlock).
 Future<bool> showClaimFlow({
   required BuildContext context,
   required Product product,
   required int balanceBefore,
   required Future<String> Function() claim,
+  String kind = 'key',
+  int? cost,
 }) async {
   final result = await showGeneralDialog<bool>(
     context: context,
     barrierDismissible: false,
-    barrierLabel: 'Claim key',
+    barrierLabel: kind == 'app' ? 'Unlock download' : 'Claim key',
     barrierColor: Colors.black.withValues(alpha: 0.8),
     transitionDuration: const Duration(milliseconds: 520),
     pageBuilder: (ctx, _, _) => _ClaimFlow(
       product: product,
       balanceBefore: balanceBefore,
       claim: claim,
+      kind: kind,
+      spent: cost,
     ),
     transitionBuilder: (ctx, anim, secondary, child) {
       final curved = CurvedAnimation(parent: anim, curve: kPremiumCurve);
@@ -55,11 +62,22 @@ class _ClaimFlow extends StatefulWidget {
     required this.product,
     required this.balanceBefore,
     required this.claim,
+    required this.kind,
+    this.spent,
   });
 
   final Product product;
   final int balanceBefore;
   final Future<String> Function() claim;
+
+  /// `'key'` → license reveal · `'app'` → download unlock.
+  final String kind;
+
+  /// Amount actually charged — differs from [Product.cost] when the buyer
+  /// picked a duration option. Falls back to the product's flat cost.
+  final int? spent;
+
+  int get _spent => spent ?? product.cost;
 
   @override
   State<_ClaimFlow> createState() => _ClaimFlowState();
@@ -163,6 +181,9 @@ class _ClaimFlowState extends State<_ClaimFlow> {
 
   // ---- pieces ----------------------------------------------------------
 
+  /// App-store unlock vs license-key reveal.
+  bool get _isApp => widget.kind == 'app';
+
   Widget _island({
     required IconData icon,
     required Color color,
@@ -223,26 +244,31 @@ class _ClaimFlowState extends State<_ClaimFlow> {
               color: done
                   ? AppColors.green.withValues(alpha: 0.14)
                   : active
-                      ? AppColors.cyan.withValues(alpha: 0.10)
-                      : Colors.white.withValues(alpha: 0.04),
+                  ? AppColors.cyan.withValues(alpha: 0.10)
+                  : Colors.white.withValues(alpha: 0.04),
               border: Border.all(
                 color: done
                     ? AppColors.green.withValues(alpha: 0.55)
                     : active
-                        ? AppColors.cyan.withValues(alpha: 0.5)
-                        : Colors.white.withValues(alpha: 0.10),
+                    ? AppColors.cyan.withValues(alpha: 0.5)
+                    : Colors.white.withValues(alpha: 0.10),
               ),
             ),
             child: done
-                ? const Icon(Icons.check_rounded,
-                    size: 14, color: AppColors.green)
+                ? const Icon(
+                    Icons.check_rounded,
+                    size: 14,
+                    color: AppColors.green,
+                  )
                 : active
-                    ? const Padding(
-                        padding: EdgeInsets.all(5),
-                        child: CircularProgressIndicator(
-                            strokeWidth: 1.8, color: AppColors.cyan),
-                      )
-                    : null,
+                ? const Padding(
+                    padding: EdgeInsets.all(5),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.8,
+                      color: AppColors.cyan,
+                    ),
+                  )
+                : null,
           ),
           const SizedBox(width: 13),
           AnimatedDefaultTextStyle(
@@ -265,12 +291,15 @@ class _ClaimFlowState extends State<_ClaimFlow> {
       mainAxisSize: MainAxisSize.min,
       children: [
         _island(
-          icon: Icons.key_outlined,
+          icon: _isApp ? Icons.download_rounded : Icons.key_outlined,
           color: AppColors.primary,
           spin: false,
         ),
         const SizedBox(height: 30),
-        const Eyebrow(text: 'Secure claim', color: AppColors.cyan),
+        Eyebrow(
+          text: _isApp ? 'Secure unlock' : 'Secure claim',
+          color: AppColors.cyan,
+        ),
         const SizedBox(height: 18),
         Text(
           widget.product.name,
@@ -283,9 +312,9 @@ class _ClaimFlowState extends State<_ClaimFlow> {
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
-          'Securing your key…',
-          style: TextStyle(color: AppColors.textDim, fontSize: 14),
+        Text(
+          _isApp ? 'Securing your download…' : 'Securing your key…',
+          style: const TextStyle(color: AppColors.textDim, fontSize: 14),
         ),
         const SizedBox(height: 34),
         DoubleBezel(
@@ -295,8 +324,8 @@ class _ClaimFlowState extends State<_ClaimFlow> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _checkRow('Verifying balance', 0),
-              _checkRow('Reserving key', 1),
-              _checkRow('Revealing key', 2),
+              _checkRow(_isApp ? 'Reserving download' : 'Reserving key', 1),
+              _checkRow(_isApp ? 'Unlocking file' : 'Revealing key', 2),
             ],
           ),
         ),
@@ -304,18 +333,30 @@ class _ClaimFlowState extends State<_ClaimFlow> {
     );
   }
 
+  /// Open the product's YouTube tutorial after purchase. The raw URL is
+  /// passed straight through — youtu.be / watch / shorts links all resolve —
+  /// and the dialog stays open so "Download now" is still one tap away.
+  Future<void> _openTutorial() async {
+    final url = widget.product.youtubeUrl.trim();
+    if (url.isEmpty) return;
+    try {
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (_) {
+      // No handler available — nothing else to fall back to here.
+    }
+  }
+
   Widget _successView() {
-    final after = (widget.balanceBefore - widget.product.cost).clamp(0, 1 << 30);
+    final after = (widget.balanceBefore - widget._spent).clamp(0, 1 << 30);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _island(
-          icon: Icons.check_rounded,
-          color: AppColors.green,
-          spin: false,
-        ),
+        _island(icon: Icons.check_rounded, color: AppColors.green, spin: false),
         const SizedBox(height: 30),
-        const Eyebrow(text: 'Key unlocked', color: AppColors.green),
+        Eyebrow(
+          text: _isApp ? 'Download unlocked' : 'Key unlocked',
+          color: AppColors.green,
+        ),
         const SizedBox(height: 18),
         Text(
           widget.product.name,
@@ -328,9 +369,9 @@ class _ClaimFlowState extends State<_ClaimFlow> {
           ),
         ),
         const SizedBox(height: 6),
-        const Text(
-          'Your license key is ready',
-          style: TextStyle(color: AppColors.textDim, fontSize: 14),
+        Text(
+          _isApp ? 'Your download is ready' : 'Your license key is ready',
+          style: const TextStyle(color: AppColors.textDim, fontSize: 14),
         ),
         const SizedBox(height: 28),
 
@@ -380,7 +421,7 @@ class _ClaimFlowState extends State<_ClaimFlow> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '-${widget.product.cost}',
+                    '-${widget._spent}',
                     style: monoStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
@@ -392,104 +433,112 @@ class _ClaimFlowState extends State<_ClaimFlow> {
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        // The raw download URL is intentionally hidden for app/file
+        // purchases — buyers go through "Download now" instead of copying
+        // the file-host link themselves.
+        if (!_isApp) ...[
+          const SizedBox(height: 16),
 
-        // ---- key card ---------------------------------------------------
-        DoubleBezel(
-          padding: const EdgeInsets.fromLTRB(20, 18, 16, 14),
-          glowColor: AppColors.green,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'YOUR KEY',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 2.2,
-                  color: AppColors.textDim,
-                ),
-              ),
-              const SizedBox(height: 12),
-              SelectableText(
-                _key,
-                style: monoStyle(
-                  fontSize: 15.5,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.3,
-                  color: AppColors.text,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(height: 1, color: Colors.white.withValues(alpha: 0.07)),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  AnimatedOpacity(
-                    opacity: _copied ? 1 : 0,
-                    duration: kMotionFast,
-                    curve: kPremiumCurve,
-                    child: const Text(
-                      'COPIED',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 2,
-                        color: AppColors.green,
-                      ),
-                    ),
+          // ---- key card ---------------------------------------------------
+          DoubleBezel(
+            padding: const EdgeInsets.fromLTRB(20, 18, 16, 14),
+            glowColor: AppColors.green,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _isApp ? 'FILE LINK' : 'YOUR KEY',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 2.2,
+                    color: AppColors.textDim,
                   ),
-                  PressableScale(
-                    onTap: _copy,
-                    child: AnimatedContainer(
+                ),
+                const SizedBox(height: 12),
+                SelectableText(
+                  _key,
+                  style: monoStyle(
+                    fontSize: _isApp ? 13.5 : 15.5,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: _isApp ? 0 : 1.3,
+                    color: AppColors.text,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  height: 1,
+                  color: Colors.white.withValues(alpha: 0.07),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    AnimatedOpacity(
+                      opacity: _copied ? 1 : 0,
                       duration: kMotionFast,
                       curve: kPremiumCurve,
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: _copied
-                            ? AppColors.green.withValues(alpha: 0.16)
-                            : Colors.white.withValues(alpha: 0.07),
-                        border: Border.all(
-                          color: _copied
-                              ? AppColors.green.withValues(alpha: 0.55)
-                              : Colors.white.withValues(alpha: 0.14),
+                      child: const Text(
+                        'COPIED',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 2,
+                          color: AppColors.green,
                         ),
-                      ),
-                      child: AnimatedSwitcher(
-                        duration: kMotionFast,
-                        transitionBuilder: (child, anim) => ScaleTransition(
-                          scale: anim,
-                          child: FadeTransition(opacity: anim, child: child),
-                        ),
-                        child: _copied
-                            ? const Icon(
-                                Icons.check_rounded,
-                                key: ValueKey('check'),
-                                size: 17,
-                                color: AppColors.green,
-                              )
-                            : const Icon(
-                                Icons.copy_outlined,
-                                key: ValueKey('copy'),
-                                size: 16,
-                                color: AppColors.text,
-                              ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                    PressableScale(
+                      onTap: _copy,
+                      child: AnimatedContainer(
+                        duration: kMotionFast,
+                        curve: kPremiumCurve,
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _copied
+                              ? AppColors.green.withValues(alpha: 0.16)
+                              : Colors.white.withValues(alpha: 0.07),
+                          border: Border.all(
+                            color: _copied
+                                ? AppColors.green.withValues(alpha: 0.55)
+                                : Colors.white.withValues(alpha: 0.14),
+                          ),
+                        ),
+                        child: AnimatedSwitcher(
+                          duration: kMotionFast,
+                          transitionBuilder: (child, anim) => ScaleTransition(
+                            scale: anim,
+                            child: FadeTransition(opacity: anim, child: child),
+                          ),
+                          child: _copied
+                              ? const Icon(
+                                  Icons.check_rounded,
+                                  key: ValueKey('check'),
+                                  size: 17,
+                                  color: AppColors.green,
+                                )
+                              : const Icon(
+                                  Icons.copy_outlined,
+                                  key: ValueKey('copy'),
+                                  size: 16,
+                                  color: AppColors.text,
+                                ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
         const SizedBox(height: 26),
         IslandButton(
-          label: 'Done',
-          icon: CupertinoIcons.checkmark,
+          label: _isApp ? 'Download now' : 'Done',
+          icon: _isApp ? Icons.download_rounded : CupertinoIcons.checkmark,
           gradient: const LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -497,6 +546,17 @@ class _ClaimFlowState extends State<_ClaimFlow> {
           ),
           onPressed: () => Navigator.of(context).pop(true),
         ),
+        // Tutorial for app/file products — only when the admin set a link.
+        if (_isApp && widget.product.youtubeUrl.trim().isNotEmpty) ...[
+          const SizedBox(height: 14),
+          IslandButton(
+            label: 'Watch tutorial',
+            icon: Icons.play_circle_outline_rounded,
+            outline: true,
+            glow: false,
+            onPressed: _openTutorial,
+          ),
+        ],
       ],
     );
   }
@@ -505,11 +565,7 @@ class _ClaimFlowState extends State<_ClaimFlow> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _island(
-          icon: Icons.close_rounded,
-          color: AppColors.red,
-          spin: false,
-        ),
+        _island(icon: Icons.close_rounded, color: AppColors.red, spin: false),
         const SizedBox(height: 30),
         const Eyebrow(text: 'Claim failed', color: AppColors.red),
         const SizedBox(height: 18),
@@ -559,36 +615,39 @@ class _ClaimFlowState extends State<_ClaimFlow> {
       _Phase.failure => _failureView(),
     };
 
-    return Stack(
-      children: [
-        const MeshBackground(),
-        SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(26, 40, 26, 40),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 500),
-                switchInCurve: kPremiumCurve,
-                switchOutCurve: kPremiumCurve,
-                transitionBuilder: (child, anim) => FadeTransition(
-                  opacity: anim,
-                  child: SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0, 0.04),
-                      end: Offset.zero,
-                    ).animate(anim),
-                    child: child,
+    // `showGeneralDialog` has no Material ancestor, so Texts here would
+    // inherit MaterialApp's _errorTextStyle (yellow double underline +
+    // monospace fallback). A transparent Material resets DefaultTextStyle.
+    return Material(
+      type: MaterialType.transparency,
+      child: Stack(
+        children: [
+          const MeshBackground(),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(26, 40, 26, 40),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 500),
+                  switchInCurve: kPremiumCurve,
+                  switchOutCurve: kPremiumCurve,
+                  transitionBuilder: (child, anim) => FadeTransition(
+                    opacity: anim,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0, 0.04),
+                        end: Offset.zero,
+                      ).animate(anim),
+                      child: child,
+                    ),
                   ),
-                ),
-                child: KeyedSubtree(
-                  key: ValueKey(_phase),
-                  child: view,
+                  child: KeyedSubtree(key: ValueKey(_phase), child: view),
                 ),
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
