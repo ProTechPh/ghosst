@@ -22,6 +22,7 @@ import 'sign_up.dart';
 import 'theme.dart';
 
 void main() {
+  // Trigger build: verify automated forced-update flow (2.0.0+14)
   WidgetsFlutterBinding.ensureInitialized();
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
