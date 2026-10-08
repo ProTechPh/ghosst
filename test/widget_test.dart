@@ -1,13 +1,30 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/premium.dart';
 import 'package:ghosst/screens/splash_screen.dart';
+import 'package:ghosst/screens/update_screen.dart';
+import 'package:ghosst/services/backend.dart';
 import 'package:ghosst/sign_in.dart';
 import 'package:ghosst/sign_up.dart';
 import 'package:ghosst/theme.dart';
 import 'package:ghosst/validation.dart';
 
 void main() {
+  /// Opacity of the "TAP TO SKIP" hint — its ramp is the easiest read on
+  /// whether the intro timeline is actually advancing.
+  double skipHintOpacity(WidgetTester tester) => tester
+      .widget<Opacity>(
+        find.ancestor(
+          of: find.text('TAP TO SKIP'),
+          matching: find.byWidgetPredicate(
+            (w) => w is Opacity && w.child is Text,
+          ),
+        ),
+      )
+      .opacity;
+
   testWidgets('premium primitives render', (WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -38,7 +55,7 @@ void main() {
     expect(find.text('1,234'), findsOneWidget);
   });
 
-  testWidgets('splash plays its timeline then completes', (tester) async {
+  testWidgets('splash plays its full timeline before lifting', (tester) async {
     var done = false;
     await tester.pumpWidget(
       MaterialApp(
@@ -47,14 +64,89 @@ void main() {
       ),
     );
 
-    // Run the full intro; outro is still in flight when the finish timer fires.
-    await tester.pump(const Duration(milliseconds: 2600));
+    // Early intro: the skip hint is still hidden — the timeline has begun.
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(skipHintOpacity(tester), 0);
     expect(done, isFalse);
 
-    await tester.pump(const Duration(milliseconds: 600));
+    // Late intro: it fades in as the timeline advances frame by frame. (It
+    // used to stay pinned at 0 — nothing listened to the controllers, so the
+    // splash froze on frame 0 and then got cut.)
+    await tester.pump(const Duration(milliseconds: 2000)); // t = 2500ms
+    expect(skipHintOpacity(tester), greaterThan(0.5));
+    expect(done, isFalse);
+
+    // Intro completes on this frame → the hold beat starts (900ms).
+    await tester.pump(const Duration(milliseconds: 150)); // t = 2650ms
+    expect(done, isFalse);
+
+    // Hold ends, exit begins — the finished frame was never cut short.
+    await tester.pump(const Duration(milliseconds: 900)); // t = 3550ms
+    expect(done, isFalse);
+
+    // Exit (720ms) completes.
+    await tester.pump(const Duration(milliseconds: 900)); // t = 4450ms
     expect(done, isTrue);
 
     await tester.pumpWidget(const SizedBox()); // detach before teardown
+  });
+
+  testWidgets('splash waits for onReady before lifting', (tester) async {
+    var done = false;
+    final gate = Completer<void>();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: SplashScreen(
+          onReady: () => gate.future,
+          onDone: () => done = true,
+        ),
+      ),
+    );
+
+    // Intro + hold are over, but the app underneath is not ready: the
+    // finished frame is HELD instead of the splash being torn away.
+    await tester.pump(const Duration(milliseconds: 2650)); // hold running
+    expect(done, isFalse);
+    await tester.pump(const Duration(milliseconds: 900)); // exit waits
+    expect(done, isFalse);
+
+    gate.complete();
+    await tester.pump(); // resume the exit
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900)); // > 720ms outro
+    expect(done, isTrue);
+
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('tap bails out of a slow onReady wait', (tester) async {
+    var done = false;
+    final gate = Completer<void>(); // never completed — a stalled check
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: SplashScreen(
+          onReady: () => gate.future,
+          onDone: () => done = true,
+        ),
+      ),
+    );
+
+    // Intro + hold are over and the exit is parked on the gate.
+    await tester.pump(const Duration(milliseconds: 2650));
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(done, isFalse);
+
+    // A tap releases it instead of hanging on a frozen screen.
+    await tester.tap(find.byType(SplashScreen));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900)); // > 720ms outro
+    expect(done, isTrue);
+    expect(gate.isCompleted, isFalse);
+
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('tap skips the splash early', (tester) async {
@@ -68,8 +160,8 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byType(SplashScreen));
-    await tester.pump(); // first ticker frame — starts the outro clock
-    await tester.pump(const Duration(milliseconds: 600)); // > 480ms outro
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900)); // > 720ms outro
     expect(done, isTrue);
 
     await tester.pumpWidget(const SizedBox());
@@ -194,5 +286,31 @@ void main() {
           fallback: 'Sign in failed'),
       'something new from the server', // unmapped messages pass through
     );
+  });
+
+  testWidgets('update gate renders through the shared APK installer', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: UpdateRequiredScreen(
+          currentBuild: 16,
+          info: UpdateInfo(
+            versionCode: 17,
+            versionName: '2.0.1',
+            url: 'https://www.mediafire.com/file/next.apk',
+            message: 'Faster store',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('A new Ghosst version is ready'), findsOneWidget);
+    expect(find.text('build 16'), findsOneWidget);
+    expect(find.textContaining('build 17'), findsOneWidget);
+    expect(find.text('Faster store'), findsOneWidget);
+    // The CTA now lives in ApkInstaller — same label, same behaviour.
+    expect(find.text('Update now'), findsOneWidget);
   });
 }

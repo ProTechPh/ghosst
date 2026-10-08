@@ -636,34 +636,38 @@ class MeshBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Positioned.fill(
-      child: Container(
-        color: AppColors.bg,
-        child: Stack(
-          children: [
-            Positioned(
-              top: -140,
-              left: -110,
-              child: _orb(
-                size: 420,
-                color: AppColors.primary,
-                alpha: 0.22,
+      // Own layer: these gradients are static, so the per-frame animations
+      // painted around them must never re-rasterise them.
+      child: RepaintBoundary(
+        child: Container(
+          color: AppColors.bg,
+          child: Stack(
+            children: [
+              Positioned(
+                top: -140,
+                left: -110,
+                child: _orb(
+                  size: 420,
+                  color: AppColors.primary,
+                  alpha: 0.22,
+                ),
               ),
-            ),
-            Positioned(
-              top: 180,
-              right: -160,
-              child: _orb(size: 380, color: AppColors.cyan, alpha: 0.10),
-            ),
-            Positioned(
-              bottom: -160,
-              left: -60,
-              child: _orb(
-                size: 460,
-                color: const Color(0xFF0E7490),
-                alpha: 0.20,
+              Positioned(
+                top: 180,
+                right: -160,
+                child: _orb(size: 380, color: AppColors.cyan, alpha: 0.10),
               ),
-            ),
-          ],
+              Positioned(
+                bottom: -160,
+                left: -60,
+                child: _orb(
+                  size: 460,
+                  color: const Color(0xFF0E7490),
+                  alpha: 0.20,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

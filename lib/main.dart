@@ -13,10 +13,12 @@ import 'screens/my_keys_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/store_screen.dart';
+import 'screens/tamper_screen.dart';
 import 'screens/update_screen.dart';
 import 'screens/wallet_screen.dart';
 import 'services/ad_service.dart';
 import 'services/backend.dart';
+import 'services/security.dart';
 import 'sign_in.dart';
 import 'sign_up.dart';
 import 'theme.dart';
@@ -73,15 +75,28 @@ class _AppEntryState extends State<_AppEntry> {
 
   /// Forced-update gate — set when the launch check finds a newer build.
   UpdateInfo? _pendingUpdate;
+
+  /// Latest announcement regardless of version. The integrity gate borrows
+  /// its download link so both gates point at the same official APK.
+  UpdateInfo? _latestUpdate;
+
+  /// Integrity verdict (cracked / re-packed / modded build). Null until the
+  /// check answers — each leg is bounded and fails open.
+  SecurityReport? _security;
+
   int _currentBuild = 0;
-  late final Future<void> _updateCheck;
+  late final Future<void> _boot;
 
   @override
   void initState() {
     super.initState();
-    // Runs in parallel with the intro so the verdict (gate or all-clear) is
-    // ready the moment the splash finishes — bounded by an 8s timeout.
-    _updateCheck = _checkUpdate();
+    // Both legs run in parallel with the intro so the verdict (gate or
+    // all-clear) is ready the moment the splash finishes.
+    _boot = _launchChecks();
+  }
+
+  Future<void> _launchChecks() async {
+    await Future.wait<void>([_checkUpdate(), _checkSecurity()]);
   }
 
   @override
@@ -109,37 +124,55 @@ class _AppEntryState extends State<_AppEntry> {
     } catch (_) {}
     if (!mounted) return;
     setState(() {
+      _latestUpdate = info;
       _currentBuild = build;
       if (info != null && info.versionCode > build) _pendingUpdate = info;
     });
   }
 
+  /// Signature/debug verdict from the platform side — the modded-build
+  /// detector. Fails open on any error so a broken check can't lock out a
+  /// legitimate install.
+  Future<void> _checkSecurity() async {
+    final report = await Security.check();
+    if (!mounted) return;
+    setState(() => _security = report);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final blocked = _pendingUpdate != null;
+    // A modified build outranks a newer build: it must not be handed an APK
+    // to install over something Android would refuse anyway.
+    final tampered = _security?.blocked ?? false;
+    final blocked = tampered || _pendingUpdate != null;
     return Stack(
       children: [
         // The gate replaces the entire router — nothing to pop, no UI to
         // reach while a newer build is waiting.
         SafeArea(
           child: blocked
-              ? UpdateRequiredScreen(
-                  info: _pendingUpdate!,
-                  currentBuild: _currentBuild,
-                )
+              ? (tampered
+                    ? TamperDetectedScreen(
+                        info: _latestUpdate,
+                        flags: _security?.flags ?? const <String>[],
+                      )
+                    : UpdateRequiredScreen(
+                        info: _pendingUpdate!,
+                        currentBuild: _currentBuild,
+                      ))
               : const Router(),
         ),
         if (_splash)
           SplashScreen(
+            // Held BEFORE the exit starts, so the intro never gets cut and the
+            // reveal lands on the finished gate (bounded by both legs).
+            onReady: () => _boot,
             onDone: () async {
-              // Hold the intro until the update verdict is in (≤8s) so the
-              // gate is already mounted underneath when the splash lifts.
-              await _updateCheck;
               if (!mounted) return;
               setState(() => _splash = false);
               // Passive app-open ad right after the intro — profit only,
-              // never over the update gate and never touches the balance.
-              if (_pendingUpdate == null) {
+              // never over a gate and never touches the balance.
+              if (!blocked) {
                 Future.delayed(const Duration(milliseconds: 500), () {
                   try {
                     _ads.showAppOpen();

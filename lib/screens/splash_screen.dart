@@ -20,7 +20,12 @@ import '../theme.dart';
 /// launch bitmap, so the hand-off is seamless; all motion builds AROUND it.
 /// Tap anywhere to skip.
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key, required this.onDone});
+  const SplashScreen({super.key, required this.onDone, this.onReady});
+
+  /// Awaited while the finished intro is HELD on screen, before the exit
+  /// starts — so the reveal always lands on real content, never mid-beat or
+  /// on a bare loading spinner. Bounded by the caller.
+  final Future<void> Function()? onReady;
 
   final VoidCallback onDone;
 
@@ -36,40 +41,81 @@ class _SplashScreenState extends State<SplashScreen>
   static const String _word = 'GHOSST';
   static const List<String> _tags = ['WATCH', 'EARN', 'CLAIM'];
 
+  /// Master timeline every beat is sliced from (see [SplashScreen]'s docs).
+  /// 2.6s reads as cinematic; at 2.0s the wordmark/tagline landed rushed —
+  /// the letters were still arriving when the hold beat already cut in.
+  /// [kIntroMs] also sets the pace of every `_seg()` window below.
+  static const Duration kIntroMs = Duration(milliseconds: 2600);
+
   late final AnimationController _intro = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 2000),
-  )..forward();
+    duration: kIntroMs,
+  );
+
+  /// Comet/dash orbit — scaled with [kIntroMs] so the ring keeps the same
+  /// apparent speed it had when the intro ran 2.0s (2400 × 1.3).
   late final AnimationController _spin = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 2400),
+    duration: const Duration(milliseconds: 3120),
   )..repeat();
   late final AnimationController _out = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 480),
+    duration: const Duration(milliseconds: 720),
   );
 
-  Timer? _finishTimer;
-  Timer? _hapticTimer;
+  /// Exit easing — a gentle in/out dolly. Deliberately NOT [kPremiumCurve]:
+  /// that curve front-loads (72% of the move inside the first third), which
+  /// reads as a hard cut the moment the splash lifts.
+  late final CurvedAnimation _outEase = CurvedAnimation(
+    parent: _out,
+    curve: Curves.easeInOutCubic,
+  );
+
+  /// Everything the body reads at build time. Rebuilding from these is what
+  /// actually paints the intro — no listener on them means a frozen frame.
+  late final Listenable _tick = Listenable.merge([_intro, _spin, _out]);
+
+  /// Beat between "intro finished" and "lift the splash": the completed frame
+  /// (wordmark, tagline, full load bar) needs a moment to be READ, not just
+  /// glanced at — 900ms is the difference between a reveal and a cut.
+  static const Duration _hold = Duration(milliseconds: 900);
+
+  Timer? _holdTimer;
+
+  /// Completes when the user taps to bail out of a slow [SplashScreen.onReady]
+  /// wait — a tap must never be swallowed while the splash holds.
+  final Completer<void> _bail = Completer<void>();
   bool _exited = false;
+  bool _hapticFired = false;
 
   @override
   void initState() {
     super.initState();
-    _finishTimer = Timer(const Duration(milliseconds: 2150), _exit);
-    // The "ring locks" beat — synced to the pop at ~0.36 of the intro.
-    _hapticTimer = Timer(
-      const Duration(milliseconds: 760),
-      () => HapticFeedback.mediumImpact().ignore(),
-    );
+    _intro.addListener(_onIntroTick);
+    _intro.addStatusListener(_onIntroStatus);
+    _intro.forward();
+  }
+
+  /// The "ring locks" beat — synced to the pop at ~0.36 of the intro itself,
+  /// so it stays on beat even when the first frame lands late.
+  void _onIntroTick() {
+    if (_hapticFired || _intro.value < 0.38) return;
+    _hapticFired = true;
+    HapticFeedback.mediumImpact().ignore();
+  }
+
+  void _onIntroStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed || _exited || !mounted) return;
+    _holdTimer?.cancel();
+    _holdTimer = Timer(_hold, () => _exit());
   }
 
   @override
   void dispose() {
-    _finishTimer?.cancel();
-    _hapticTimer?.cancel();
+    _holdTimer?.cancel();
     _intro.dispose();
     _spin.dispose();
+    _outEase.dispose();
     _out.dispose();
     super.dispose();
   }
@@ -83,37 +129,58 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   void _skip() {
+    // Already past the point of no return: a tap during a slow `onReady`
+    // wait still has to land, so it just releases that wait.
+    if (_bail.isCompleted) return;
+    _bail.complete();
     if (_exited) return;
     _intro.value = 1; // reveal everything…
     _exit(); // …then fly out
   }
 
-  void _exit() {
+  /// Lifts the splash: holds the finished frame until the app underneath is
+  /// ready, then dollies out into it. Chain starts from the intro's own
+  /// completion, never from a wall clock — the intro only begins counting on
+  /// the first frame, so a fixed timer used to cut it off mid-beat on a cold
+  /// start.
+  Future<void> _exit() async {
     if (_exited || !mounted) return;
     _exited = true;
-    _finishTimer?.cancel();
-    _hapticTimer?.cancel();
-    _out.forward().whenComplete(() {
-      if (mounted) widget.onDone();
-    });
+    _holdTimer?.cancel();
+    try {
+      final ready = widget.onReady?.call();
+      // Racing the tap: the hold is a beat, not a lock.
+      if (ready != null) await Future.any<void>([ready, _bail.future]);
+    } catch (_) {}
+    if (!mounted) return;
+    await _out.forward();
+    if (mounted) widget.onDone();
   }
 
   @override
   Widget build(BuildContext context) {
-    final out = CurvedAnimation(parent: _out, curve: kPremiumCurve);
-
-    // Dolly-in exit: the camera pushes INTO the app, never a plain blink.
-    return FadeTransition(
-      opacity: Tween<double>(begin: 1, end: 0).animate(out),
-      child: Transform.scale(
-        scale: 1 + 0.10 * out.value,
-        child: Stack(
-          children: [
-            const MeshBackground(),
-            Positioned.fill(child: _body()),
-          ],
-        ),
-      ),
+    // Rebuilds every frame off the intro/spin/exit controllers — this is what
+    // drives the whole beat structure below (values are read in `_body`).
+    return AnimatedBuilder(
+      animation: _tick,
+      builder: (context, _) {
+        // Dolly-in exit: the camera pushes INTO the app, never a plain blink.
+        final out = _outEase.value;
+        return Opacity(
+          opacity: 1 - out,
+          child: Transform.scale(
+            scale: 1 + 0.10 * out,
+            child: Stack(
+              children: [
+                // Static orbs — their own layer (see [MeshBackground]), so the
+                // per-frame intro repaints never re-rasterise the gradient.
+                const MeshBackground(),
+                Positioned.fill(child: _body()),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
