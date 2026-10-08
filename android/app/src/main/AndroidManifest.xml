@@ -58,5 +58,18 @@
             <action android:name="android.intent.action.VIEW"/>
             <data android:mimeType="application/vnd.android.package-archive"/>
         </intent>
+        <!-- "Remove this copy" → the system uninstall sheet. Without this,
+             Android 11+ package visibility hides the uninstall activity and
+             startActivity() throws (the tap silently does nothing). -->
+        <intent>
+            <action android:name="android.intent.action.DELETE"/>
+            <data android:scheme="package"/>
+        </intent>
+        <!-- Fallback: the app-info page, which carries the same Uninstall
+             button, on ROMs that don't expose ACTION_DELETE. -->
+        <intent>
+            <action android:name="android.intent.action.APPLICATION_DETAILS_SETTINGS"/>
+            <data android:scheme="package"/>
+        </intent>
     </queries>
 </manifest>

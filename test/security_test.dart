@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/premium.dart';
 import 'package:ghosst/screens/tamper_screen.dart';
+import 'package:ghosst/services/apk_download.dart';
 import 'package:ghosst/services/backend.dart';
 import 'package:ghosst/services/security.dart';
 import 'package:ghosst/theme.dart';
@@ -19,6 +20,8 @@ void main() {
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(Security.channel, null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(OfficialApk.channel, null);
   });
 
   group('Security.verifyIntegrity', () {
@@ -126,11 +129,75 @@ void main() {
       );
       expect(find.text('Download official app'), findsOneWidget);
       expect(find.text('Remove this copy'), findsOneWidget);
-      // The link is printed verbatim so it survives the uninstall.
-      expect(
-        find.text('https://www.mediafire.com/file/official.apk'),
-        findsOneWidget,
+      // The link is never printed — the app downloads the file itself.
+      expect(find.textContaining('mediafire'), findsNothing);
+      expect(find.textContaining('github.com'), findsNothing);
+    });
+
+    testWidgets('downloads in-app instead of printing the link', (
+      tester,
+    ) async {
+      // Native download is unavailable in this harness — the screen must
+      // report that instead of falling back to a browser.
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(OfficialApk.channel, (call) async {
+            throw PlatformException(
+              code: 'download-failed',
+              message: 'Could not start the download',
+            );
+          });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark,
+          home: TamperDetectedScreen(
+            info: UpdateInfo(
+              versionCode: 17,
+              versionName: '2.0.1',
+              url: 'https://example.com/ghosst-official.apk',
+            ),
+            flags: const ['signature-mismatch'],
+          ),
+        ),
       );
+
+      await tester.ensureVisible(
+        find.widgetWithText(IslandButton, 'Download official app'),
+      );
+      await tester.pump();
+      await tester.tap(find.widgetWithText(IslandButton, 'Download official app'));
+      await tester.pumpAndSettle();
+
+      // The link never leaks into the UI — the download stays in-app.
+      expect(find.textContaining('https://example.com'), findsNothing);
+      expect(find.textContaining('browser instead'), findsOneWidget);
+    });
+
+    testWidgets('Remove this copy asks Android to uninstall the app', (
+      tester,
+    ) async {
+      String? called;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(Security.channel, (call) async {
+            called = call.method;
+            return true;
+          });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark,
+          home: const TamperDetectedScreen(flags: ['signature-mismatch']),
+        ),
+      );
+
+      await tester.ensureVisible(
+        find.widgetWithText(IslandButton, 'Remove this copy'),
+      );
+      await tester.pump();
+      await tester.tap(find.widgetWithText(IslandButton, 'Remove this copy'));
+      await tester.pumpAndSettle();
+
+      expect(called, 'uninstallSelf');
     });
 
     testWidgets('disables the download when no official link exists', (
