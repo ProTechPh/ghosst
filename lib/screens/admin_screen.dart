@@ -841,16 +841,17 @@ class _AdminScreenState extends State<AdminScreen> {
     var claimed = keys.where((k) => k.productId == p.id && k.claimed).toList();
     var adding = false;
     var addErr = '';
+    var addInfo = '';
     var addStep = ''; // live 'Adding 120/500…' while a paste is posting
     var bulkBusy = false;
     var bulkStep = ''; // live 'Deleting 120/480…' during a bulk delete
     var bulkErr = '';
 
-    // Server-side totals — the lists below only ever hold the newest 200
-    // rows, so the bulk buttons and section headers count from the database
-    // (`null` = counts not loaded yet ⇒ fall back to the list length).
+    // Server-side totals — accurate counts from the database (`null` = not loaded yet).
     int? totalKeys;
     int? usedTotal;
+    var durationCounts = <String, int>{};
+    var filterPool = true;
     final keyInput = TextEditingController();
 
     // Pool that newly pasted keys join (duration products only).
@@ -861,16 +862,27 @@ class _AdminScreenState extends State<AdminScreen> {
     var open = true;
     StateSetter? refresh;
 
-    /// Re-reads the server-side totals — the lists cap at 200 rows, so the
-    /// bulk buttons and section headers count straight from the database.
+    /// Re-reads server-side totals for all pools and overall counts.
     Future<void> reloadCounts() async {
       try {
         final all = await Backend.countKeys(p.id);
         final used = await Backend.countKeys(p.id, usedOnly: true);
+        final dCounts = <String, int>{};
+        if (p.hasDurations) {
+          for (final d in p.durations) {
+            final c = await Backend.countAvailableKeys(p.id, duration: d.label);
+            if (c >= 0) {
+              dCounts[d.label] = c;
+            } else {
+              dCounts[d.label] = avail.where((k) => k.duration == d.label).length;
+            }
+          }
+        }
         if (open) {
           refresh?.call(() {
             totalKeys = all;
             usedTotal = used;
+            durationCounts = dCounts;
           });
         }
       } catch (_) {
@@ -878,12 +890,31 @@ class _AdminScreenState extends State<AdminScreen> {
       }
     }
 
+    /// Loads full stock (up to 5 000 keys) and re-syncs all counts.
+    Future<void> loadFreshStock() async {
+      try {
+        final fresh = await Backend.keysForProduct(p.id, limit: 5000);
+        if (mounted) {
+          setState(
+            () => keys = [...keys.where((x) => x.productId != p.id), ...fresh],
+          );
+        }
+        if (open) {
+          refresh?.call(() {
+            avail = fresh.where((k) => !k.claimed).toList();
+            claimed = fresh.where((k) => k.claimed).toList();
+          });
+        }
+      } catch (_) {
+        // Keep the state-derived lists — viewing and copying still work.
+      }
+      await reloadCounts();
+    }
+
     /// Bulk sweep, pages of 100 server-side: [usedOnly] erases only the
     /// claimed rows, otherwise every key of this product.
     Future<void> bulkDelete({required bool usedOnly}) async {
       if (bulkBusy) return;
-      // Counts come from the server; fall back to the visible rows when the
-      // tally failed — the sweep below always runs against the database.
       final count = usedOnly
           ? (usedTotal ?? claimed.length)
           : (totalKeys ?? (avail.length + claimed.length));
@@ -910,7 +941,6 @@ class _AdminScreenState extends State<AdminScreen> {
           p.id,
           usedOnly: usedOnly,
           onProgress: (done, total) {
-            // Throttle: a 5 000-row sweep would otherwise rebuild 5 000×.
             if (!open) return;
             if (done != total && done % 25 != 0) return;
             refresh?.call(
@@ -921,24 +951,7 @@ class _AdminScreenState extends State<AdminScreen> {
           },
         );
 
-        // Pull fresh stock + totals so the dialog shows the new truth.
-        try {
-          final fresh = await Backend.keysForProduct(p.id);
-          if (mounted) {
-            setState(
-              () => keys = [...keys.where((x) => x.productId != p.id), ...fresh],
-            );
-          }
-          if (open) {
-            refresh?.call(() {
-              avail = fresh.where((k) => !k.claimed).toList();
-              claimed = fresh.where((k) => k.claimed).toList();
-            });
-          }
-        } catch (_) {
-          // Keep the state-derived lists — the delete itself still landed.
-        }
-        await reloadCounts();
+        await loadFreshStock();
         if (open && failed > 0) {
           refresh?.call(
             () => bulkErr =
@@ -972,11 +985,25 @@ class _AdminScreenState extends State<AdminScreen> {
           final availTotal = hasCounts ? totalKeys! - usedTotal! : avail.length;
           final allTotal = hasCounts ? totalKeys! : avail.length + claimed.length;
 
+          final poolAvail = p.hasDurations && filterPool
+              ? avail.where((k) => k.duration == keyDuration).toList()
+              : avail;
+          final poolTotal = p.hasDurations && filterPool
+              ? (durationCounts[keyDuration] ?? poolAvail.length)
+              : availTotal;
+
           Future<void> removeKey(StockEntry k) async {
             if (!await _deleteKey(k)) return;
             setD(() {
               avail = avail.where((x) => x.keyId != k.keyId).toList();
               claimed = claimed.where((x) => x.keyId != k.keyId).toList();
+              if (durationCounts.containsKey(k.duration) &&
+                  durationCounts[k.duration]! > 0) {
+                durationCounts[k.duration] = durationCounts[k.duration]! - 1;
+              }
+              if (totalKeys != null && totalKeys! > 0) {
+                totalKeys = totalKeys! - 1;
+              }
             });
           }
 
@@ -1008,43 +1035,52 @@ class _AdminScreenState extends State<AdminScreen> {
               setD(() {
                 adding = true;
                 addErr = '';
+                addInfo = '';
                 addStep = '';
               });
             }
             try {
-              // Chunked submit: 100 rows per call, a breath between chunks.
               final res = await Backend.addKeys(
                 productId: p.id,
                 keys: lines,
                 duration: p.hasDurations ? keyDuration : '',
-                onProgress: (done, total) {
-                  // Throttle: a 5 000-key paste would rebuild 5 000×.
+                onProgress: (done, total, status) {
                   if (!ctx.mounted) return;
-                  if (done != total && done % 10 != 0) return;
+                  if (status != null && status.isNotEmpty) {
+                    setD(() => addStep = status);
+                    return;
+                  }
+                  if (done != total && done % 5 != 0) return;
                   setD(() => addStep = 'Adding $done/$total…');
                 },
               );
-              final fresh = await Backend.keysForProduct(p.id);
-              if (mounted) {
-                setState(
-                  () => keys = [
-                    ...keys.where((x) => x.productId != p.id),
-                    ...fresh,
-                  ],
-                );
-              }
-              await reloadCounts();
+              await loadFreshStock();
               if (ctx.mounted) {
                 setD(() {
-                  avail = fresh.where((k) => !k.claimed).toList();
-                  claimed = fresh.where((k) => k.claimed).toList();
-                  keyInput.clear();
                   addStep = '';
-                  addErr = res.ok
-                      ? ''
-                      : 'Added ${res.added} of ${lines.length} keys — '
-                            '${res.failed} failed'
-                            '${res.lastError.isEmpty ? '' : ' (${_trimErr(res.lastError)})'}.';
+                  if (res.ok) {
+                    keyInput.clear();
+                    addErr = '';
+                    if (res.skipped > 0 && res.added > 0) {
+                      addInfo =
+                          'Added ${res.added} keys (${res.skipped} already existed in stock — skipped).';
+                    } else if (res.added == 0 && res.skipped > 0) {
+                      addInfo =
+                          'All ${res.skipped} keys already exist in stock — skipped.';
+                    } else {
+                      addInfo = 'Added all ${res.added} keys.';
+                    }
+                  } else {
+                    keyInput.text = res.failedKeys.join('\n');
+                    final skippedMsg = res.skipped > 0
+                        ? ' (${res.skipped} existing skipped)'
+                        : '';
+                    addErr = 'Added ${res.added} of ${lines.length} keys$skippedMsg — '
+                        '${res.failed} failed'
+                        '${res.lastError.isEmpty ? '' : ' (${_trimErr(res.lastError)})'}. '
+                        'Failed keys were kept in the text box for retry.';
+                    addInfo = '';
+                  }
                 });
               }
             } catch (e) {
@@ -1071,7 +1107,7 @@ class _AdminScreenState extends State<AdminScreen> {
                     SectionLabel('Add keys'),
                     if (p.hasDurations) ...[
                       // Pool picker — pasted keys are tagged with the
-                      // selected duration; counts come from the live list.
+                      // selected duration; counts come from server tallies.
                       Wrap(
                         spacing: 7,
                         runSpacing: 7,
@@ -1099,7 +1135,7 @@ class _AdminScreenState extends State<AdminScreen> {
                                 ),
                                 child: Text(
                                   '${d.label} · '
-                                  '${avail.where((k) => k.duration == d.label).length}',
+                                  '${durationCounts[d.label] ?? avail.where((k) => k.duration == d.label).length}',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
@@ -1135,6 +1171,17 @@ class _AdminScreenState extends State<AdminScreen> {
                         hintText: 'Paste keys — one per line',
                       ),
                     ),
+                    if (addInfo.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        addInfo,
+                        style: const TextStyle(
+                          color: AppColors.cyan,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                     if (addErr.isNotEmpty) ...[
                       const SizedBox(height: 6),
                       Text(
@@ -1192,29 +1239,63 @@ class _AdminScreenState extends State<AdminScreen> {
                     ],
                     const SizedBox(height: 14),
                     const Divider(height: 1, color: Color(0x14FFFFFF)),
-                    SectionLabel('Available ($availTotal)'),
-                    if (avail.isNotEmpty && avail.length < availTotal) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SectionLabel(
+                            p.hasDurations && filterPool
+                                ? '$keyDuration ($poolTotal)'
+                                : 'Available ($availTotal)',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (p.hasDurations) ...[
+                          const SizedBox(width: 8),
+                          InkWell(
+                            borderRadius: BorderRadius.circular(6),
+                            onTap: () => setD(() => filterPool = !filterPool),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              child: Text(
+                                filterPool ? 'Show all' : 'Only $keyDuration',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.cyan,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    if (poolAvail.isNotEmpty && poolAvail.length < poolTotal) ...[
                       const SizedBox(height: 2),
                       Text(
-                        'Newest ${avail.length} of $availTotal listed.',
+                        'Newest ${poolAvail.length} of $poolTotal listed.',
                         style: TextStyle(
                           color: AppColors.textDim,
                           fontSize: 11.5,
                         ),
                       ),
                     ],
-                    if (avail.isEmpty)
+                    if (poolAvail.isEmpty)
                       Text(
-                        availTotal > 0
-                            ? '$availTotal in the database — '
-                                  'older than this 200-row view.'
-                            : 'No keys in stock.',
+                        poolTotal > 0
+                            ? '$poolTotal in the database — older than loaded view.'
+                            : (p.hasDurations && filterPool
+                                ? 'No keys in $keyDuration pool.'
+                                : 'No keys in stock.'),
                         style: const TextStyle(
                           color: AppColors.textDim,
                           fontSize: 13,
                         ),
                       ),
-                    for (final k in avail)
+                    for (final k in poolAvail.take(200))
                       Padding(
                         padding: const EdgeInsets.only(bottom: 4),
                         child: Row(
@@ -1347,25 +1428,7 @@ class _AdminScreenState extends State<AdminScreen> {
       ),
     ).whenComplete(() => open = false);
 
-    // Stock straight from the database — the shared `keys` window only keeps
-    // the newest 200 rows across every product. Totals load alongside it so
-    // the bulk buttons know how many rows they really cover.
-    final freshStock = Backend.keysForProduct(p.id);
-    final freshCounts = reloadCounts();
-    try {
-      final fresh = await freshStock;
-      if (mounted) {
-        setState(
-          () => keys = [...keys.where((x) => x.productId != p.id), ...fresh],
-        );
-        avail = fresh.where((k) => !k.claimed).toList();
-        claimed = fresh.where((k) => k.claimed).toList();
-        if (open) refresh?.call(() {});
-      }
-    } catch (_) {
-      // Keep the state-derived lists — viewing and copying still work.
-    }
-    await freshCounts;
+    loadFreshStock();
 
     await dialog;
     // The dialog is closing — dispose its controller after the exit frame.

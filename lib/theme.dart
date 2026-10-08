@@ -537,9 +537,16 @@ class EmptyState extends StatelessWidget {
 
 /// Small uppercase cyan section label.
 class SectionLabel extends StatelessWidget {
-  const SectionLabel(this.text, {super.key});
+  const SectionLabel(
+    this.text, {
+    super.key,
+    this.maxLines,
+    this.overflow,
+  });
 
   final String text;
+  final int? maxLines;
+  final TextOverflow? overflow;
 
   @override
   Widget build(BuildContext context) {
@@ -547,6 +554,8 @@ class SectionLabel extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 10, top: 6),
       child: Text(
         text.toUpperCase(),
+        maxLines: maxLines,
+        overflow: overflow,
         style: const TextStyle(
           color: AppColors.cyan,
           fontSize: 11.5,

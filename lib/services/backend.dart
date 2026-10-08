@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -246,6 +247,8 @@ class StockWriteResult {
   const StockWriteResult({
     required this.added,
     required this.failed,
+    this.skipped = 0,
+    this.failedKeys = const [],
     this.lastError = '',
   });
 
@@ -254,6 +257,12 @@ class StockWriteResult {
 
   /// Rows that could not be written after retries.
   final int failed;
+
+  /// Existing keys or in-batch duplicates that were safely skipped.
+  final int skipped;
+
+  /// Keys that could not be written (retained so user can re-submit).
+  final List<String> failedKeys;
 
   /// Message of the last failure (trimmed by the caller for display).
   final String lastError;
@@ -501,31 +510,120 @@ class Backend {
     }
   }
 
-  /// Adds [keys] to a product's stock, posting [stockChunkSize] rows per
-  /// submit so pastes of any size clear Appwrite's 100-row-per-call cap (and
-  /// its rate limits) instead of failing outright.
-  ///
-  /// A chunk is posted with a few requests in flight, then the next chunk
-  /// follows after a short breather. Transient failures (429 / 5xx / no
-  /// connection) are retried twice before they count as failed; rows are
-  /// never retried under a fresh document id, so a retry can't fork a key
-  /// into two stock rows. Returns the landed/failed split for the UI.
+  /// Adds [keys] to a product's stock, posting in manageable chunks and
+  /// intelligently handling Appwrite rate limits (429) with exponential
+  /// cooldown so bulk uploads do not get blocked halfway through.
   static Future<StockWriteResult> addKeys({
     required String productId,
     required List<String> keys,
     String duration = '',
-    void Function(int done, int total)? onProgress,
+    bool skipExisting = true,
+    void Function(int done, int total, String? status)? onProgress,
   }) async {
+    // 1. Deduplicate & trim within the pasted batch:
+    final cleanBatch = <String>[];
+    final seenInBatch = <String>{};
+    var skippedInBatch = 0;
+    for (final raw in keys) {
+      final k = raw.trim();
+      if (k.isEmpty) continue;
+      if (seenInBatch.contains(k)) {
+        skippedInBatch++;
+      } else {
+        seenInBatch.add(k);
+        cleanBatch.add(k);
+      }
+    }
+
+    // 2. Existing key detection: check against current keys in database for this product
+    var skippedExisting = 0;
+    List<String> toInsert = cleanBatch;
+    if (skipExisting && cleanBatch.isNotEmpty) {
+      onProgress?.call(0, cleanBatch.length, 'Checking existing keys in stock…');
+      try {
+        final existing = await keysForProduct(productId, limit: 5000);
+        final existingSet = existing.map((e) => e.keyText.trim()).toSet();
+        final freshList = <String>[];
+        for (final k in cleanBatch) {
+          if (existingSet.contains(k)) {
+            skippedExisting++;
+          } else {
+            freshList.add(k);
+          }
+        }
+        toInsert = freshList;
+      } catch (_) {
+        // Fallback: proceed with cleanBatch if query failed
+      }
+    }
+
+    final totalSkipped = skippedInBatch + skippedExisting;
+    if (toInsert.isEmpty) {
+      return StockWriteResult(
+        added: 0,
+        failed: 0,
+        skipped: totalSkipped,
+        failedKeys: const [],
+        lastError: '',
+      );
+    }
+
     var added = 0;
     var failed = 0;
+    final failedKeys = <String>[];
     var lastError = '';
-    final total = keys.length;
+    final total = toInsert.length;
 
-    for (var start = 0; start < total; start += stockChunkSize) {
-      final chunk = keys.sublist(start, math.min(start + stockChunkSize, total));
-      await _pooled(chunk, _stockWidth, (k) async {
-        // One id for every attempt: if the first POST landed but its answer
-        // was lost, the retry collides (409) instead of creating a twin row.
+    // Concurrency controls: keep requests paced and polite to stay under
+    // Appwrite's rate limit window.
+    const chunkSize = 50;
+    const workerWidth = 2;
+
+    // Mutex for rate-limit cooldown: ensures only one worker ticks the countdown
+    // and other workers pause gracefully without stacking timeouts.
+    Future<void>? activeCooldown;
+    var rateLimitConsecutive = 0;
+
+    Future<void> handle429() async {
+      if (activeCooldown != null) {
+        await activeCooldown;
+        return;
+      }
+
+      rateLimitConsecutive++;
+      // Appwrite Cloud enforces a strict 60-second quota window per client.
+      // Waiting 60s with a live ticker ensures the window fully resets so
+      // all remaining keys can land successfully.
+      final cooldownSeconds = 60;
+
+      final completer = Completer<void>();
+      activeCooldown = completer.future;
+
+      try {
+        for (var sec = cooldownSeconds; sec > 0; sec--) {
+          onProgress?.call(
+            added + failed,
+            total,
+            'Rate limit reached — resuming in ${sec}s… ($added/$total)',
+          );
+          await Future.delayed(const Duration(seconds: 1));
+        }
+      } finally {
+        activeCooldown = null;
+        completer.complete();
+      }
+    }
+
+    Future<void> waitIfRateLimited() async {
+      while (activeCooldown != null) {
+        await activeCooldown;
+      }
+    }
+
+    for (var start = 0; start < total; start += chunkSize) {
+      final chunk =
+          toInsert.sublist(start, math.min(start + chunkSize, total));
+      await _pooled(chunk, workerWidth, (k) async {
         final docId = ID.unique();
         final data = <String, dynamic>{
           'productId': productId,
@@ -533,38 +631,80 @@ class Backend {
           'status': 'available',
           if (duration.isNotEmpty) 'duration': duration,
         };
-        try {
-          await _retry(() => _db.createDocument(
-                databaseId: Col.dbId,
-                collectionId: Col.keys,
-                documentId: docId,
-                data: data,
-              ));
-          added++;
-        } on AppwriteException catch (e) {
-          if (e.code == 409) {
-            added++; // our own earlier attempt already wrote this row
-          } else {
-            failed++;
+
+        const maxAttempts = 12;
+        var landed = false;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+          await waitIfRateLimited();
+          try {
+            await _db.createDocument(
+              databaseId: Col.dbId,
+              collectionId: Col.keys,
+              documentId: docId,
+              data: data,
+            );
+            added++;
+            landed = true;
+            rateLimitConsecutive = math.max(0, rateLimitConsecutive - 1);
+            break;
+          } on AppwriteException catch (e) {
+            if (e.code == 409) {
+              // Our own earlier attempt landed before network response was received
+              added++;
+              landed = true;
+              break;
+            }
+            if (e.code == 429) {
+              if (attempt < maxAttempts) {
+                await handle429();
+                continue;
+              }
+            } else if ((e.code == 0 || (e.code != null && e.code! >= 500)) &&
+                attempt < maxAttempts) {
+              await Future.delayed(Duration(milliseconds: 500 * attempt));
+              continue;
+            }
+            // Non-transient or retries exhausted
             lastError = e.message ?? '$e';
+            break;
+          } catch (e) {
+            if (attempt < maxAttempts) {
+              await Future.delayed(Duration(milliseconds: 500 * attempt));
+              continue;
+            }
+            lastError = '$e';
+            break;
           }
-        } catch (e) {
-          failed++;
-          lastError = '$e';
         }
-        onProgress?.call(added + failed, total);
+
+        if (!landed) {
+          failed++;
+          failedKeys.add(k);
+        }
+
+        // Polite inter-item pacing to avoid burst rate limits
+        await Future.delayed(const Duration(milliseconds: 60));
+        onProgress?.call(added + failed, total, null);
       });
 
       // Breather between submits so a multi-chunk paste stays polite.
-      if (start + stockChunkSize < total) {
-        await Future.delayed(const Duration(milliseconds: 150));
+      if (start + chunkSize < total) {
+        await Future.delayed(const Duration(milliseconds: 400));
       }
     }
-    return StockWriteResult(added: added, failed: failed, lastError: lastError);
+
+    return StockWriteResult(
+      added: added,
+      failed: failed,
+      skipped: totalSkipped,
+      failedKeys: failedKeys,
+      lastError: lastError,
+    );
   }
 
   /// Total rows stored for [productId], straight from the server — the admin
-  /// dialog's lists only hold the newest 200 rows. [usedOnly] counts the
+  /// dialog's lists can display up to 5 000 rows. [usedOnly] counts the
   /// claimed rows: `claimed` is the only non-`available` value this app ever
   /// writes, and the filter rides the existing `product_status` index.
   static Future<int> countKeys(String productId, {bool usedOnly = false}) async {
@@ -578,6 +718,45 @@ class Backend {
       ],
     );
     return r.total;
+  }
+
+  /// Counts available (unclaimed) keys for a product, optionally scoped to a
+  /// specific duration pool. Returns -1 if index is missing or query fails.
+  static Future<int> countAvailableKeys(
+    String productId, {
+    String duration = '',
+  }) async {
+    if (duration.isNotEmpty) {
+      try {
+        final r = await _db.listDocuments(
+          databaseId: Col.dbId,
+          collectionId: Col.keys,
+          queries: [
+            Query.equal('productId', productId),
+            Query.equal('status', 'available'),
+            Query.equal('duration', duration),
+            Query.limit(1),
+          ],
+        );
+        return r.total;
+      } catch (_) {
+        return -1;
+      }
+    }
+    try {
+      final r = await _db.listDocuments(
+        databaseId: Col.dbId,
+        collectionId: Col.keys,
+        queries: [
+          Query.equal('productId', productId),
+          Query.equal('status', 'available'),
+          Query.limit(1),
+        ],
+      );
+      return r.total;
+    } catch (_) {
+      return -1;
+    }
   }
 
   static Future<List<StockEntry>> listKeys() async {
@@ -604,17 +783,43 @@ class Backend {
 
   /// Every stock row of a single product — used by the admin Keys dialog so
   /// the view reflects the database, not the shared 200-row list window.
-  static Future<List<StockEntry>> keysForProduct(String productId) async {
+  /// Safely handles products with thousands of keys and optional duration filter.
+  static Future<List<StockEntry>> keysForProduct(
+    String productId, {
+    String duration = '',
+    int limit = 5000,
+  }) async {
+    if (duration.isNotEmpty) {
+      try {
+        final r = await _db.listDocuments(
+          databaseId: Col.dbId,
+          collectionId: Col.keys,
+          queries: [
+            Query.equal('productId', productId),
+            Query.equal('duration', duration),
+            Query.orderDesc(r'$createdAt'),
+            Query.limit(limit),
+          ],
+        );
+        return r.documents.map(StockEntry.fromDoc).toList();
+      } catch (_) {
+        // Appwrite may lack an index on `duration` — fallback below queries by productId
+      }
+    }
     final r = await _db.listDocuments(
       databaseId: Col.dbId,
       collectionId: Col.keys,
       queries: [
         Query.equal('productId', productId),
         Query.orderDesc(r'$createdAt'),
-        Query.limit(200),
+        Query.limit(limit),
       ],
     );
-    return r.documents.map(StockEntry.fromDoc).toList();
+    final all = r.documents.map(StockEntry.fromDoc).toList();
+    if (duration.isNotEmpty) {
+      return all.where((k) => k.duration == duration).toList();
+    }
+    return all;
   }
 
   static Future<int> availableStock() async {
@@ -916,7 +1121,7 @@ class Backend {
   /// Retries transient failures (rate limit, server error, dead connection)
   /// with a short backoff; everything else — permissions, validation — fails
   /// immediately, since repeating it won't help.
-  static Future<T> _retry<T>(Future<T> Function() op, {int attempts = 3}) async {
+  static Future<T> _retry<T>(Future<T> Function() op, {int attempts = 4}) async {
     for (var attempt = 1;; attempt++) {
       try {
         return await op();
@@ -924,7 +1129,8 @@ class Backend {
         final code = e.code ?? 0;
         final transient = code == 429 || code == 0 || code >= 500;
         if (!transient || attempt >= attempts) rethrow;
-        await Future.delayed(Duration(milliseconds: 350 * attempt));
+        final delayMs = code == 429 ? 2000 * attempt : 350 * attempt;
+        await Future.delayed(Duration(milliseconds: delayMs));
       }
     }
   }
