@@ -1,4 +1,4 @@
-package com.protech.ghosst
+package com.astrixtech.ghosst
 
 import android.app.DownloadManager
 import android.content.Context
@@ -271,12 +271,12 @@ class MainActivity : FlutterActivity() {
     }
 
     companion object {
-        private const val CHANNEL = "com.protech.ghosst/security"
-        private const val APK_CHANNEL = "com.protech.ghosst/apk"
+        private const val CHANNEL = "com.astrixtech.ghosst/security"
+        private const val APK_CHANNEL = "com.astrixtech.ghosst/apk"
         private const val APK_MIME = "application/vnd.android.package-archive"
 
         // Keep in sync with `applicationId` in android/app/build.gradle.kts.
-        private const val APPLICATION_ID = "com.protech.ghosst"
+        private const val APPLICATION_ID = "com.astrixtech.ghosst"
 
         // SHA-256 of the official release certificate (`ghosst-release.jks`,
         // alias `ghosst`). Re-derive any time the keystore changes:

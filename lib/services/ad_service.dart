@@ -115,7 +115,9 @@ class AdService {
           onAdFailedToLoad: (err) {
             _lastRewardedFailTime = DateTime.now();
             _lastRewardedErrorCode = err.code;
-            debugPrint('[AdService] RewardedAd failed to load: AdMob code ${err.code}: ${err.message}');
+            debugPrint(
+              '[AdService] RewardedAd failed to load: AdMob code ${err.code}: ${err.message}',
+            );
             _rewardedCompleter = null;
             if (!completer.isCompleted) completer.complete(null);
           },
@@ -131,7 +133,9 @@ class AdService {
     try {
       return await completer.future.timeout(timeout);
     } catch (_) {
-      debugPrint('[AdService] RewardedAd wait timed out (${timeout.inSeconds}s)');
+      debugPrint(
+        '[AdService] RewardedAd wait timed out (${timeout.inSeconds}s)',
+      );
       return _ad;
     }
   }
@@ -210,10 +214,11 @@ class AdService {
       await RewardedInterstitialAd.load(
         adUnitId: AdUnits.rewardedInterstitial,
         request: const AdRequest(),
-        rewardedInterstitialAdLoadCallback:
-            RewardedInterstitialAdLoadCallback(
+        rewardedInterstitialAdLoadCallback: RewardedInterstitialAdLoadCallback(
           onAdLoaded: (ad) {
-            debugPrint('[AdService] RewardedInterstitialAd loaded successfully');
+            debugPrint(
+              '[AdService] RewardedInterstitialAd loaded successfully',
+            );
             _lastRiFailTime = null;
             _lastRiErrorCode = null;
             _ri?.dispose();
@@ -224,7 +229,9 @@ class AdService {
           onAdFailedToLoad: (err) {
             _lastRiFailTime = DateTime.now();
             _lastRiErrorCode = err.code;
-            debugPrint('[AdService] RewardedInterstitialAd failed: AdMob code ${err.code}: ${err.message}');
+            debugPrint(
+              '[AdService] RewardedInterstitialAd failed: AdMob code ${err.code}: ${err.message}',
+            );
             _riCompleter = null;
             if (!completer.isCompleted) completer.complete(null);
           },

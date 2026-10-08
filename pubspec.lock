@@ -232,6 +232,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  gma_mediation_unity:
+    dependency: "direct main"
+    description:
+      name: gma_mediation_unity
+      sha256: "400d2ca165479aa55a2c56110d42884eba92bbb20347781c491dc7d8c641c1cf"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.11.1"
   google_mobile_ads:
     dependency: "direct main"
     description:

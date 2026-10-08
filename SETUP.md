@@ -19,7 +19,7 @@ create them with those exact `$id`s.
 ## 1. Project / platform settings
 
 1. Appwrite Console → **Settings → Platforms → Add platform → Flutter app**:
-   - Name: `ghosst`, Package name: `com.protech.ghosst`.
+   - Name: `ghosst`, Package name: `com.astrixtech.ghosst`.
 2. Platform scopes — make sure these are enabled (leave defaults if unsure):
    `account.read`, `account.write`, `databases.read`, `databases.write`,
    `functions.read`, `functions.write`.

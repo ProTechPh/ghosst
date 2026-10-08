@@ -31,7 +31,9 @@ class SecurityReport {
 /// broken check must never lock a legitimate user out of the app.
 class Security {
   /// Channel shared with `MainActivity.kt`.
-  static const MethodChannel channel = MethodChannel('com.protech.ghosst/security');
+  static const MethodChannel channel = MethodChannel(
+    'com.astrixtech.ghosst/security',
+  );
 
   /// Reports on this build. Debug/profile builds are signed with the dev
   /// key, so they would flag every local run — release only.
@@ -51,7 +53,9 @@ class Security {
   }) async {
     Object? raw;
     try {
-      raw = await channel.invokeMethod<Object>('verifyIntegrity').timeout(timeout);
+      raw = await channel
+          .invokeMethod<Object>('verifyIntegrity')
+          .timeout(timeout);
     } on MissingPluginException {
       return SecurityReport.clean;
     } catch (_) {

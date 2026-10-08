@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.protech.ghosst"
+    namespace = "com.astrixtech.ghosst"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -16,7 +16,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.protech.ghosst"
+        applicationId = "com.astrixtech.ghosst"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -49,11 +49,6 @@ android {
             )
         }
     }
-}
-
-dependencies {
-    // Google AdMob Mediation Adapter for Unity Ads
-    implementation("com.google.ads.mediation:unity:4.12.5.0")
 }
 
 kotlin {

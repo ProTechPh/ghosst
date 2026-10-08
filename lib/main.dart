@@ -35,17 +35,15 @@ void main() {
   runApp(const MyApp());
 
   // Initialize MobileAds asynchronously so it never delays or crashes app launch
-  MobileAds.instance.initialize().then((_) async {
-    await MobileAds.instance.updateRequestConfiguration(
-      RequestConfiguration(
-        testDeviceIds: const ['F3ED0CCF90379B60EE0479B837D1D143'],
-      ),
-    );
-    AdService.instance.preload();
-    AdService.instance.preloadRewardedInterstitial();
-  }).catchError((e) {
-    debugPrint('MobileAds initialization failed: $e');
-  });
+  MobileAds.instance
+      .initialize()
+      .then((_) {
+        AdService.instance.preload();
+        AdService.instance.preloadRewardedInterstitial();
+      })
+      .catchError((e) {
+        debugPrint('MobileAds initialization failed: $e');
+      });
 }
 
 class MyApp extends StatelessWidget {

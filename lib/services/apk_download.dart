@@ -25,8 +25,7 @@ class ApkDownloadState {
   bool get failed =>
       state == 'failed' || state == 'missing' || state == 'error';
 
-  double? get fraction =>
-      total > 0 ? (received / total).clamp(0.0, 1.0) : null;
+  double? get fraction => total > 0 ? (received / total).clamp(0.0, 1.0) : null;
 
   static const ApkDownloadState unknown = ApkDownloadState(state: 'error');
 }
@@ -43,13 +42,12 @@ class OfficialApk {
   OfficialApk._();
 
   /// Channel shared with `MainActivity.kt`.
-  static const MethodChannel channel = MethodChannel('com.protech.ghosst/apk');
+  static const MethodChannel channel = MethodChannel(
+    'com.astrixtech.ghosst/apk',
+  );
 
   /// Queues the download and returns its DownloadManager id.
-  static Future<int> start({
-    required String url,
-    required String name,
-  }) async {
+  static Future<int> start({required String url, required String name}) async {
     final uri = Uri.tryParse(url.trim());
     if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
       throw const DownloadLinkException('That download link is not valid');
@@ -71,9 +69,7 @@ class OfficialApk {
   /// gone (shouldn't happen on Android, but never leaves the UI hanging).
   static Future<ApkDownloadState> status(int id) async {
     final raw = await channel
-        .invokeMapMethod<String, Object?>('status', <String, Object?>{
-          'id': id,
-        })
+        .invokeMapMethod<String, Object?>('status', <String, Object?>{'id': id})
         .timeout(const Duration(seconds: 10));
     if (raw == null) return ApkDownloadState.unknown;
     return ApkDownloadState(
