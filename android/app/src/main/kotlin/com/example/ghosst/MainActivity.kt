@@ -38,6 +38,7 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "verifyIntegrity" -> result.success(verifyIntegrity())
                     "uninstallSelf" -> result.success(uninstallSelf())
+                    "getPrivateDns" -> result.success(privateDns())
                     else -> result.notImplemented()
                 }
             }
@@ -198,6 +199,22 @@ class MainActivity : FlutterActivity() {
             }
         }
         return false
+    }
+
+    // ----------------------------------------------------------- private DNS
+
+    // Custom Private DNS (e.g. dns.adguard.com) is the usual way ads get
+    // filtered device-wide. Read-only, no permission needed. Purely
+    // informational: it names the server on the ad-blocker gate, never
+    // triggers it — a privacy-only DNS server is not a blocker.
+    private fun privateDns(): Map<String, String?>? = try {
+        mapOf(
+            "mode" to Settings.Global.getString(contentResolver, "private_dns_mode"),
+            "specifier" to Settings.Global.getString(contentResolver, "private_dns_specifier"),
+        )
+    } catch (e: Exception) {
+        // Locked-down ROM / unreadable setting — Dart skips the enrichment.
+        null
     }
 
     // ------------------------------------------------------------- signature

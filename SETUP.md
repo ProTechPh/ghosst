@@ -289,6 +289,13 @@ App ID (already in the manifest): `ca-app-pub-7791552060229072~1855578469`.
    units (Banner / Interstitial / App open / Native) need no SSV.
 4. The passive formats (banner, interstitial, app open, native) need **no
    SSV** — they earn you revenue only and never touch the coin balance.
+5. **Ad-blocker gate:** ads pay for the app, so a device that filters them
+   is locked out. `lib/services/adblock_detector.dart` probes three real
+   AdMob hosts against the Appwrite endpoint as control — 2 of 3 blocked
+   while the control answers = gate (`lib/screens/adblock_screen.dart`,
+   third gate in `main.dart`, re-checked on app resume). Fails open when
+   offline or inconclusive; Private DNS (`getPrivateDns` on the security
+   channel) is shown as context only, never a standalone trigger.
 
 ## 6. Run & test
 

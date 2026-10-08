@@ -6,6 +6,7 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'premium.dart';
+import 'screens/adblock_screen.dart';
 import 'screens/admin_screen.dart';
 import 'screens/earn_screen.dart';
 import 'screens/landing_screen.dart';
@@ -17,6 +18,7 @@ import 'screens/tamper_screen.dart';
 import 'screens/update_screen.dart';
 import 'screens/wallet_screen.dart';
 import 'services/ad_service.dart';
+import 'services/adblock_detector.dart';
 import 'services/backend.dart';
 import 'services/security.dart';
 import 'sign_in.dart';
@@ -69,7 +71,7 @@ class _AppEntry extends StatefulWidget {
   State<_AppEntry> createState() => _AppEntryState();
 }
 
-class _AppEntryState extends State<_AppEntry> {
+class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
   bool _splash = true;
   final _ads = AdService();
 
@@ -84,23 +86,45 @@ class _AppEntryState extends State<_AppEntry> {
   /// check answers — each leg is bounded and fails open.
   SecurityReport? _security;
 
+  /// Ad-blocker verdict. Null until the check answers — fails open, and
+  /// only positive evidence (ads blocked while the network works) locks.
+  AdblockReport? _adblock;
+
+  /// Throttle stamp: launch + resume re-checks run at most once a minute
+  /// so returning from a settings screen never hammers the probes.
+  DateTime? _lastAdblockCheck;
+
   int _currentBuild = 0;
   late final Future<void> _boot;
 
   @override
   void initState() {
     super.initState();
-    // Both legs run in parallel with the intro so the verdict (gate or
+    WidgetsBinding.instance.addObserver(this);
+    // All legs run in parallel with the intro so the verdict (gate or
     // all-clear) is ready the moment the splash finishes.
     _boot = _launchChecks();
   }
 
   Future<void> _launchChecks() async {
-    await Future.wait<void>([_checkUpdate(), _checkSecurity()]);
+    await Future.wait<void>([
+      _checkUpdate(),
+      _checkSecurity(),
+      _checkAdblock(),
+    ]);
+  }
+
+  /// Blockers are toggled outside the app (quick-settings tile, Private
+  /// DNS screen) — re-check on return so the gate reappears the moment the
+  /// device starts filtering ads again (throttled, fails open).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _checkAdblock();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _ads.dispose();
     super.dispose();
   }
@@ -139,12 +163,30 @@ class _AppEntryState extends State<_AppEntry> {
     setState(() => _security = report);
   }
 
+  /// Probes ad endpoints against our own backend to spot a DNS/VPN filter.
+  /// Throttled so rapid resume cycles share one run (the stamp lands before
+  /// the network call). Fails open: offline / timeout / broken probe means
+  /// no gate — same policy as [Security.check].
+  Future<void> _checkAdblock() async {
+    final now = DateTime.now();
+    final last = _lastAdblockCheck;
+    if (last != null && now.difference(last) < const Duration(seconds: 60)) {
+      return;
+    }
+    _lastAdblockCheck = now;
+    final report = await AdblockDetector.check();
+    if (!mounted) return;
+    setState(() => _adblock = report);
+  }
+
   @override
   Widget build(BuildContext context) {
     // A modified build outranks a newer build: it must not be handed an APK
-    // to install over something Android would refuse anyway.
+    // to install over something Android would refuse anyway. The ad-blocker
+    // gate ranks last — it's the only one the user can clear in-place.
     final tampered = _security?.blocked ?? false;
-    final blocked = tampered || _pendingUpdate != null;
+    final adBlocked = _adblock?.blocked ?? false;
+    final blocked = tampered || _pendingUpdate != null || adBlocked;
     return Stack(
       children: [
         // The gate replaces the entire router — nothing to pop, no UI to
@@ -156,9 +198,17 @@ class _AppEntryState extends State<_AppEntry> {
                         info: _latestUpdate,
                         flags: _security?.flags ?? const <String>[],
                       )
-                    : UpdateRequiredScreen(
+                    : _pendingUpdate != null
+                    ? UpdateRequiredScreen(
                         info: _pendingUpdate!,
                         currentBuild: _currentBuild,
+                      )
+                    : AdblockScreen(
+                        report: _adblock!,
+                        recheck: AdblockDetector.check,
+                        onResult: (r) {
+                          if (mounted) setState(() => _adblock = r);
+                        },
                       ))
               : const Router(),
         ),
