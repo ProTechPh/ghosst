@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/ad_service.dart';
@@ -19,6 +21,11 @@ class _EarnScreenState extends State<EarnScreen> {
   bool busy = false;
   String status = '';
 
+  /// Persistent cooldown timestamp so users cannot spam AdMob and get flagged/throttled.
+  static DateTime? _cooldownUntil;
+  Timer? _ticker;
+  int _remainingCooldown = 0;
+
   /// Server-poll verification state — drives the determinate progress bar
   /// so the waiting screen visibly moves instead of sitting on a dead line.
   bool verifying = false;
@@ -30,17 +37,53 @@ class _EarnScreenState extends State<EarnScreen> {
     // Both earn formats preloaded so either button responds instantly.
     _ads.preload();
     _ads.preloadRewardedInterstitial();
+    _checkCooldown();
   }
 
   @override
   void dispose() {
-    _ads.dispose();
+    _ticker?.cancel();
     super.dispose();
+  }
+
+  void _startCooldown([int seconds = 30]) {
+    _cooldownUntil = DateTime.now().add(Duration(seconds: seconds));
+    _ticker?.cancel();
+    _checkCooldown();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      _checkCooldown();
+    });
+  }
+
+  void _checkCooldown() {
+    final until = _cooldownUntil;
+    if (until == null) {
+      if (_remainingCooldown != 0) setState(() => _remainingCooldown = 0);
+      return;
+    }
+    final diff = until.difference(DateTime.now()).inSeconds;
+    if (diff <= 0) {
+      _cooldownUntil = null;
+      _ticker?.cancel();
+      _ticker = null;
+      if (mounted) setState(() => _remainingCooldown = 0);
+    } else {
+      if (mounted && _remainingCooldown != diff) {
+        setState(() => _remainingCooldown = diff);
+      }
+      _ticker ??= Timer.periodic(const Duration(seconds: 1), (_) {
+        if (!mounted) return;
+        _checkCooldown();
+      });
+    }
   }
 
   /// [instant] picks the rewarded interstitial (second earn method);
   /// both reward coins through the same SSV callback.
   Future<void> _watchAd({bool instant = false}) async {
+    if (_remainingCooldown > 0) return;
+
     final user = await Backend.currentUser();
     if (user == null) {
       setState(() => status = 'Sign in first.');
@@ -67,6 +110,7 @@ class _EarnScreenState extends State<EarnScreen> {
           busy = false;
           status = 'Ad closed before a reward was earned.';
         });
+        _startCooldown(15);
       }
     }
 
@@ -87,10 +131,11 @@ class _EarnScreenState extends State<EarnScreen> {
         );
       }
     } catch (e) {
+      debugPrint('[EarnScreen] Ad exception: $e');
       if (mounted) {
         setState(() {
           busy = false;
-          status = 'Ad error: $e';
+          status = 'Unable to play ad right now. Please try again in a moment.';
         });
       }
     }
@@ -126,6 +171,7 @@ class _EarnScreenState extends State<EarnScreen> {
             busy = false;
             status = 'Coins added!';
           });
+          _startCooldown(30);
         }
         return;
       }
@@ -136,6 +182,7 @@ class _EarnScreenState extends State<EarnScreen> {
         busy = false;
         status = 'Verification is taking longer than usual. Your coins will be added automatically once your reward is confirmed.';
       });
+      _startCooldown(30);
     }
   }
 
@@ -143,6 +190,7 @@ class _EarnScreenState extends State<EarnScreen> {
   Widget build(BuildContext context) {
     final success = status == 'Coins added!';
     final statusColor = success ? AppColors.green : AppColors.cyan;
+    final inCooldown = _remainingCooldown > 0;
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -301,7 +349,7 @@ class _EarnScreenState extends State<EarnScreen> {
         // ---- CTA ----
         NeonButton(
           expand: true,
-          onPressed: busy ? null : () => _watchAd(),
+          onPressed: (busy || inCooldown) ? null : () => _watchAd(),
           child: busy
               ? Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -323,18 +371,38 @@ class _EarnScreenState extends State<EarnScreen> {
                     ),
                   ],
                 )
-              : const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.play_circle_rounded,
-                      size: 20,
-                      color: Colors.white,
+              : inCooldown
+                  ? Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.timer_outlined,
+                          size: 19,
+                          color: AppColors.textDim,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Next ad in ${_remainingCooldown}s',
+                          style: const TextStyle(
+                            color: AppColors.textDim,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    )
+                  : const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.play_circle_rounded,
+                          size: 20,
+                          color: Colors.white,
+                        ),
+                        SizedBox(width: 8),
+                        Text('Watch ad & earn coins'),
+                      ],
                     ),
-                    SizedBox(width: 8),
-                    Text('Watch ad & earn coins'),
-                  ],
-                ),
         ),
         const SizedBox(height: 12),
         // Second earn method — rewarded interstitial (same SSV payout).
@@ -342,22 +410,44 @@ class _EarnScreenState extends State<EarnScreen> {
           expand: true,
           outline: true,
           glow: false,
-          onPressed: busy ? null : () => _watchAd(instant: true),
-          child: const Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.flash_on_rounded, size: 18, color: AppColors.cyan),
-              SizedBox(width: 8),
-              Text('Instant ad & earn coins'),
-            ],
-          ),
+          onPressed: (busy || inCooldown) ? null : () => _watchAd(instant: true),
+          child: inCooldown
+              ? Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.hourglass_empty_rounded,
+                      size: 17,
+                      color: AppColors.textDim,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Cooldown active (${_remainingCooldown}s)',
+                      style: const TextStyle(
+                        color: AppColors.textDim,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                )
+              : const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.flash_on_rounded, size: 18, color: AppColors.cyan),
+                    SizedBox(width: 8),
+                    Text('Instant ad & earn coins'),
+                  ],
+                ),
         ),
         const SizedBox(height: 14),
-        const Text(
-          'Rewards are verified before being credited to your balance within a few minutes.',
+        Text(
+          inCooldown
+              ? 'Short cooldown between ads protects your reward eligibility and prevents traffic limits.'
+              : 'Rewards are verified before being credited to your balance within a few minutes.',
           textAlign: TextAlign.center,
-          style: TextStyle(
+          style: const TextStyle(
             color: AppColors.textDim,
             fontSize: 12.5,
             height: 1.5,

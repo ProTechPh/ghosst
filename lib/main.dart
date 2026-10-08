@@ -35,9 +35,11 @@ void main() {
   runApp(const MyApp());
 
   // Initialize MobileAds asynchronously so it never delays or crashes app launch
-  MobileAds.instance.initialize().catchError((e) {
+  MobileAds.instance.initialize().then((_) {
+    AdService.instance.preload();
+    AdService.instance.preloadRewardedInterstitial();
+  }).catchError((e) {
     debugPrint('MobileAds initialization failed: $e');
-    return InitializationStatus({});
   });
 }
 

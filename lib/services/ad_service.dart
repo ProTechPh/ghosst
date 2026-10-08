@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 /// Every ad unit the app uses, in one place.
@@ -25,64 +28,129 @@ class AdUnits {
 ///   revenue only; they never touch the coin balance.
 ///
 /// Full-screen formats preload in the background (single-flight) and reload
-/// themselves after every show.
+/// themselves after every show. Uses a singleton cache so tab changes or
+/// multiple screen builds never discard matched ads.
 class AdService {
+  AdService._internal();
+  static final AdService instance = AdService._internal();
+  factory AdService() => instance;
+
   /// Real rewarded ad unit with SSV (reward item: coins).
-  /// Google test unit for debugging without SSV: ca-app-pub-3940256099942544/5224354917
   static const rewardedAdUnitId = AdUnits.rewarded;
 
   RewardedAd? _ad;
   RewardedInterstitialAd? _ri;
   InterstitialAd? _inter;
-  bool _loading = false;
-  bool _riLoading = false;
-  bool _interLoading = false;
+
+  Completer<RewardedAd?>? _rewardedCompleter;
+  Completer<RewardedInterstitialAd?>? _riCompleter;
+  Completer<InterstitialAd?>? _interCompleter;
+
+  DateTime? _lastRewardedFailTime;
+  DateTime? _lastRiFailTime;
+  int? _lastRewardedErrorCode;
+  int? _lastRiErrorCode;
 
   bool get ready => _ad != null;
+  bool get riReady => _ri != null;
+
+  static String _userFriendlyError(int? code) {
+    switch (code) {
+      case 3: // ERROR_CODE_NO_FILL
+        return 'No ads available right now. Please try again in a few moments.';
+      case 2: // ERROR_CODE_NETWORK_ERROR
+        return 'Network connection issue. Please check your internet and try again.';
+      case 1: // ERROR_CODE_INVALID_REQUEST
+        return 'Ad servers are busy. Please wait a moment and try again.';
+      case 0: // ERROR_CODE_INTERNAL_ERROR
+      default:
+        return 'Ad is temporarily unavailable. Please try again shortly.';
+    }
+  }
 
   // ---------------------------------------------------------------------
   // Rewarded — watch a video, earn coins (SSV credits server-side).
   // ---------------------------------------------------------------------
 
-  /// Preload an ad; safe to call repeatedly (single-flight).
-  Future<void> preload() async {
-    if (_ad != null || _loading) return;
-    _loading = true;
+  /// Preload an ad; waits for an in-flight load if already running.
+  Future<RewardedAd?> preload({
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    if (_ad != null) return _ad;
+
+    // Rate-limit backoff: if Google just returned No Fill, wait at least 15s
+    // before sending another request to avoid Code 1 (Too many failed requests).
+    if (_lastRewardedFailTime != null &&
+        DateTime.now().difference(_lastRewardedFailTime!).inSeconds < 15) {
+      debugPrint('[AdService] Skipping preload: failure backoff active');
+      return null;
+    }
+
+    if (_rewardedCompleter != null) {
+      try {
+        return await _rewardedCompleter!.future.timeout(timeout);
+      } catch (_) {
+        return _ad;
+      }
+    }
+
+    final completer = Completer<RewardedAd?>();
+    _rewardedCompleter = completer;
+
     try {
+      debugPrint('[AdService] Preloading RewardedAd...');
       await RewardedAd.load(
         adUnitId: rewardedAdUnitId,
         request: const AdRequest(),
         rewardedAdLoadCallback: RewardedAdLoadCallback(
           onAdLoaded: (ad) {
+            debugPrint('[AdService] RewardedAd loaded successfully');
+            _lastRewardedFailTime = null;
+            _lastRewardedErrorCode = null;
             _ad?.dispose();
             _ad = ad;
-            _loading = false;
+            _rewardedCompleter = null;
+            if (!completer.isCompleted) completer.complete(ad);
           },
           onAdFailedToLoad: (err) {
-            _loading = false;
+            _lastRewardedFailTime = DateTime.now();
+            _lastRewardedErrorCode = err.code;
+            debugPrint('[AdService] RewardedAd failed to load: AdMob code ${err.code}: ${err.message}');
+            _rewardedCompleter = null;
+            if (!completer.isCompleted) completer.complete(null);
           },
         ),
       );
+    } catch (e) {
+      _lastRewardedFailTime = DateTime.now();
+      debugPrint('[AdService] RewardedAd load exception: $e');
+      _rewardedCompleter = null;
+      if (!completer.isCompleted) completer.complete(null);
+    }
+
+    try {
+      return await completer.future.timeout(timeout);
     } catch (_) {
-      _loading = false;
+      debugPrint('[AdService] RewardedAd wait timed out (${timeout.inSeconds}s)');
+      return _ad;
     }
   }
 
-  /// Show a rewarded ad.
-  ///
-  /// [onEarned] fires when the user is entitled to the reward (coins are
-  /// credited server-side by AdMob's SSV callback shortly after).
-  /// [onClosed] fires when the ad screen is dismissed.
+  /// Show a rewarded ad. Waits up to [waitTimeout] if the ad is currently loading.
   Future<void> show({
     required String userId,
     required void Function(RewardItem reward) onEarned,
     required void Function(String error) onError,
     required void Function() onClosed,
+    Duration waitTimeout = const Duration(seconds: 8),
   }) async {
-    await preload();
-    final ad = _ad;
+    final ad = _ad ?? await preload(timeout: waitTimeout);
+
     if (ad == null) {
-      onError('Ad not loaded yet. Check your connection and try again.');
+      final hint = _lastRewardedErrorCode != null
+          ? _userFriendlyError(_lastRewardedErrorCode)
+          : 'Ad is still loading. Please wait a moment and tap again.';
+      onError(hint);
       return;
     }
     _ad = null; // one-shot
@@ -96,45 +164,84 @@ class AdService {
       onAdDismissedFullScreenContent: (a) {
         a.dispose();
         onClosed();
+        // Prepare the next one in the background.
+        unawaited(preload());
       },
       onAdFailedToShowFullScreenContent: (a, error) {
         a.dispose();
-        onError('Could not show ad: $error');
+        debugPrint('[AdService] Show error: ${error.message}');
+        onError('Could not play video right now. Please try again.');
         onClosed();
+        unawaited(preload());
       },
     );
 
     await ad.show(onUserEarnedReward: (_, reward) => onEarned(reward));
-
-    // Prepare the next one in the background.
-    // ignore: unawaited_futures
-    preload();
   }
 
   // ---------------------------------------------------------------------
   // Rewarded interstitial — the second way to earn coins (SSV same as above).
   // ---------------------------------------------------------------------
 
-  Future<void> preloadRewardedInterstitial() async {
-    if (_ri != null || _riLoading) return;
-    _riLoading = true;
+  Future<RewardedInterstitialAd?> preloadRewardedInterstitial({
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    if (_ri != null) return _ri;
+
+    if (_lastRiFailTime != null &&
+        DateTime.now().difference(_lastRiFailTime!).inSeconds < 15) {
+      debugPrint('[AdService] Skipping RI preload: failure backoff active');
+      return null;
+    }
+
+    if (_riCompleter != null) {
+      try {
+        return await _riCompleter!.future.timeout(timeout);
+      } catch (_) {
+        return _ri;
+      }
+    }
+
+    final completer = Completer<RewardedInterstitialAd?>();
+    _riCompleter = completer;
+
     try {
+      debugPrint('[AdService] Preloading RewardedInterstitialAd...');
       await RewardedInterstitialAd.load(
         adUnitId: AdUnits.rewardedInterstitial,
         request: const AdRequest(),
-        rewardedInterstitialAdLoadCallback: RewardedInterstitialAdLoadCallback(
+        rewardedInterstitialAdLoadCallback:
+            RewardedInterstitialAdLoadCallback(
           onAdLoaded: (ad) {
+            debugPrint('[AdService] RewardedInterstitialAd loaded successfully');
+            _lastRiFailTime = null;
+            _lastRiErrorCode = null;
             _ri?.dispose();
             _ri = ad;
-            _riLoading = false;
+            _riCompleter = null;
+            if (!completer.isCompleted) completer.complete(ad);
           },
-          onAdFailedToLoad: (_) {
-            _riLoading = false;
+          onAdFailedToLoad: (err) {
+            _lastRiFailTime = DateTime.now();
+            _lastRiErrorCode = err.code;
+            debugPrint('[AdService] RewardedInterstitialAd failed: AdMob code ${err.code}: ${err.message}');
+            _riCompleter = null;
+            if (!completer.isCompleted) completer.complete(null);
           },
         ),
       );
+    } catch (e) {
+      _lastRiFailTime = DateTime.now();
+      debugPrint('[AdService] RewardedInterstitialAd load exception: $e');
+      _riCompleter = null;
+      if (!completer.isCompleted) completer.complete(null);
+    }
+
+    try {
+      return await completer.future.timeout(timeout);
     } catch (_) {
-      _riLoading = false;
+      debugPrint('[AdService] RewardedInterstitialAd wait timed out');
+      return _ri;
     }
   }
 
@@ -145,11 +252,15 @@ class AdService {
     required void Function(RewardItem reward) onEarned,
     required void Function(String error) onError,
     required void Function() onClosed,
+    Duration waitTimeout = const Duration(seconds: 8),
   }) async {
-    await preloadRewardedInterstitial();
-    final ad = _ri;
+    final ad = _ri ?? await preloadRewardedInterstitial(timeout: waitTimeout);
+
     if (ad == null) {
-      onError('Ad not loaded yet. Check your connection and try again.');
+      final hint = _lastRiErrorCode != null
+          ? _userFriendlyError(_lastRiErrorCode)
+          : 'Ad is still loading. Please wait a moment and tap again.';
+      onError(hint);
       return;
     }
     _ri = null; // one-shot
@@ -162,27 +273,40 @@ class AdService {
       onAdDismissedFullScreenContent: (a) {
         a.dispose();
         onClosed();
+        unawaited(preloadRewardedInterstitial());
       },
       onAdFailedToShowFullScreenContent: (a, error) {
         a.dispose();
-        onError('Could not show ad: $error');
+        debugPrint('[AdService] RI Show error: ${error.message}');
+        onError('Could not play video right now. Please try again.');
         onClosed();
+        unawaited(preloadRewardedInterstitial());
       },
     );
 
     await ad.show(onUserEarnedReward: (_, reward) => onEarned(reward));
-
-    // ignore: unawaited_futures
-    preloadRewardedInterstitial();
   }
 
   // ---------------------------------------------------------------------
   // Interstitial — passive profit, no coins. Fire-and-forget from the shell.
   // ---------------------------------------------------------------------
 
-  Future<void> preloadInterstitial() async {
-    if (_inter != null || _interLoading) return;
-    _interLoading = true;
+  Future<InterstitialAd?> preloadInterstitial({
+    Duration timeout = const Duration(seconds: 6),
+  }) async {
+    if (_inter != null) return _inter;
+
+    if (_interCompleter != null) {
+      try {
+        return await _interCompleter!.future.timeout(timeout);
+      } catch (_) {
+        return _inter;
+      }
+    }
+
+    final completer = Completer<InterstitialAd?>();
+    _interCompleter = completer;
+
     try {
       await InterstitialAd.load(
         adUnitId: AdUnits.interstitial,
@@ -191,23 +315,32 @@ class AdService {
           onAdLoaded: (ad) {
             _inter?.dispose();
             _inter = ad;
-            _interLoading = false;
+            _interCompleter = null;
+            if (!completer.isCompleted) completer.complete(ad);
           },
-          onAdFailedToLoad: (_) {
-            _interLoading = false;
+          onAdFailedToLoad: (err) {
+            debugPrint('[AdService] Interstitial failed: ${err.message}');
+            _interCompleter = null;
+            if (!completer.isCompleted) completer.complete(null);
           },
         ),
       );
     } catch (_) {
-      _interLoading = false;
+      _interCompleter = null;
+      if (!completer.isCompleted) completer.complete(null);
+    }
+
+    try {
+      return await completer.future.timeout(timeout);
+    } catch (_) {
+      return _inter;
     }
   }
 
   /// Show the preloaded interstitial (silently skips + retries when the ad
   /// isn't ready — passive formats must never block the UI).
   Future<void> showInterstitial({void Function()? onClosed}) async {
-    await preloadInterstitial();
-    final ad = _inter;
+    final ad = _inter ?? await preloadInterstitial();
     if (ad == null) {
       onClosed?.call();
       return;
@@ -218,14 +351,12 @@ class AdService {
       onAdDismissedFullScreenContent: (a) {
         a.dispose();
         onClosed?.call();
-        // ignore: unawaited_futures
-        preloadInterstitial();
+        unawaited(preloadInterstitial());
       },
       onAdFailedToShowFullScreenContent: (a, error) {
         a.dispose();
         onClosed?.call();
-        // ignore: unawaited_futures
-        preloadInterstitial();
+        unawaited(preloadInterstitial());
       },
     );
 
@@ -255,8 +386,7 @@ class AdService {
                 onClosed?.call();
               },
             );
-            // ignore: unawaited_futures
-            ad.show();
+            unawaited(ad.show());
           },
           onAdFailedToLoad: (_) {
             onClosed?.call();
@@ -268,6 +398,7 @@ class AdService {
     }
   }
 
+  /// App-wide cleanup (only when the whole application shuts down).
   void dispose() {
     _ad?.dispose();
     _ad = null;
