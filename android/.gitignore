@@ -9,4 +9,5 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+!ghosst-release.jks
 /build/
