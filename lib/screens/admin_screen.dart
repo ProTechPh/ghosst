@@ -652,6 +652,12 @@ class _AdminScreenState extends State<AdminScreen> {
     return '${id.substring(0, 8)}…';
   }
 
+  /// Keeps a raw error readable inside a dialog row (single line, clipped).
+  static String _trimErr(Object e) {
+    final t = '$e'.trim().replaceAll(RegExp(r'\s+'), ' ');
+    return t.length <= 90 ? t : '${t.substring(0, 87)}…';
+  }
+
   String _claimDate(String iso) {
     if (iso.isEmpty) return '—';
     return iso.length >= 10 ? iso.substring(0, 10) : iso;
@@ -770,6 +776,64 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
+  /// Shared confirm for the bulk-delete buttons. Destructive and
+  /// irreversible, so every path through them states exactly how many rows
+  /// are about to die.
+  Future<bool> _confirmBulk(String title, String body) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(
+          body,
+          style: const TextStyle(
+            color: AppColors.textDim,
+            fontSize: 13.5,
+            height: 1.45,
+          ),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  /// Red destructive action used by the Keys dialog's bulk-delete row.
+  Widget _dangerButton({
+    required String label,
+    required bool enabled,
+    required VoidCallback onPressed,
+  }) {
+    return FilledButton(
+      style: FilledButton.styleFrom(
+        backgroundColor: AppColors.red.withValues(alpha: 0.12),
+        foregroundColor: AppColors.red,
+        disabledBackgroundColor: AppColors.surfaceHigh,
+        disabledForegroundColor: AppColors.textDim,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        visualDensity: VisualDensity.compact,
+      ),
+      onPressed: enabled ? onPressed : null,
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800),
+      ),
+    );
+  }
+
   /// Per-product stock: what's still available + what buyers already claimed.
   /// Both lists mutate inside the dialog so it stays in sync after a delete.
   Future<void> _showKeys(Product p) async {
@@ -777,6 +841,16 @@ class _AdminScreenState extends State<AdminScreen> {
     var claimed = keys.where((k) => k.productId == p.id && k.claimed).toList();
     var adding = false;
     var addErr = '';
+    var addStep = ''; // live 'Adding 120/500…' while a paste is posting
+    var bulkBusy = false;
+    var bulkStep = ''; // live 'Deleting 120/480…' during a bulk delete
+    var bulkErr = '';
+
+    // Server-side totals — the lists below only ever hold the newest 200
+    // rows, so the bulk buttons and section headers count from the database
+    // (`null` = counts not loaded yet ⇒ fall back to the list length).
+    int? totalKeys;
+    int? usedTotal;
     final keyInput = TextEditingController();
 
     // Pool that newly pasted keys join (duration products only).
@@ -787,11 +861,116 @@ class _AdminScreenState extends State<AdminScreen> {
     var open = true;
     StateSetter? refresh;
 
+    /// Re-reads the server-side totals — the lists cap at 200 rows, so the
+    /// bulk buttons and section headers count straight from the database.
+    Future<void> reloadCounts() async {
+      try {
+        final all = await Backend.countKeys(p.id);
+        final used = await Backend.countKeys(p.id, usedOnly: true);
+        if (open) {
+          refresh?.call(() {
+            totalKeys = all;
+            usedTotal = used;
+          });
+        }
+      } catch (_) {
+        // Counts are decoration — the dialog still works without them.
+      }
+    }
+
+    /// Bulk sweep, pages of 100 server-side: [usedOnly] erases only the
+    /// claimed rows, otherwise every key of this product.
+    Future<void> bulkDelete({required bool usedOnly}) async {
+      if (bulkBusy) return;
+      // Counts come from the server; fall back to the visible rows when the
+      // tally failed — the sweep below always runs against the database.
+      final count = usedOnly
+          ? (usedTotal ?? claimed.length)
+          : (totalKeys ?? (avail.length + claimed.length));
+      if (count == 0) return;
+      final plural = count == 1 ? '' : 's';
+      final ok = await _confirmBulk(
+        usedOnly ? 'Delete $count used key$plural?' : 'Delete all $count keys?',
+        usedOnly
+            ? 'Every claimed key of "${p.name}" is erased from the database — '
+                'the stock list stays tidy while buyers keep the keys they '
+                'already received. This cannot be undone.'
+            : 'Every key of "${p.name}" — used and unused — is erased from '
+                'the database. This cannot be undone.',
+      );
+      if (!ok || !open) return;
+
+      refresh?.call(() {
+        bulkBusy = true;
+        bulkErr = '';
+        bulkStep = 'Deleting 0/$count…';
+      });
+      try {
+        final failed = await Backend.deleteKeysForProduct(
+          p.id,
+          usedOnly: usedOnly,
+          onProgress: (done, total) {
+            // Throttle: a 5 000-row sweep would otherwise rebuild 5 000×.
+            if (!open) return;
+            if (done != total && done % 25 != 0) return;
+            refresh?.call(
+              () => bulkStep = total > 0
+                  ? 'Deleting $done/$total…'
+                  : 'Deleting $done…',
+            );
+          },
+        );
+
+        // Pull fresh stock + totals so the dialog shows the new truth.
+        try {
+          final fresh = await Backend.keysForProduct(p.id);
+          if (mounted) {
+            setState(
+              () => keys = [...keys.where((x) => x.productId != p.id), ...fresh],
+            );
+          }
+          if (open) {
+            refresh?.call(() {
+              avail = fresh.where((k) => !k.claimed).toList();
+              claimed = fresh.where((k) => k.claimed).toList();
+            });
+          }
+        } catch (_) {
+          // Keep the state-derived lists — the delete itself still landed.
+        }
+        await reloadCounts();
+        if (open && failed > 0) {
+          refresh?.call(
+            () => bulkErr =
+                '$failed row(s) could not be deleted — run it again.',
+          );
+        }
+      } catch (e) {
+        if (open) {
+          refresh?.call(() => bulkErr = 'Delete failed: ${_trimErr(e)}');
+        }
+      } finally {
+        if (open) {
+          refresh?.call(() {
+            bulkBusy = false;
+            bulkStep = '';
+          });
+        }
+      }
+    }
+
     final dialog = showDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setD) {
           refresh = setD;
+
+          // Server-side totals (fall back to the list length until the
+          // counts land — both arrive together in [reloadCounts]).
+          final hasCounts = totalKeys != null && usedTotal != null;
+          final claimedTotal = hasCounts ? usedTotal! : claimed.length;
+          final availTotal = hasCounts ? totalKeys! - usedTotal! : avail.length;
+          final allTotal = hasCounts ? totalKeys! : avail.length + claimed.length;
 
           Future<void> removeKey(StockEntry k) async {
             if (!await _deleteKey(k)) return;
@@ -829,13 +1008,21 @@ class _AdminScreenState extends State<AdminScreen> {
               setD(() {
                 adding = true;
                 addErr = '';
+                addStep = '';
               });
             }
             try {
-              await Backend.addKeys(
+              // Chunked submit: 100 rows per call, a breath between chunks.
+              final res = await Backend.addKeys(
                 productId: p.id,
                 keys: lines,
                 duration: p.hasDurations ? keyDuration : '',
+                onProgress: (done, total) {
+                  // Throttle: a 5 000-key paste would rebuild 5 000×.
+                  if (!ctx.mounted) return;
+                  if (done != total && done % 10 != 0) return;
+                  setD(() => addStep = 'Adding $done/$total…');
+                },
               );
               final fresh = await Backend.keysForProduct(p.id);
               if (mounted) {
@@ -846,15 +1033,27 @@ class _AdminScreenState extends State<AdminScreen> {
                   ],
                 );
               }
+              await reloadCounts();
               if (ctx.mounted) {
                 setD(() {
                   avail = fresh.where((k) => !k.claimed).toList();
                   claimed = fresh.where((k) => k.claimed).toList();
                   keyInput.clear();
+                  addStep = '';
+                  addErr = res.ok
+                      ? ''
+                      : 'Added ${res.added} of ${lines.length} keys — '
+                            '${res.failed} failed'
+                            '${res.lastError.isEmpty ? '' : ' (${_trimErr(res.lastError)})'}.';
                 });
               }
             } catch (e) {
-              if (ctx.mounted) setD(() => addErr = 'Add failed: $e');
+              if (ctx.mounted) {
+                setD(() {
+                  addErr = 'Add failed: ${_trimErr(e)}';
+                  addStep = '';
+                });
+              }
             } finally {
               if (ctx.mounted) setD(() => adding = false);
             }
@@ -950,16 +1149,67 @@ class _AdminScreenState extends State<AdminScreen> {
                     NeonButton(
                       expand: true,
                       dense: true,
-                      onPressed: adding ? null : addPasted,
-                      child: Text(_addLabel(keyInput.text, adding)),
+                      onPressed: adding || bulkBusy ? null : addPasted,
+                      child: Text(
+                        adding && addStep.isNotEmpty
+                            ? addStep
+                            : _addLabel(keyInput.text, adding),
+                      ),
                     ),
                     const SizedBox(height: 14),
                     const Divider(height: 1, color: Color(0x14FFFFFF)),
-                    SectionLabel('Available (${avail.length})'),
-                    if (avail.isEmpty)
-                      const Text(
-                        'No keys in stock.',
+                    SectionLabel('Bulk delete'),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _dangerButton(
+                            label: 'Delete used ($claimedTotal)',
+                            enabled: !adding && !bulkBusy && claimedTotal > 0,
+                            onPressed: () => bulkDelete(usedOnly: true),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _dangerButton(
+                            label: 'Delete all ($allTotal)',
+                            enabled: !adding && !bulkBusy && allTotal > 0,
+                            onPressed: () => bulkDelete(usedOnly: false),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (bulkStep.isNotEmpty || bulkErr.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        bulkStep.isNotEmpty ? bulkStep : bulkErr,
                         style: TextStyle(
+                          color: bulkStep.isNotEmpty
+                              ? AppColors.textDim
+                              : AppColors.red,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    const Divider(height: 1, color: Color(0x14FFFFFF)),
+                    SectionLabel('Available ($availTotal)'),
+                    if (avail.isNotEmpty && avail.length < availTotal) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        'Newest ${avail.length} of $availTotal listed.',
+                        style: TextStyle(
+                          color: AppColors.textDim,
+                          fontSize: 11.5,
+                        ),
+                      ),
+                    ],
+                    if (avail.isEmpty)
+                      Text(
+                        availTotal > 0
+                            ? '$availTotal in the database — '
+                                  'older than this 200-row view.'
+                            : 'No keys in stock.',
+                        style: const TextStyle(
                           color: AppColors.textDim,
                           fontSize: 13,
                         ),
@@ -1027,11 +1277,24 @@ class _AdminScreenState extends State<AdminScreen> {
                         ),
                       ),
                     const SizedBox(height: 14),
-                    SectionLabel('Claimed (${claimed.length})'),
-                    if (claimed.isEmpty)
-                      const Text(
-                        'Nothing claimed yet.',
+                    SectionLabel('Claimed ($claimedTotal)'),
+                    if (claimed.isNotEmpty && claimed.length < claimedTotal) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        'Newest ${claimed.length} of $claimedTotal listed.',
                         style: TextStyle(
+                          color: AppColors.textDim,
+                          fontSize: 11.5,
+                        ),
+                      ),
+                    ],
+                    if (claimed.isEmpty)
+                      Text(
+                        claimedTotal > 0
+                            ? '$claimedTotal in the database — '
+                                  'older than this 200-row view.'
+                            : 'Nothing claimed yet.',
+                        style: const TextStyle(
                           color: AppColors.textDim,
                           fontSize: 13,
                         ),
@@ -1085,9 +1348,12 @@ class _AdminScreenState extends State<AdminScreen> {
     ).whenComplete(() => open = false);
 
     // Stock straight from the database — the shared `keys` window only keeps
-    // the newest 200 rows across every product.
+    // the newest 200 rows across every product. Totals load alongside it so
+    // the bulk buttons know how many rows they really cover.
+    final freshStock = Backend.keysForProduct(p.id);
+    final freshCounts = reloadCounts();
     try {
-      final fresh = await Backend.keysForProduct(p.id);
+      final fresh = await freshStock;
       if (mounted) {
         setState(
           () => keys = [...keys.where((x) => x.productId != p.id), ...fresh],
@@ -1099,6 +1365,7 @@ class _AdminScreenState extends State<AdminScreen> {
     } catch (_) {
       // Keep the state-derived lists — viewing and copying still work.
     }
+    await freshCounts;
 
     await dialog;
     // The dialog is closing — dispose its controller after the exit frame.

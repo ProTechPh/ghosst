@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart';
@@ -236,6 +237,30 @@ class StockEntry {
   );
 }
 
+/// Outcome of a bulk stock write.
+///
+/// Appwrite has no all-or-nothing batch API — rows land one request at a
+/// time — so a paste can partially succeed. The admin panel shows the split
+/// instead of pretending the whole submit worked (or didn't).
+class StockWriteResult {
+  const StockWriteResult({
+    required this.added,
+    required this.failed,
+    this.lastError = '',
+  });
+
+  /// Rows that reached the database.
+  final int added;
+
+  /// Rows that could not be written after retries.
+  final int failed;
+
+  /// Message of the last failure (trimmed by the caller for display).
+  final String lastError;
+
+  bool get ok => failed == 0;
+}
+
 /// A forced-update announcement published from the Admin screen.
 ///
 /// Clients compare [versionCode] against their own build number at launch;
@@ -273,6 +298,16 @@ class Backend {
   static final _account = Account(client);
   static final _functions = Functions(client);
   static final _storage = Storage(client);
+
+  /// Rows per stock "submit". Appwrite's batched paths (CSV import and
+  /// friends) accept at most 100 rows per call, so a paste bigger than this
+  /// is split into chunks of this size and posted one chunk after another
+  /// instead of blowing up on the limit.
+  static const stockChunkSize = 100;
+
+  /// Requests kept in flight while a chunk is posted — enough to make a
+  /// 100-row chunk finish quickly, few enough to stay under rate limits.
+  static const _stockWidth = 6;
 
   // ---- session ----
 
@@ -466,24 +501,83 @@ class Backend {
     }
   }
 
-  static Future<void> addKeys({
+  /// Adds [keys] to a product's stock, posting [stockChunkSize] rows per
+  /// submit so pastes of any size clear Appwrite's 100-row-per-call cap (and
+  /// its rate limits) instead of failing outright.
+  ///
+  /// A chunk is posted with a few requests in flight, then the next chunk
+  /// follows after a short breather. Transient failures (429 / 5xx / no
+  /// connection) are retried twice before they count as failed; rows are
+  /// never retried under a fresh document id, so a retry can't fork a key
+  /// into two stock rows. Returns the landed/failed split for the UI.
+  static Future<StockWriteResult> addKeys({
     required String productId,
     required List<String> keys,
     String duration = '',
+    void Function(int done, int total)? onProgress,
   }) async {
-    for (final k in keys) {
-      await _db.createDocument(
-        databaseId: Col.dbId,
-        collectionId: Col.keys,
-        documentId: ID.unique(),
-        data: {
+    var added = 0;
+    var failed = 0;
+    var lastError = '';
+    final total = keys.length;
+
+    for (var start = 0; start < total; start += stockChunkSize) {
+      final chunk = keys.sublist(start, math.min(start + stockChunkSize, total));
+      await _pooled(chunk, _stockWidth, (k) async {
+        // One id for every attempt: if the first POST landed but its answer
+        // was lost, the retry collides (409) instead of creating a twin row.
+        final docId = ID.unique();
+        final data = <String, dynamic>{
           'productId': productId,
           'key': k,
           'status': 'available',
           if (duration.isNotEmpty) 'duration': duration,
-        },
-      );
+        };
+        try {
+          await _retry(() => _db.createDocument(
+                databaseId: Col.dbId,
+                collectionId: Col.keys,
+                documentId: docId,
+                data: data,
+              ));
+          added++;
+        } on AppwriteException catch (e) {
+          if (e.code == 409) {
+            added++; // our own earlier attempt already wrote this row
+          } else {
+            failed++;
+            lastError = e.message ?? '$e';
+          }
+        } catch (e) {
+          failed++;
+          lastError = '$e';
+        }
+        onProgress?.call(added + failed, total);
+      });
+
+      // Breather between submits so a multi-chunk paste stays polite.
+      if (start + stockChunkSize < total) {
+        await Future.delayed(const Duration(milliseconds: 150));
+      }
     }
+    return StockWriteResult(added: added, failed: failed, lastError: lastError);
+  }
+
+  /// Total rows stored for [productId], straight from the server — the admin
+  /// dialog's lists only hold the newest 200 rows. [usedOnly] counts the
+  /// claimed rows: `claimed` is the only non-`available` value this app ever
+  /// writes, and the filter rides the existing `product_status` index.
+  static Future<int> countKeys(String productId, {bool usedOnly = false}) async {
+    final r = await _db.listDocuments(
+      databaseId: Col.dbId,
+      collectionId: Col.keys,
+      queries: [
+        Query.equal('productId', productId),
+        if (usedOnly) Query.equal('status', 'claimed'),
+        Query.limit(1),
+      ],
+    );
+    return r.total;
   }
 
   static Future<List<StockEntry>> listKeys() async {
@@ -733,37 +827,105 @@ class Backend {
     );
   }
 
-  /// Removes EVERY key of [productId] straight from the database — queried
-  /// per product in pages, not taken from the admin's shared 200-row window,
-  /// so a product delete leaves no stock rows behind.
+  /// Removes stock rows of [productId] straight from the database — queried
+  /// in pages of 100 (Appwrite's per-submit cap), not taken from the admin's
+  /// shared 200-row window, so a bulk delete leaves nothing behind.
+  ///
+  /// [usedOnly] limits the sweep to claimed rows; the default clears every
+  /// key of the product. [onProgress] reports (rows removed, rows matched).
   ///
   /// Returns how many rows could NOT be deleted (0 = fully clean).
-  static Future<int> deleteKeysForProduct(String productId) async {
+  static Future<int> deleteKeysForProduct(
+    String productId, {
+    bool usedOnly = false,
+    void Function(int done, int total)? onProgress,
+  }) async {
+    var total = -1;
+    try {
+      total = await countKeys(productId, usedOnly: usedOnly);
+    } catch (_) {
+      // Count is cosmetic — a failed tally must not stop the delete.
+    }
+
+    var done = 0;
     final failed = <String>{};
     while (true) {
       final r = await _db.listDocuments(
         databaseId: Col.dbId,
         collectionId: Col.keys,
-        queries: [Query.equal('productId', productId), Query.limit(100)],
+        queries: [
+          Query.equal('productId', productId),
+          // `claimed` = used. Exact match on purpose: it reuses the
+          // `product_status` composite index (like `availableCount`) while
+          // deleted rows fall out of the result set on the next pass.
+          if (usedOnly) Query.equal('status', 'claimed'),
+          Query.limit(100),
+        ],
       );
-      if (r.documents.isEmpty) break;
+      // Rows that already failed once stay in the result set — drop them so
+      // a stubborn row can't loop this page forever.
+      final page = r.documents.where((d) => !failed.contains(d.$id)).toList();
+      if (page.isEmpty) break;
+
       var anyRemoved = false;
-      for (final d in r.documents) {
+      await _pooled(page, _stockWidth, (d) async {
         try {
-          await _db.deleteDocument(
-            databaseId: Col.dbId,
-            collectionId: Col.keys,
-            documentId: d.$id,
-          );
+          await _retry(() => _db.deleteDocument(
+                databaseId: Col.dbId,
+                collectionId: Col.keys,
+                documentId: d.$id,
+              ));
           anyRemoved = true;
+          done++;
+          onProgress?.call(done, total);
         } catch (_) {
           failed.add(d.$id);
         }
-      }
+      });
       // Every remaining row failed to delete — don't spin forever.
       if (!anyRemoved) break;
     }
     return failed.length;
+  }
+
+  // ---- stock bulk helpers ----
+
+  /// Runs [job] over [items] with at most [width] in flight, pulling the next
+  /// item as soon as a worker frees up. Safe for Dart's single-threaded event
+  /// loop: the index hand-out between `await`s is never interleaved.
+  static Future<void> _pooled<T>(
+    List<T> items,
+    int width,
+    Future<void> Function(T item) job,
+  ) async {
+    var next = 0;
+    Future<void> worker() async {
+      while (true) {
+        final i = next;
+        if (i >= items.length) return;
+        next = i + 1;
+        await job(items[i]);
+      }
+    }
+
+    await Future.wait([
+      for (var i = 0; i < width && i < items.length; i++) worker(),
+    ]);
+  }
+
+  /// Retries transient failures (rate limit, server error, dead connection)
+  /// with a short backoff; everything else — permissions, validation — fails
+  /// immediately, since repeating it won't help.
+  static Future<T> _retry<T>(Future<T> Function() op, {int attempts = 3}) async {
+    for (var attempt = 1;; attempt++) {
+      try {
+        return await op();
+      } on AppwriteException catch (e) {
+        final transient = e.code == 429 || e.code == 0 || e.code >= 500;
+        if (!transient || attempt >= attempts) rethrow;
+        await Future.delayed(Duration(milliseconds: 350 * attempt));
+      }
+    }
   }
 
   // ---- forced app update ----
