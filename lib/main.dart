@@ -23,8 +23,18 @@ import 'theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  MobileAds.instance.initialize();
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    debugPrint('FlutterError: ${details.exception}');
+  };
+
   runApp(const MyApp());
+
+  // Initialize MobileAds asynchronously so it never delays or crashes app launch
+  MobileAds.instance.initialize().catchError((e) {
+    debugPrint('MobileAds initialization failed: $e');
+    return InitializationStatus({});
+  });
 }
 
 class MyApp extends StatelessWidget {
@@ -129,7 +139,15 @@ class _AppEntryState extends State<_AppEntry> {
               setState(() => _splash = false);
               // Passive app-open ad right after the intro — profit only,
               // never over the update gate and never touches the balance.
-              if (_pendingUpdate == null) _ads.showAppOpen();
+              if (_pendingUpdate == null) {
+                Future.delayed(const Duration(milliseconds: 500), () {
+                  try {
+                    _ads.showAppOpen();
+                  } catch (e) {
+                    debugPrint('showAppOpen error: $e');
+                  }
+                });
+              }
             },
           ),
       ],
