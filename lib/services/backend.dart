@@ -921,7 +921,8 @@ class Backend {
       try {
         return await op();
       } on AppwriteException catch (e) {
-        final transient = e.code == 429 || e.code == 0 || e.code >= 500;
+        final code = e.code ?? 0;
+        final transient = code == 429 || code == 0 || code >= 500;
         if (!transient || attempt >= attempts) rethrow;
         await Future.delayed(Duration(milliseconds: 350 * attempt));
       }
