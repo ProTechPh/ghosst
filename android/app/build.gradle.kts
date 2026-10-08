@@ -51,6 +51,11 @@ android {
     }
 }
 
+dependencies {
+    // Google AdMob Mediation Adapter for Unity Ads
+    implementation("com.google.ads.mediation:unity:4.12.5.0")
+}
+
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
