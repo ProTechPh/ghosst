@@ -144,12 +144,30 @@ jobs:
           done
 
           # Publish this build as the new forced update.
+          # In Appwrite REST API, POST /documents requires documentId and data fields
           BODY=$(jq -n \
             --argjson versionCode "$BUILD" \
             --arg versionName "$BASE" \
             --arg url "$GATE_URL" \
             --arg message "Required update — install the latest Ghosst to keep using the app." \
-            '{versionCode: $versionCode, versionName: $versionName, url: $url, message: $message, active: true}')
-          NEW_ID=$(curl -sS -f "${HEADERS[@]}" -H "Content-Type: application/json" \
-            -X POST -d "$BODY" "$DOCS" | jq -r '."$id"')
+            '{
+              documentId: "unique()",
+              data: {
+                versionCode: $versionCode,
+                versionName: $versionName,
+                url: $url,
+                message: $message,
+                active: true
+              }
+            }')
+
+          CREATE_RESP=$(curl -sS "${HEADERS[@]}" -H "Content-Type: application/json" \
+            -X POST -d "$BODY" "$DOCS")
+          NEW_ID=$(echo "$CREATE_RESP" | jq -r '."$id" // empty')
+
+          if [ -z "$NEW_ID" ]; then
+            echo "::warning::Failed to create forced-update doc in Appwrite. Response: ${CREATE_RESP}"
+            exit 0
+          fi
+
           echo "Forced-update gate open: build ${BUILD} (${BASE}) → ${GATE_URL} (doc ${NEW_ID})"
