@@ -1,5 +1,6 @@
-# Builds the Play Store bundle without publishing it. Version name/code come
-# directly from pubspec.yaml; Google Play is the only update channel.
+# Builds the Play Store bundle and attaches the raw .aab to a GitHub Release.
+# Version name/code come directly from pubspec.yaml; Google Play is the only
+# update channel. Release assets are stored as-is (no zip wrapper).
 name: Build Play Bundle
 
 on:
@@ -8,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write # create the release and upload the .aab asset
 
 concurrency:
   group: build-play-bundle
@@ -44,8 +45,29 @@ jobs:
       - name: Build Play release bundle
         run: flutter build appbundle --release --flavor play
 
-      - name: Upload Play bundle artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Ghosst-Play-${{ github.run_number }}
-          path: build/app/outputs/bundle/playRelease/app-play-release.aab
+      # The .aab is attached directly as a release asset — GitHub artifacts
+      # are always zipped, releases are not.
+      - name: Publish release with raw .aab
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VER=$(grep -E '^version:' pubspec.yaml | awk '{print $2}')
+          TAG="v${VER}"
+          AAB=build/app/outputs/bundle/playRelease/app-play-release.aab
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          NOTES="Ghosst **${VER}** — Play bundle (\`.aab\`)"
+          NOTES="${NOTES}"$'\n'"Commit: \`${GITHUB_SHA:0:7}\`"
+          NOTES="${NOTES}"$'\n'"Build: ${RUN_URL}"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # Same version rebuilt — replace the asset in place.
+            gh release upload "$TAG" "$AAB" --clobber
+          else
+            gh release create "$TAG" "$AAB" \
+              --title "Ghosst v${VER}" \
+              --notes "$NOTES" \
+              --target "$GITHUB_SHA" \
+              --latest
+          fi
+          echo "Published ${TAG} → app-play-release.aab"
