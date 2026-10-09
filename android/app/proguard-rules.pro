@@ -28,6 +28,17 @@
 # File picker & platform interface
 -keep class com.mr.flutter.plugin.filepicker.** { *; }
 
+# androidx.work + androidx.room: WorkManagerInitializer builds WorkDatabase at
+# process start through Room's reflective lookup of the generated *_Impl class.
+# If R8 strips or renames those, the app force-closes before Flutter even
+# starts: "Failed to create an instance of androidx.work.impl.WorkDatabase".
+# WorkManager's initializer runs unconditionally via androidx.startup.
+-keep class androidx.work.** { *; }
+-keep class androidx.room.** { *; }
+-keep class * extends androidx.room.RoomDatabase { *; }
+-dontwarn androidx.work.**
+-dontwarn androidx.room.**
+
 # Play Core split-install classes are referenced by Flutter's deferred-component
 # loader but not shipped (we don't use dynamic feature modules). Suppress only —
 # kept in sync with build/app/outputs/mapping/<variant>/missing_rules.txt.
