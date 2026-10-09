@@ -12,4 +12,23 @@
             <data android:mimeType="application/vnd.android.package-archive" />
         </intent>
     </queries>
+
+    <!-- Pulled in by open_filex (and file_picker) but never used here: the
+         Play build serves no APK/file downloads, and every file the app does
+         open lives in its own external-files dir, which open_filex opens via
+         FileProvider with no storage permission. Dropping them keeps Play's
+         photo/video permission declaration out of the App content form. The
+         direct flavor keeps them. -->
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_IMAGES"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_VIDEO"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_AUDIO"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        tools:node="remove" />
 </manifest>
