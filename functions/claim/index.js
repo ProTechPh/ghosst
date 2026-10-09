@@ -6,6 +6,7 @@
  *   - body { action: "deleteAccount", confirm: "DELETE" } -> permanent account deletion
  *   - body { action: "simulate" }                          -> rejected (debug path removed)
  *   - body { action: "claimBetaBonus" }                    -> daily beta no-fill bonus
+ *   - body { action: "claimBetaTestReward" }               -> cooldown-limited test-ad reward
  *   - body { productId }                                   -> license claim (type=key)
  *                                                          -> download unlock (type=apk|file)
  *
@@ -20,6 +21,8 @@
  * Env vars: COINS_PER_REWARD (fallback reward when callback omits reward_amount)
  *           BETA_BONUS_ENABLED=true to enable the temporary daily fallback
  *           BETA_DAILY_COINS=5 (small server-controlled daily amount)
+ *           BETA_TEST_REWARDS_ENABLED=true (defaults to BETA_BONUS_ENABLED)
+ *           BETA_TEST_COINS=5, BETA_TEST_COOLDOWN_SECONDS=30
  *
  * Returns: { ok: true, key }                     (license claim)
  *          { ok: true, downloadUrl, type }       (app-store claim)
@@ -708,6 +711,130 @@ function betaBonusId(uid, now = new Date()) {
   return `beta-${userHash}-${day}`;
 }
 
+function betaTestRewardsEnabled() {
+  const explicit = process.env.BETA_TEST_REWARDS_ENABLED;
+  if (explicit == null || String(explicit).trim() === '') return betaBonusEnabled();
+  return /^(1|true|yes)$/i.test(String(explicit));
+}
+
+function betaTestRewardAmount() {
+  const configured = parseInt(
+    process.env.BETA_TEST_COINS || process.env.BETA_DAILY_COINS || '5',
+    10,
+  );
+  return Number.isFinite(configured) ? Math.max(1, Math.min(configured, 100)) : 5;
+}
+
+function betaTestCooldownSeconds() {
+  const configured = parseInt(process.env.BETA_TEST_COOLDOWN_SECONDS || '30', 10);
+  return Number.isFinite(configured) ? Math.max(10, Math.min(configured, 3600)) : 30;
+}
+
+function betaTestMarkerId(uid) {
+  const userHash = crypto.createHash('sha256').update(String(uid)).digest('hex').slice(0, 20);
+  return `beta-test-${userHash}`;
+}
+
+async function handleBetaTestReward(context, key) {
+  const { req, res, log } = context;
+  const jwt = req.headers['x-appwrite-user-jwt'];
+  if (!jwt) return res.json({ ok: false, code: 'unauthorized', error: 'Not signed in' }, 200);
+  if (!betaTestRewardsEnabled()) {
+    return res.json(
+      { ok: false, code: 'disabled', error: 'Beta test rewards are not active' },
+      200,
+    );
+  }
+
+  const user = await api('GET', '/account', { jwt });
+  const uid = user.$id;
+  const locked = await acquireLock(key, uid);
+  if (!locked) {
+    return res.json(
+      { ok: false, code: 'busy', error: 'Busy right now — try again in a second' },
+      200,
+    );
+  }
+
+  const markerId = betaTestMarkerId(uid);
+  const markerPath = `/databases/${DB}/collections/${COL.adRewards}/documents/${markerId}`;
+  let previous = null;
+  let markerCreated = false;
+  try {
+    try {
+      previous = await api('GET', markerPath, { key });
+    } catch (e) {
+      if (e.status !== 404) throw e;
+    }
+
+    const now = new Date();
+    const cooldownMs = betaTestCooldownSeconds() * 1000;
+    const previousTime = previous
+      ? Date.parse(String(previous.eventTime || previous.createdAt || previous.$updatedAt || ''))
+      : Number.NaN;
+    if (!Number.isNaN(previousTime) && now.getTime() - previousTime < cooldownMs) {
+      return res.json({
+        ok: false,
+        code: 'cooldown',
+        error: 'Test reward cooldown is still active',
+        nextAt: new Date(previousTime + cooldownMs).toISOString(),
+      }, 200);
+    }
+
+    const amount = betaTestRewardAmount();
+    const markerData = {
+      userId: uid,
+      reward: amount,
+      nonce: `BETA-TEST-${now.getTime()}`,
+      adUnit: 'beta_test_reward',
+      eventTime: now.toISOString(),
+      createdAt: now.toISOString(),
+    };
+    if (previous) {
+      await api('PATCH', markerPath, { key, body: { data: markerData } });
+    } else {
+      await api('POST', `/databases/${DB}/collections/${COL.adRewards}/documents`, {
+        key,
+        body: { documentId: markerId, data: markerData },
+      });
+      markerCreated = true;
+    }
+
+    let total;
+    try {
+      total = await credit(key, uid, amount);
+    } catch (e) {
+      // Roll the cooldown marker back so a failed balance write can be retried.
+      try {
+        if (markerCreated) {
+          await api('DELETE', markerPath, { key });
+        } else if (previous) {
+          await api('PATCH', markerPath, {
+            key,
+            body: {
+              data: {
+                userId: String(previous.userId || uid),
+                reward: Number(previous.reward || 0),
+                nonce: String(previous.nonce || ''),
+                adUnit: String(previous.adUnit || 'beta_test_reward'),
+                eventTime: String(previous.eventTime || ''),
+                createdAt: String(previous.createdAt || previous.$createdAt || ''),
+              },
+            },
+          });
+        }
+      } catch (_) {}
+      throw e;
+    }
+
+    const nextAt = new Date(now.getTime() + cooldownMs).toISOString();
+    log(`beta test reward user=${uid} +${amount} total=${total} next=${nextAt}`);
+    return res.json({ ok: true, amount, coins: total, nextAt }, 200);
+  } finally {
+    await releaseLock(key);
+  }
+}
+
 async function handleBetaBonus(context, key) {
   const { req, res, log } = context;
   const jwt = req.headers['x-appwrite-user-jwt'];
@@ -1111,6 +1238,9 @@ module.exports = async (context) => {
     }
     if (params.action === 'claimBetaBonus') {
       return await handleBetaBonus(context, key);
+    }
+    if (params.action === 'claimBetaTestReward') {
+      return await handleBetaTestReward(context, key);
     }
     return await handleClaim(context, key, params);
   } catch (e) {

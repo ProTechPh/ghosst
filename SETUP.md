@@ -214,12 +214,17 @@ Create only **Functions → `claim`**, then in **Settings**:
 | Execute access | **Any** (AdMob cannot authenticate; protected app routes validate JWT) |
 | Timeout | 30s default |
 | Scopes (ephemeral key) | `documents.read`, `documents.write`, `users.read`, `users.write` |
-| Env vars | `COINS_PER_REWARD=10`, `BETA_BONUS_ENABLED=true`, `BETA_DAILY_COINS=5` |
+| Env vars | `COINS_PER_REWARD=10`, `BETA_BONUS_ENABLED=true`, `BETA_DAILY_COINS=5`, `BETA_TEST_REWARDS_ENABLED=true`, `BETA_TEST_COINS=5`, `BETA_TEST_COOLDOWN_SECONDS=30` |
 
 `BETA_BONUS_ENABLED=true` enables the temporary no-fill fallback. It is
 authenticated and limited server-side to one claim per Appwrite user per UTC
 day. Set it to `false` when the beta ends; never replace this with a client-side
 coin increment. `BETA_DAILY_COINS` is clamped by the function to 1–100.
+For closed-beta test-ad builds, `BETA_TEST_REWARDS_ENABLED=true` credits each
+completed test ad after a server-enforced cooldown. The amount is controlled by
+`BETA_TEST_COINS` (1–100) and the cooldown by
+`BETA_TEST_COOLDOWN_SECONDS` (10–3600). Disable both beta flags and reset beta
+balances before promoting a live-ads bundle to Production.
 
 Upload the zip under **Deployments → Create deployment** (build command:
 default `npm install` is fine).

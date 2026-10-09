@@ -155,12 +155,14 @@ class _EarnScreenState extends State<EarnScreen> {
   }
 
   Future<void> _claimBetaBonus({bool afterTestAd = false}) async {
+    if (afterTestAd) {
+      await _claimBetaTestReward();
+      return;
+    }
     if (!mounted) return;
     setState(() {
       busy = true;
-      status = afterTestAd
-          ? 'Test ad completed — claiming your daily beta bonus…'
-          : 'No ads available — checking your daily beta bonus…';
+      status = 'No ads available — checking your daily beta bonus…';
     });
 
     try {
@@ -186,11 +188,7 @@ class _EarnScreenState extends State<EarnScreen> {
       setState(() {
         busy = false;
         status = alreadyClaimed
-            ? afterTestAd
-                  ? 'Test ad completed. Today’s beta bonus was already claimed.'
-                  : 'No ads available. Today’s beta bonus was already claimed; try ads again later.'
-            : afterTestAd
-            ? 'Test ad completed, but the beta bonus is unavailable right now.'
+            ? 'No ads available. Today’s beta bonus was already claimed; try ads again later.'
             : 'No ads available right now. Please try again in a few minutes.';
       });
       _startCooldown(alreadyClaimed ? 60 : 30);
@@ -199,9 +197,52 @@ class _EarnScreenState extends State<EarnScreen> {
       if (!mounted) return;
       setState(() {
         busy = false;
-        status = afterTestAd
-            ? 'Test ad completed, but the beta bonus is unavailable right now.'
-            : 'No ads available right now. Please try again in a few minutes.';
+        status =
+            'No ads available right now. Please try again in a few minutes.';
+      });
+      _startCooldown(30);
+    }
+  }
+
+  Future<void> _claimBetaTestReward() async {
+    if (!mounted) return;
+    setState(() {
+      busy = true;
+      status = 'Test ad completed — adding coins…';
+    });
+
+    try {
+      final result = await Backend.claimBetaTestReward();
+      if (!mounted) return;
+      if (result.granted) {
+        try {
+          await widget.onRefresh();
+        } catch (_) {
+          // Credit is already committed server-side.
+        }
+        if (!mounted) return;
+        setState(() {
+          busy = false;
+          _lastActionSucceeded = true;
+          status = '+${result.amount} test-ad coins added!';
+        });
+        _startCooldown(30);
+        return;
+      }
+
+      setState(() {
+        busy = false;
+        status = result.code == 'cooldown'
+            ? 'Test reward cooldown is still active. Please wait a moment.'
+            : 'Test ad completed, but coins could not be added right now.';
+      });
+      _startCooldown(30);
+    } catch (e) {
+      debugPrint('[EarnScreen] Beta test reward exception: $e');
+      if (!mounted) return;
+      setState(() {
+        busy = false;
+        status = 'Test ad completed, but coins could not be added right now.';
       });
       _startCooldown(30);
     }
