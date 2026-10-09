@@ -5,6 +5,7 @@
  *   - query ?signature=<AdMob SSV signature>               -> verified reward callback
  *   - body { action: "deleteAccount", confirm: "DELETE" } -> permanent account deletion
  *   - body { action: "simulate" }                          -> rejected (debug path removed)
+ *   - body { action: "claimBetaBonus" }                    -> daily beta no-fill bonus
  *   - body { productId }                                   -> license claim (type=key)
  *                                                          -> download unlock (type=apk|file)
  *
@@ -17,6 +18,8 @@
  *                   users.write in the console)
  *
  * Env vars: COINS_PER_REWARD (fallback reward when callback omits reward_amount)
+ *           BETA_BONUS_ENABLED=true to enable the temporary daily fallback
+ *           BETA_DAILY_COINS=5 (small server-controlled daily amount)
  *
  * Returns: { ok: true, key }                     (license claim)
  *          { ok: true, downloadUrl, type }       (app-store claim)
@@ -680,6 +683,110 @@ async function finishClaim(context, key, opts) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Temporary beta bonus: authenticated, once per UTC day               */
+/* ------------------------------------------------------------------ */
+
+function betaBonusEnabled() {
+  return /^(1|true|yes)$/i.test(String(process.env.BETA_BONUS_ENABLED || ''));
+}
+
+function betaBonusAmount() {
+  const configured = parseInt(process.env.BETA_DAILY_COINS || '5', 10);
+  // A bad environment value must never turn a small fallback into a windfall.
+  return Number.isFinite(configured) ? Math.max(1, Math.min(configured, 100)) : 5;
+}
+
+function nextUtcDayIso(now = new Date()) {
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
+  ).toISOString();
+}
+
+function betaBonusId(uid, now = new Date()) {
+  const day = now.toISOString().slice(0, 10).replace(/-/g, '');
+  const userHash = crypto.createHash('sha256').update(String(uid)).digest('hex').slice(0, 20);
+  return `beta-${userHash}-${day}`;
+}
+
+async function handleBetaBonus(context, key) {
+  const { req, res, log } = context;
+  const jwt = req.headers['x-appwrite-user-jwt'];
+  if (!jwt) return res.json({ ok: false, code: 'unauthorized', error: 'Not signed in' }, 200);
+  if (!betaBonusEnabled()) {
+    return res.json(
+      { ok: false, code: 'disabled', error: 'Daily beta bonus is not active' },
+      200,
+    );
+  }
+
+  const user = await api('GET', '/account', { jwt });
+  const uid = user.$id;
+  const now = new Date();
+  const amount = betaBonusAmount();
+  const dedupeKey = betaBonusId(uid, now);
+  const nextAt = nextUtcDayIso(now);
+
+  const locked = await acquireLock(key, uid);
+  if (!locked) {
+    return res.json(
+      { ok: false, code: 'busy', error: 'Busy right now — try again in a second' },
+      200,
+    );
+  }
+
+  try {
+    // The deterministic document id is the authoritative daily limit. Even
+    // concurrent/replayed requests can create it only once (the loser gets 409).
+    try {
+      await api('POST', `/databases/${DB}/collections/${COL.adRewards}/documents`, {
+        key,
+        body: {
+          documentId: dedupeKey,
+          data: {
+            userId: uid,
+            reward: amount,
+            nonce: `BETA-${now.toISOString().slice(0, 10)}`,
+            adUnit: 'beta_daily_bonus',
+            eventTime: now.toISOString(),
+            createdAt: now.toISOString(),
+          },
+        },
+      });
+    } catch (e) {
+      if (e.status === 409) {
+        return res.json({
+          ok: false,
+          code: 'already_claimed',
+          error: 'Daily beta bonus already claimed',
+          nextAt,
+        }, 200);
+      }
+      throw e;
+    }
+
+    let total;
+    try {
+      total = await credit(key, uid, amount);
+    } catch (e) {
+      // Keep retries safe: remove the reservation if the balance update failed.
+      try {
+        await api(
+          'DELETE',
+          `/databases/${DB}/collections/${COL.adRewards}/documents/${dedupeKey}`,
+          { key },
+        );
+      } catch (_) {}
+      throw e;
+    }
+
+    log(`beta bonus user=${uid} +${amount} total=${total} day=${dedupeKey}`);
+    return res.json({ ok: true, amount, coins: total, nextAt }, 200);
+  } finally {
+    await releaseLock(key);
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Permanent account deletion                                         */
 /* ------------------------------------------------------------------ */
 
@@ -1001,6 +1108,9 @@ module.exports = async (context) => {
     }
     if (params.action === 'deleteAccount') {
       return await handleDeleteAccount(context, key, params);
+    }
+    if (params.action === 'claimBetaBonus') {
+      return await handleBetaBonus(context, key);
     }
     return await handleClaim(context, key, params);
   } catch (e) {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:appwrite/models.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -5,6 +7,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../premium.dart';
+import '../services/ad_service.dart';
 import '../services/backend.dart';
 import '../services/consent_service.dart';
 import '../services/distribution.dart';
@@ -127,12 +130,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
     final error = await ConsentService.showPrivacyOptions();
-    if (error != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not open privacy choices: ${error.message}'),
-        ),
-      );
+    if (error != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not open privacy choices: ${error.message}'),
+          ),
+        );
+      }
+    } else {
+      final permitted = await ConsentService.canRequestAds();
+      if (permitted && !AdService.adsEnabled) {
+        try {
+          await AdService.instance.initialize();
+          unawaited(AdService.instance.preload());
+          unawaited(AdService.instance.preloadInterstitial());
+        } catch (e) {
+          debugPrint(
+            '[Consent] Error initializing ads after consent update: $e',
+          );
+        }
+      }
     }
   }
 

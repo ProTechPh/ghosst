@@ -183,7 +183,7 @@ member. That's what unlocks the Admin tab and key/product write permissions.
 > `{ok, downloadUrl, type, cost}`),
 > `{action: "deleteAccount", confirm: "DELETE"}` → authenticated permanent
 > deletion, and `?yt=...` → YouTube embed HTML. Deploy just
-> `claim` with a **domain (HTTP)**, env var `COINS_PER_REWARD=10` (fallback),
+> `claim` with a **domain (HTTP)**, env vars described below,
 > scopes `documents.read`, `documents.write`, `users.read`, and `users.write`;
 > Execute access = Any. The deletion route still requires the caller's valid
 > user JWT. AdMob
@@ -214,7 +214,12 @@ Create only **Functions → `claim`**, then in **Settings**:
 | Execute access | **Any** (AdMob cannot authenticate; protected app routes validate JWT) |
 | Timeout | 30s default |
 | Scopes (ephemeral key) | `documents.read`, `documents.write`, `users.read`, `users.write` |
-| Env vars | `COINS_PER_REWARD` = `10` (fallback) |
+| Env vars | `COINS_PER_REWARD=10`, `BETA_BONUS_ENABLED=true`, `BETA_DAILY_COINS=5` |
+
+`BETA_BONUS_ENABLED=true` enables the temporary no-fill fallback. It is
+authenticated and limited server-side to one claim per Appwrite user per UTC
+day. Set it to `false` when the beta ends; never replace this with a client-side
+coin increment. `BETA_DAILY_COINS` is clamped by the function to 1–100.
 
 Upload the zip under **Deployments → Create deployment** (build command:
 default `npm install` is fine).
@@ -251,9 +256,16 @@ App ID (already in the manifest): `ca-app-pub-7791552060229072~1855578469`.
 3. **Rewarded interstitial** is created with the same SSV treatment —
    `AdUnits.rewardedInterstitial` is wired with its real ID. The four passive
    units (Banner / Interstitial / App open / Native) need no SSV.
-4. The passive formats (banner, interstitial, app open, native) need **no
+4. **Unity Ads mediation fallback:** in AdMob → Mediation, create a mediation
+   group for Android rewarded inventory, target both Ghosst rewarded ad units,
+   then add Unity Ads as an ad source with the Unity Game ID and placement ID.
+   Complete Unity's bidding/waterfall partnership setup and mapping. Merely
+   adding `gma_mediation_unity` to the app does not enable Unity inventory in
+   AdMob. Confirm startup logs contain `Unity Ads Adapter: ready`; load-error
+   waterfall logs should list a Unity adapter response.
+5. The passive formats (banner, interstitial, app open, native) need **no
    SSV** — they earn you revenue only and never touch the coin balance.
-5. **Ad-blocker gate:** ads pay for the app, so a device that filters them
+6. **Ad-blocker gate:** ads pay for the app, so a device that filters them
    is locked out. `lib/services/adblock_detector.dart` probes three real
    AdMob hosts against the Appwrite endpoint as control — 2 of 3 blocked
    while the control answers = gate (`lib/screens/adblock_screen.dart`,
@@ -268,6 +280,8 @@ flutter pub get
 flutter run --flavor play
 # or for the sideload-only feature set:
 flutter run --flavor direct
+# Release-mode QA with guaranteed-fill Google test ads (never publish this):
+flutter run --release --flavor play --dart-define=USE_TEST_ADS=true
 flutter build appbundle --release --flavor play
 flutter build apk --release --flavor direct
 ```
@@ -320,9 +334,15 @@ flutter build apk --release --flavor direct
       scopes. Verify both a product claim and Profile → Delete account.
 - [ ] Each published APK/file product has a working MediaFire link.
 - [ ] Play upload uses the `N` from CI: every push to `main` auto-bumps
-      `version: x.y.z+N` in `pubspec.yaml` and publishes release `vX.Y.Z+N`.
-      Bump `x.y.z` by hand when the release needs a new feature version;
-      Play Store is the only update channel and `N` must always increase.
+       `version: x.y.z+N` in `pubspec.yaml` and publishes release `vX.Y.Z+N`.
+       Bump `x.y.z` by hand when the release needs a new feature version;
+       Play Store is the only update channel and `N` must always increase.
+- [ ] Use the correct GitHub Release asset: `live-ads.aab` for production Play,
+      `closed-beta-test-ads.aab` for temporary closed testing,
+      `release-live-ads.apk` for production sideload testing,
+      `release-test-ads.apk` for release-mode QA, and `debug-test-ads.apk` for
+      development. Upload only one AAB for each version code. Never promote a
+      `test-ads` bundle to Production or distribute either test APK publicly.
 - [ ] Product costs / reward amount reviewed.
 - [ ] Upload the release's deobfuscation file to Play Console so crashes are
       readable: download `mapping.txt.gz` from the matching GitHub release
@@ -342,6 +362,7 @@ flutter build apk --release --flavor direct
 | Claim: `Missing index` | Collection index (esp. `product_status`) not created |
 | Admin tab missing | User not in team `admins` |
 | Coins never arrive after a real ad | Check `reward-ssv` **Executions** log: if no execution at all → callback URL wrong; if `bad signature`/`stale` → clock/cert issue; if `missing user_id` → ad loaded without SSV options |
+| Rewarded ad says no inventory | First run a debug build (automatic Google sample ads) or release QA with `USE_TEST_ADS=true`. If test ads load, the SDK is healthy: activate the AdMob mediation group, map both rewarded units to Unity, verify the Unity account/placement is live, and inspect the per-adapter waterfall logs. New production units can also take time to begin serving. |
 | `Permission denied` listing keys as admin | Team membership/permissions on `keys` collection |
 | Store shows no products | Create one in Admin tab (or console), `active = true` |
 | Buy app → `Download not configured` | No `app_files` doc for that product (or blank `url`) — re-save the link in the Admin edit dialog |

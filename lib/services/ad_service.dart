@@ -1,63 +1,315 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 /// Every ad unit the app uses, in one place.
 ///
-/// AdMob app ID: `ca-app-pub-7791552060229072~1855578469` (already wired in
-/// `android/app/src/main/AndroidManifest.xml`). All six units are real —
-/// SSV is enabled on both rewarded formats (coins credited by the claim
-/// function); passive formats need no SSV.
+/// AdMob app ID: `ca-app-pub-7791552060229072~1855578469` (configured in
+/// `android/app/src/main/AndroidManifest.xml`).
+///
+/// In debug builds ([kDebugMode]), Google's official sample test unit IDs are
+/// used by default to protect the publisher account from invalid traffic flags.
+/// In release builds, real production unit IDs are used.
 class AdUnits {
   AdUnits._();
 
-  // Real units (AdMob console, app Ghosst).
-  static const rewarded = 'ca-app-pub-7791552060229072/3206073177';
-  static const rewardedInterstitial = 'ca-app-pub-7791552060229072/8242333892';
-  static const banner = 'ca-app-pub-7791552060229072/3870834884';
-  static const interstitial = 'ca-app-pub-7791552060229072/9227103348';
-  static const appOpen = 'ca-app-pub-7791552060229072/5447640437';
-  static const native = 'ca-app-pub-7791552060229072/4134558763';
+  // Production units (AdMob console, app Ghosst).
+  static const prodRewarded = 'ca-app-pub-7791552060229072/3206073177';
+  static const prodRewardedInterstitial =
+      'ca-app-pub-7791552060229072/8242333892';
+  static const prodBanner = 'ca-app-pub-7791552060229072/3870834884';
+  static const prodInterstitial = 'ca-app-pub-7791552060229072/9227103348';
+  static const prodAppOpen = 'ca-app-pub-7791552060229072/5447640437';
+  static const prodNative = 'ca-app-pub-7791552060229072/4134558763';
+
+  // Google official test ad unit IDs (Android).
+  // https://developers.google.com/admob/android/test-ads
+  static const testRewarded = 'ca-app-pub-3940256099942544/5224354917';
+  static const testRewardedInterstitial =
+      'ca-app-pub-3940256099942544/5354046379';
+  static const testBanner = 'ca-app-pub-3940256099942544/6300978111';
+  static const testInterstitial = 'ca-app-pub-3940256099942544/1033173712';
+  static const testAppOpen = 'ca-app-pub-3940256099942544/9257395921';
+  static const testNative = 'ca-app-pub-3940256099942544/2247696110';
+
+  /// Registered test device IDs for Google Mobile Ads SDK.
+  /// Testing on physical devices with registered testDeviceIds guarantees
+  /// test ad fills (solving error code 3: No fill) and prevents invalid traffic penalties.
+  static const List<String> testDeviceIds = [
+    'F3ED0CCF90379B60EE0479B837D1D143', // TECNO LJ6
+  ];
+
+  /// Debug builds use Google's guaranteed-fill sample inventory. Release builds
+  /// use the real Ghosst units unless explicitly overridden for release QA with
+  /// `--dart-define=USE_TEST_ADS=true`.
+  static bool useTestAds = const bool.fromEnvironment(
+    'USE_TEST_ADS',
+    defaultValue: kDebugMode,
+  );
+
+  static String get rewarded => useTestAds ? testRewarded : prodRewarded;
+  static String get rewardedInterstitial =>
+      useTestAds ? testRewardedInterstitial : prodRewardedInterstitial;
+  static String get banner => useTestAds ? testBanner : prodBanner;
+  static String get interstitial =>
+      useTestAds ? testInterstitial : prodInterstitial;
+  static String get appOpen => useTestAds ? testAppOpen : prodAppOpen;
+  static String get native => useTestAds ? testNative : prodNative;
 }
 
-/// Ad wrapper covering all six AdMob formats:
+/// Lifecycle states for an individual advertisement slot.
+enum AdState { idle, loading, loaded, showing, failed }
+
+/// Centralized advertisement manager covering all six AdMob formats:
 ///
 /// * **Rewarded** & **Rewarded interstitial** — earn coins (SSV → function).
 /// * **Interstitial**, **App open**, **Banner**, **Native** — passive
 ///   revenue only; they never touch the coin balance.
 ///
-/// Full-screen formats preload in the background (single-flight) and reload
-/// themselves after every show. Uses a singleton cache so tab changes or
-/// multiple screen builds never discard matched ads.
+/// Enforces:
+/// - Explicit ad state management (idle, loading, loaded, showing, failed).
+/// - Concurrency mutex preventing multiple full-screen ads from opening at once.
+/// - Duplicate reward prevention on rewarded video completion.
+/// - Single-flight preloading with timeout guards.
+/// - 4-hour TTL caching for AdMob full-screen inventory.
+/// - Bounded exponential backoff with jitter on load failures.
+/// - Structured diagnostic logging of error codes, domains, and response info.
+/// - Safe disposal without tearing down singleton state across screen builds.
 class AdService {
   AdService._internal();
   static final AdService instance = AdService._internal();
   factory AdService() => instance;
 
-  /// Set only after UMP allows ad requests and Mobile Ads initializes.
-  static bool adsEnabled = false;
+  /// Reactive notifier for when ads are permitted by consent and initialized.
+  final ValueNotifier<bool> adsEnabledNotifier = ValueNotifier<bool>(false);
+
+  /// Backwards-compatible static property for `AdService.adsEnabled`.
+  static bool get adsEnabled => instance.adsEnabledNotifier.value;
+  static set adsEnabled(bool v) => instance.adsEnabledNotifier.value = v;
 
   /// Real rewarded ad unit with SSV (reward item: coins).
-  static const rewardedAdUnitId = AdUnits.rewarded;
+  static String get rewardedAdUnitId => AdUnits.rewarded;
 
+  // Active full-screen ad instances.
   RewardedAd? _ad;
   RewardedInterstitialAd? _ri;
   InterstitialAd? _inter;
+  AppOpenAd? _appOpen;
 
+  // States
+  AdState _adState = AdState.idle;
+  AdState _riState = AdState.idle;
+  AdState _interState = AdState.idle;
+  AdState _appOpenState = AdState.idle;
+
+  // Timestamps
+  DateTime? _adLoadedTime;
+  DateTime? _riLoadedTime;
+  DateTime? _interLoadedTime;
+  DateTime? _appOpenLoadedTime;
+
+  // In-flight single-flight completers.
   Completer<RewardedAd?>? _rewardedCompleter;
   Completer<RewardedInterstitialAd?>? _riCompleter;
   Completer<InterstitialAd?>? _interCompleter;
+  Completer<AppOpenAd?>? _appOpenCompleter;
 
+  // Failure tracking & backoff
   DateTime? _lastRewardedFailTime;
   DateTime? _lastRiFailTime;
+  DateTime? _lastInterFailTime;
+  DateTime? _lastAppOpenFailTime;
+
   int? _lastRewardedErrorCode;
   int? _lastRiErrorCode;
+  int? _lastInterErrorCode;
+  int? _lastAppOpenErrorCode;
 
-  bool get ready => _ad != null;
-  bool get riReady => _ri != null;
+  int _rewardedRetryAttempts = 0;
+  int _riRetryAttempts = 0;
+  int _interRetryAttempts = 0;
+  int _appOpenRetryAttempts = 0;
 
-  static String _userFriendlyError(int? code) {
+  Duration? _rewardedRetryDelay;
+  Duration? _riRetryDelay;
+  Duration? _interRetryDelay;
+  Duration? _appOpenRetryDelay;
+
+  // Global full-screen presentation mutex.
+  bool _isShowingFullScreenAd = false;
+  bool get isShowingFullScreenAd => _isShowingFullScreenAd;
+
+  // Readiness getters
+  bool get ready => _ad != null && !_isAdExpired(_adLoadedTime);
+  bool get riReady => _ri != null && !_isAdExpired(_riLoadedTime);
+  bool get interReady => _inter != null && !_isAdExpired(_interLoadedTime);
+  bool get appOpenReady =>
+      _appOpen != null && !_isAdExpired(_appOpenLoadedTime);
+
+  AdState get rewardedState => _adState;
+  AdState get riState => _riState;
+  AdState get interState => _interState;
+  AdState get appOpenState => _appOpenState;
+
+  int? get lastRewardedErrorCode => _lastRewardedErrorCode;
+  int? get lastRiErrorCode => _lastRiErrorCode;
+  int? get lastInterErrorCode => _lastInterErrorCode;
+  int? get lastAppOpenErrorCode => _lastAppOpenErrorCode;
+
+  // Mediation adapter initialization tracking
+  InitializationStatus? _initializationStatus;
+  InitializationStatus? get initializationStatus => _initializationStatus;
+  Map<String, AdapterStatus> get adapterStatuses =>
+      _initializationStatus?.adapterStatuses ?? const {};
+
+  /// Checks whether Unity Ads mediation adapter is registered and ready.
+  bool get isUnityAdapterReady {
+    final statuses = adapterStatuses;
+    for (final entry in statuses.entries) {
+      if (entry.key.toLowerCase().contains('unity')) {
+        return entry.value.state == AdapterInitializationState.ready;
+      }
+    }
+    return false;
+  }
+
+  /// Returns a diagnostic report string of all mediation adapter statuses.
+  String get mediationDiagnostics {
+    if (_initializationStatus == null) {
+      return 'Mediation not initialized (MobileAds.initialize pending)';
+    }
+    final statuses = adapterStatuses;
+    if (statuses.isEmpty) {
+      return 'Mediation initialized: No adapters reported in initializationStatus.';
+    }
+    final buffer = StringBuffer('Mediation Adapter Statuses:\n');
+    for (final entry in statuses.entries) {
+      final name = entry.key;
+      final st = entry.value;
+      final isUnity = name.toLowerCase().contains('unity');
+      buffer.writeln(
+        '  - $name: ${st.state.name} (${st.latency}s) "${st.description}"'
+        '${isUnity ? " [Unity Ads Adapter]" : ""}',
+      );
+    }
+    return buffer.toString().trim();
+  }
+
+  /// Centralized initialization entry point that configures test devices,
+  /// initializes the Mobile Ads SDK with mediation adapters, records adapter
+  /// statuses, logs diagnostics, and enables ad preloading.
+  Future<InitializationStatus> initialize() async {
+    await MobileAds.instance.updateRequestConfiguration(
+      RequestConfiguration(testDeviceIds: AdUnits.testDeviceIds),
+    );
+    final status = await MobileAds.instance.initialize();
+    _initializationStatus = status;
+    adsEnabledNotifier.value = true;
+    _logMediationInitialization(status);
+    return status;
+  }
+
+  /// Records an initialization status instance directly (used for testing and diagnostics).
+  void recordInitializationStatus(InitializationStatus status) {
+    _initializationStatus = status;
+    _logMediationInitialization(status);
+  }
+
+  static void _logMediationInitialization(InitializationStatus status) {
+    final timestamp = DateTime.now().toIso8601String();
+    debugPrint('[$timestamp][AdService][Mediation] MobileAds initialized.');
+    final adapters = status.adapterStatuses;
+    if (adapters.isEmpty) {
+      debugPrint(
+        '[$timestamp][AdService][Mediation] No adapter statuses returned.',
+      );
+      return;
+    }
+    var unityFound = false;
+    for (final entry in adapters.entries) {
+      final name = entry.key;
+      final adapterStatus = entry.value;
+      final isUnity = name.toLowerCase().contains('unity');
+      if (isUnity) unityFound = true;
+      debugPrint(
+        '[$timestamp][AdService][Mediation] Adapter: $name | '
+        'State: ${adapterStatus.state.name} | Latency: ${adapterStatus.latency}s | '
+        'Description: "${adapterStatus.description}"'
+        '${isUnity ? " [Unity Ads]" : ""}',
+      );
+    }
+    if (!unityFound) {
+      debugPrint(
+        '[$timestamp][AdService][Mediation] Unity Ads adapter not yet reporting in adapterStatuses. '
+        'Ensure Unity Ads is enabled in AdMob Mediation groups for unit $rewardedAdUnitId.',
+      );
+    }
+  }
+
+  /// AdMob full-screen ads expire 4 hours after being loaded.
+  static bool _isAdExpired(DateTime? loadedAt) {
+    if (loadedAt == null) return true;
+    return DateTime.now().difference(loadedAt) > const Duration(hours: 4);
+  }
+
+  /// Calculates bounded exponential backoff with jitter.
+  static Duration _calculateBackoff(int attempt, {bool isNoFill = false}) {
+    final baseSeconds = isNoFill ? 15 : 3;
+    final maxSeconds = isNoFill ? 60 : 30;
+    final exponential = baseSeconds * math.pow(2, math.min(attempt, 4)).toInt();
+    final clamped = math.min(exponential, maxSeconds);
+    final jitter = math.Random().nextInt(3);
+    return Duration(seconds: clamped + jitter);
+  }
+
+  /// Structured diagnostic logging for all ad lifecycle events.
+  static void _logAdError(
+    String format,
+    String adUnitId,
+    dynamic error, {
+    String action = 'load',
+  }) {
+    final timestamp = DateTime.now().toIso8601String();
+    if (error is LoadAdError) {
+      final responseInfo = error.responseInfo;
+      final adapter = responseInfo?.mediationAdapterClassName ?? 'None';
+      final responseId = responseInfo?.responseId ?? 'None';
+      debugPrint(
+        '[$timestamp][AdService][$format][$action] FAILED: '
+        'code=${error.code}, domain="${error.domain}", message="${error.message}", '
+        'adapter="$adapter", responseId="$responseId", unit="$adUnitId"',
+      );
+      if (responseInfo?.adapterResponses != null &&
+          responseInfo!.adapterResponses!.isNotEmpty) {
+        for (final ar in responseInfo.adapterResponses!) {
+          final isUnity =
+              ar.adapterClassName.toLowerCase().contains('unity') ||
+              ar.adSourceName.toLowerCase().contains('unity');
+          debugPrint(
+            '[$timestamp][AdService][$format][Waterfall] '
+            'adapter="${ar.adapterClassName}", source="${ar.adSourceName}", '
+            'latency=${ar.latencyMillis}ms, '
+            'error="${ar.adError?.message ?? 'None'}"'
+            '${isUnity ? " [Unity Ads]" : ""}',
+          );
+        }
+      }
+    } else if (error is AdError) {
+      debugPrint(
+        '[$timestamp][AdService][$format][$action] FAILED: '
+        'code=${error.code}, domain="${error.domain}", message="${error.message}", '
+        'unit="$adUnitId"',
+      );
+    } else {
+      debugPrint(
+        '[$timestamp][AdService][$format][$action] FAILED: $error, unit="$adUnitId"',
+      );
+    }
+  }
+
+  static String userFriendlyError(int? code) {
     switch (code) {
       case 3: // ERROR_CODE_NO_FILL
         return 'No ads available right now. Please try again in a few moments.';
@@ -75,21 +327,37 @@ class AdService {
   // Rewarded — watch a video, earn coins (SSV credits server-side).
   // ---------------------------------------------------------------------
 
-  /// Preload an ad; waits for an in-flight load if already running.
+  /// Preload a rewarded ad; awaits an in-flight load if already running.
   Future<RewardedAd?> preload({
     Duration timeout = const Duration(seconds: 8),
   }) async {
     if (!adsEnabled) return null;
-    if (_ad != null) return _ad;
 
-    // Rate-limit backoff: if Google just returned No Fill, wait at least 15s
-    // before sending another request to avoid Code 1 (Too many failed requests).
-    if (_lastRewardedFailTime != null &&
-        DateTime.now().difference(_lastRewardedFailTime!).inSeconds < 15) {
-      debugPrint('[AdService] Skipping preload: failure backoff active');
-      return null;
+    // Check cached ad TTL.
+    if (_ad != null) {
+      if (_isAdExpired(_adLoadedTime)) {
+        debugPrint('[AdService] Cached RewardedAd expired (>4h); clearing');
+        _ad?.dispose();
+        _ad = null;
+        _adState = AdState.idle;
+      } else {
+        return _ad;
+      }
     }
 
+    // Rate-limit backoff: if Google recently failed, respect backoff delay.
+    if (_lastRewardedFailTime != null && _rewardedRetryDelay != null) {
+      final elapsed = DateTime.now().difference(_lastRewardedFailTime!);
+      if (elapsed < _rewardedRetryDelay!) {
+        final remaining = (_rewardedRetryDelay! - elapsed).inSeconds;
+        debugPrint(
+          '[AdService] Skipping RewardedAd preload: backoff active (${remaining}s remaining)',
+        );
+        return null;
+      }
+    }
+
+    // If an in-flight load is pending, await it.
     if (_rewardedCompleter != null) {
       try {
         return await _rewardedCompleter!.future.timeout(timeout);
@@ -100,36 +368,58 @@ class AdService {
 
     final completer = Completer<RewardedAd?>();
     _rewardedCompleter = completer;
+    _adState = AdState.loading;
 
     try {
-      debugPrint('[AdService] Preloading RewardedAd...');
+      debugPrint(
+        '[AdService] Preloading RewardedAd (unit: ${AdUnits.rewarded})...',
+      );
       await RewardedAd.load(
-        adUnitId: rewardedAdUnitId,
+        adUnitId: AdUnits.rewarded,
         request: const AdRequest(),
         rewardedAdLoadCallback: RewardedAdLoadCallback(
           onAdLoaded: (ad) {
-            debugPrint('[AdService] RewardedAd loaded successfully');
+            _adState = AdState.loaded;
+            _adLoadedTime = DateTime.now();
             _lastRewardedFailTime = null;
             _lastRewardedErrorCode = null;
+            _rewardedRetryAttempts = 0;
+            _rewardedRetryDelay = null;
             _ad?.dispose();
             _ad = ad;
             _rewardedCompleter = null;
+            final adapter =
+                ad.responseInfo?.mediationAdapterClassName ?? 'None';
+            final responseId = ad.responseInfo?.responseId ?? 'None';
+            final isUnity = adapter.toLowerCase().contains('unity');
+            debugPrint(
+              '[AdService] RewardedAd loaded successfully via adapter="$adapter"'
+              '${isUnity ? " (Unity Ads Mediation)" : ""}'
+              ' (responseId: $responseId)',
+            );
             if (!completer.isCompleted) completer.complete(ad);
           },
           onAdFailedToLoad: (err) {
+            _adState = AdState.failed;
             _lastRewardedFailTime = DateTime.now();
             _lastRewardedErrorCode = err.code;
-            debugPrint(
-              '[AdService] RewardedAd failed to load: AdMob code ${err.code}: ${err.message}',
+            _rewardedRetryAttempts++;
+            _rewardedRetryDelay = _calculateBackoff(
+              _rewardedRetryAttempts,
+              isNoFill: err.code == 3,
             );
+            _logAdError('Rewarded', AdUnits.rewarded, err, action: 'load');
             _rewardedCompleter = null;
             if (!completer.isCompleted) completer.complete(null);
           },
         ),
       );
     } catch (e) {
+      _adState = AdState.failed;
       _lastRewardedFailTime = DateTime.now();
-      debugPrint('[AdService] RewardedAd load exception: $e');
+      _rewardedRetryAttempts++;
+      _rewardedRetryDelay = _calculateBackoff(_rewardedRetryAttempts);
+      _logAdError('Rewarded', AdUnits.rewarded, e, action: 'load_exception');
       _rewardedCompleter = null;
       if (!completer.isCompleted) completer.complete(null);
     }
@@ -153,42 +443,90 @@ class AdService {
     Duration waitTimeout = const Duration(seconds: 8),
   }) async {
     if (!adsEnabled) {
-      onError('Ads are unavailable until privacy choices are completed.');
+      onError('Ads are temporarily unavailable. Please try again shortly.');
       return;
     }
+    if (_isShowingFullScreenAd) {
+      onError('Another advertisement is already currently displaying.');
+      return;
+    }
+
     final ad = _ad ?? await preload(timeout: waitTimeout);
 
     if (ad == null) {
       final hint = _lastRewardedErrorCode != null
-          ? _userFriendlyError(_lastRewardedErrorCode)
+          ? userFriendlyError(_lastRewardedErrorCode)
           : 'Ad is still loading. Please wait a moment and tap again.';
       onError(hint);
       return;
     }
-    _ad = null; // one-shot
 
-    // SSV callback receives this as `user_id` so the function can credit us.
-    await ad.setServerSideOptions(
-      ServerSideVerificationOptions(userId: userId),
-    );
+    // Take ownership and enter showing state.
+    _ad = null;
+    _adState = AdState.showing;
+    _isShowingFullScreenAd = true;
+
+    try {
+      await ad.setServerSideOptions(
+        ServerSideVerificationOptions(userId: userId),
+      );
+    } catch (e) {
+      debugPrint('[AdService] Failed to set SSV options: $e');
+    }
+
+    var rewardGranted = false;
 
     ad.fullScreenContentCallback = FullScreenContentCallback(
+      onAdShowedFullScreenContent: (a) {
+        debugPrint('[AdService] RewardedAd displayed full screen');
+      },
+      onAdImpression: (a) {
+        debugPrint('[AdService] RewardedAd impression recorded');
+      },
+      onAdClicked: (a) {
+        debugPrint('[AdService] RewardedAd clicked');
+      },
       onAdDismissedFullScreenContent: (a) {
+        debugPrint('[AdService] RewardedAd dismissed');
         a.dispose();
+        _isShowingFullScreenAd = false;
+        _adState = AdState.idle;
         onClosed();
         // Prepare the next one in the background.
         unawaited(preload());
       },
       onAdFailedToShowFullScreenContent: (a, error) {
+        _logAdError('Rewarded', AdUnits.rewarded, error, action: 'show');
         a.dispose();
-        debugPrint('[AdService] Show error: ${error.message}');
+        _isShowingFullScreenAd = false;
+        _adState = AdState.idle;
         onError('Could not play video right now. Please try again.');
         onClosed();
         unawaited(preload());
       },
     );
 
-    await ad.show(onUserEarnedReward: (_, reward) => onEarned(reward));
+    try {
+      await ad.show(
+        onUserEarnedReward: (_, reward) {
+          if (!rewardGranted) {
+            rewardGranted = true;
+            debugPrint(
+              '[AdService] User earned reward: ${reward.amount} ${reward.type}',
+            );
+            onEarned(reward);
+          }
+        },
+      );
+    } catch (e) {
+      debugPrint('[AdService] RewardedAd show exception: $e');
+      _isShowingFullScreenAd = false;
+      _adState = AdState.idle;
+      ad.dispose();
+      onError('Could not play video right now. Please try again.');
+      onClosed();
+      unawaited(preload());
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -199,12 +537,29 @@ class AdService {
     Duration timeout = const Duration(seconds: 8),
   }) async {
     if (!adsEnabled) return null;
-    if (_ri != null) return _ri;
 
-    if (_lastRiFailTime != null &&
-        DateTime.now().difference(_lastRiFailTime!).inSeconds < 15) {
-      debugPrint('[AdService] Skipping RI preload: failure backoff active');
-      return null;
+    if (_ri != null) {
+      if (_isAdExpired(_riLoadedTime)) {
+        debugPrint(
+          '[AdService] Cached RewardedInterstitialAd expired (>4h); clearing',
+        );
+        _ri?.dispose();
+        _ri = null;
+        _riState = AdState.idle;
+      } else {
+        return _ri;
+      }
+    }
+
+    if (_lastRiFailTime != null && _riRetryDelay != null) {
+      final elapsed = DateTime.now().difference(_lastRiFailTime!);
+      if (elapsed < _riRetryDelay!) {
+        final remaining = (_riRetryDelay! - elapsed).inSeconds;
+        debugPrint(
+          '[AdService] Skipping RI preload: backoff active (${remaining}s remaining)',
+        );
+        return null;
+      }
     }
 
     if (_riCompleter != null) {
@@ -217,29 +572,51 @@ class AdService {
 
     final completer = Completer<RewardedInterstitialAd?>();
     _riCompleter = completer;
+    _riState = AdState.loading;
 
     try {
-      debugPrint('[AdService] Preloading RewardedInterstitialAd...');
+      debugPrint(
+        '[AdService] Preloading RewardedInterstitialAd (unit: ${AdUnits.rewardedInterstitial})...',
+      );
       await RewardedInterstitialAd.load(
         adUnitId: AdUnits.rewardedInterstitial,
         request: const AdRequest(),
         rewardedInterstitialAdLoadCallback: RewardedInterstitialAdLoadCallback(
           onAdLoaded: (ad) {
-            debugPrint(
-              '[AdService] RewardedInterstitialAd loaded successfully',
-            );
+            _riState = AdState.loaded;
+            _riLoadedTime = DateTime.now();
             _lastRiFailTime = null;
             _lastRiErrorCode = null;
+            _riRetryAttempts = 0;
+            _riRetryDelay = null;
             _ri?.dispose();
             _ri = ad;
             _riCompleter = null;
+            final adapter =
+                ad.responseInfo?.mediationAdapterClassName ?? 'None';
+            final responseId = ad.responseInfo?.responseId ?? 'None';
+            final isUnity = adapter.toLowerCase().contains('unity');
+            debugPrint(
+              '[AdService] RewardedInterstitialAd loaded successfully via adapter="$adapter"'
+              '${isUnity ? " (Unity Ads Mediation)" : ""}'
+              ' (responseId: $responseId)',
+            );
             if (!completer.isCompleted) completer.complete(ad);
           },
           onAdFailedToLoad: (err) {
+            _riState = AdState.failed;
             _lastRiFailTime = DateTime.now();
             _lastRiErrorCode = err.code;
-            debugPrint(
-              '[AdService] RewardedInterstitialAd failed: AdMob code ${err.code}: ${err.message}',
+            _riRetryAttempts++;
+            _riRetryDelay = _calculateBackoff(
+              _riRetryAttempts,
+              isNoFill: err.code == 3,
+            );
+            _logAdError(
+              'RewardedInterstitial',
+              AdUnits.rewardedInterstitial,
+              err,
+              action: 'load',
             );
             _riCompleter = null;
             if (!completer.isCompleted) completer.complete(null);
@@ -247,8 +624,16 @@ class AdService {
         ),
       );
     } catch (e) {
+      _riState = AdState.failed;
       _lastRiFailTime = DateTime.now();
-      debugPrint('[AdService] RewardedInterstitialAd load exception: $e');
+      _riRetryAttempts++;
+      _riRetryDelay = _calculateBackoff(_riRetryAttempts);
+      _logAdError(
+        'RewardedInterstitial',
+        AdUnits.rewardedInterstitial,
+        e,
+        action: 'load_exception',
+      );
       _riCompleter = null;
       if (!completer.isCompleted) completer.complete(null);
     }
@@ -270,48 +655,207 @@ class AdService {
     required void Function() onClosed,
     Duration waitTimeout = const Duration(seconds: 8),
   }) async {
+    if (!adsEnabled) {
+      onError('Ads are temporarily unavailable. Please try again shortly.');
+      return;
+    }
+    if (_isShowingFullScreenAd) {
+      onError('Another advertisement is already currently displaying.');
+      return;
+    }
+
     final ad = _ri ?? await preloadRewardedInterstitial(timeout: waitTimeout);
 
     if (ad == null) {
       final hint = _lastRiErrorCode != null
-          ? _userFriendlyError(_lastRiErrorCode)
+          ? userFriendlyError(_lastRiErrorCode)
           : 'Ad is still loading. Please wait a moment and tap again.';
       onError(hint);
       return;
     }
-    _ri = null; // one-shot
 
-    await ad.setServerSideOptions(
-      ServerSideVerificationOptions(userId: userId),
-    );
+    _ri = null;
+    _riState = AdState.showing;
+    _isShowingFullScreenAd = true;
+
+    try {
+      await ad.setServerSideOptions(
+        ServerSideVerificationOptions(userId: userId),
+      );
+    } catch (e) {
+      debugPrint('[AdService] Failed to set RI SSV options: $e');
+    }
+
+    var rewardGranted = false;
 
     ad.fullScreenContentCallback = FullScreenContentCallback(
+      onAdShowedFullScreenContent: (a) {
+        debugPrint('[AdService] RewardedInterstitialAd displayed full screen');
+      },
+      onAdImpression: (a) {
+        debugPrint('[AdService] RewardedInterstitialAd impression recorded');
+      },
+      onAdClicked: (a) {
+        debugPrint('[AdService] RewardedInterstitialAd clicked');
+      },
       onAdDismissedFullScreenContent: (a) {
+        debugPrint('[AdService] RewardedInterstitialAd dismissed');
         a.dispose();
+        _isShowingFullScreenAd = false;
+        _riState = AdState.idle;
         onClosed();
-        unawaited(preloadRewardedInterstitial());
+        // Do not eagerly reload RI here; load lazily when user is on Earn screen
+        // to avoid ad-hoarding penalties.
       },
       onAdFailedToShowFullScreenContent: (a, error) {
+        _logAdError(
+          'RewardedInterstitial',
+          AdUnits.rewardedInterstitial,
+          error,
+          action: 'show',
+        );
         a.dispose();
-        debugPrint('[AdService] RI Show error: ${error.message}');
+        _isShowingFullScreenAd = false;
+        _riState = AdState.idle;
         onError('Could not play video right now. Please try again.');
         onClosed();
-        unawaited(preloadRewardedInterstitial());
       },
     );
 
-    await ad.show(onUserEarnedReward: (_, reward) => onEarned(reward));
+    try {
+      await ad.show(
+        onUserEarnedReward: (_, reward) {
+          if (!rewardGranted) {
+            rewardGranted = true;
+            debugPrint(
+              '[AdService] User earned RI reward: ${reward.amount} ${reward.type}',
+            );
+            onEarned(reward);
+          }
+        },
+      );
+    } catch (e) {
+      debugPrint('[AdService] RewardedInterstitialAd show exception: $e');
+      _isShowingFullScreenAd = false;
+      _riState = AdState.idle;
+      ad.dispose();
+      onError('Could not play video right now. Please try again.');
+      onClosed();
+    }
+  }
+
+  /// Shows the requested rewarded format, then transparently falls back to the
+  /// other rewarded format when the preferred unit has no inventory.
+  ///
+  /// Network fallback (AdMob -> Unity Ads) happens inside each AdMob mediation
+  /// request. This method adds a second layer by trying both rewarded ad units,
+  /// because mediation groups and inventory can differ between the two units.
+  Future<void> showRewardedWithFallback({
+    required String userId,
+    required void Function(RewardItem reward) onEarned,
+    required void Function(String error) onError,
+    required void Function() onClosed,
+    bool preferInterstitial = false,
+    Duration waitTimeout = const Duration(seconds: 8),
+  }) async {
+    if (!adsEnabled) {
+      onError('Ads are temporarily unavailable. Please try again shortly.');
+      return;
+    }
+    if (_isShowingFullScreenAd) {
+      onError('Another advertisement is already currently displaying.');
+      return;
+    }
+
+    // Load both units together. A cached ad returns immediately and an
+    // in-flight load is shared by the existing single-flight completers.
+    if (!ready && !riReady) {
+      await Future.wait([
+        preload(timeout: waitTimeout),
+        preloadRewardedInterstitial(timeout: waitTimeout),
+      ]);
+    } else {
+      // Keep the alternate warm without delaying a ready preferred format.
+      if (!ready) unawaited(preload(timeout: waitTimeout));
+      if (!riReady) {
+        unawaited(preloadRewardedInterstitial(timeout: waitTimeout));
+      }
+    }
+
+    final useInterstitial = preferInterstitial
+        ? (riReady || !ready)
+        : (!ready && riReady);
+
+    if (useInterstitial && riReady) {
+      await showRewardedInterstitial(
+        userId: userId,
+        onEarned: onEarned,
+        onError: onError,
+        onClosed: onClosed,
+        waitTimeout: waitTimeout,
+      );
+      return;
+    }
+    if (ready) {
+      await show(
+        userId: userId,
+        onEarned: onEarned,
+        onError: onError,
+        onClosed: onClosed,
+        waitTimeout: waitTimeout,
+      );
+      return;
+    }
+    if (riReady) {
+      await showRewardedInterstitial(
+        userId: userId,
+        onEarned: onEarned,
+        onError: onError,
+        onClosed: onClosed,
+        waitTimeout: waitTimeout,
+      );
+      return;
+    }
+
+    final codes = {_lastRewardedErrorCode, _lastRiErrorCode};
+    if (codes.contains(2)) {
+      onError(userFriendlyError(2));
+    } else if (_lastRewardedErrorCode == 3 && _lastRiErrorCode == 3) {
+      onError(
+        'No rewarded ads are available from any ad source right now. '
+        'Please try again in a few minutes.',
+      );
+    } else {
+      onError('Rewarded ads are still loading. Please try again shortly.');
+    }
   }
 
   // ---------------------------------------------------------------------
-  // Interstitial — passive profit, no coins. Fire-and-forget from the shell.
+  // Interstitial — passive profit, no coins. Preloaded for instant show.
   // ---------------------------------------------------------------------
 
   Future<InterstitialAd?> preloadInterstitial({
     Duration timeout = const Duration(seconds: 6),
   }) async {
     if (!adsEnabled) return null;
-    if (_inter != null) return _inter;
+
+    if (_inter != null) {
+      if (_isAdExpired(_interLoadedTime)) {
+        debugPrint('[AdService] Cached InterstitialAd expired (>4h); clearing');
+        _inter?.dispose();
+        _inter = null;
+        _interState = AdState.idle;
+      } else {
+        return _inter;
+      }
+    }
+
+    if (_lastInterFailTime != null && _interRetryDelay != null) {
+      final elapsed = DateTime.now().difference(_lastInterFailTime!);
+      if (elapsed < _interRetryDelay!) {
+        return null;
+      }
+    }
 
     if (_interCompleter != null) {
       try {
@@ -323,26 +867,68 @@ class AdService {
 
     final completer = Completer<InterstitialAd?>();
     _interCompleter = completer;
+    _interState = AdState.loading;
 
     try {
+      debugPrint(
+        '[AdService] Preloading InterstitialAd (unit: ${AdUnits.interstitial})...',
+      );
       await InterstitialAd.load(
         adUnitId: AdUnits.interstitial,
         request: const AdRequest(),
         adLoadCallback: InterstitialAdLoadCallback(
           onAdLoaded: (ad) {
+            _interState = AdState.loaded;
+            _interLoadedTime = DateTime.now();
+            _lastInterFailTime = null;
+            _lastInterErrorCode = null;
+            _interRetryAttempts = 0;
+            _interRetryDelay = null;
             _inter?.dispose();
             _inter = ad;
             _interCompleter = null;
+            final adapter =
+                ad.responseInfo?.mediationAdapterClassName ?? 'None';
+            final responseId = ad.responseInfo?.responseId ?? 'None';
+            final isUnity = adapter.toLowerCase().contains('unity');
+            debugPrint(
+              '[AdService] InterstitialAd loaded successfully via adapter="$adapter"'
+              '${isUnity ? " (Unity Ads Mediation)" : ""}'
+              ' (responseId: $responseId)',
+            );
             if (!completer.isCompleted) completer.complete(ad);
           },
           onAdFailedToLoad: (err) {
-            debugPrint('[AdService] Interstitial failed: ${err.message}');
+            _interState = AdState.failed;
+            _lastInterFailTime = DateTime.now();
+            _lastInterErrorCode = err.code;
+            _interRetryAttempts++;
+            _interRetryDelay = _calculateBackoff(
+              _interRetryAttempts,
+              isNoFill: err.code == 3,
+            );
+            _logAdError(
+              'Interstitial',
+              AdUnits.interstitial,
+              err,
+              action: 'load',
+            );
             _interCompleter = null;
             if (!completer.isCompleted) completer.complete(null);
           },
         ),
       );
-    } catch (_) {
+    } catch (e) {
+      _interState = AdState.failed;
+      _lastInterFailTime = DateTime.now();
+      _interRetryAttempts++;
+      _interRetryDelay = _calculateBackoff(_interRetryAttempts);
+      _logAdError(
+        'Interstitial',
+        AdUnits.interstitial,
+        e,
+        action: 'load_exception',
+      );
       _interCompleter = null;
       if (!completer.isCompleted) completer.complete(null);
     }
@@ -354,78 +940,257 @@ class AdService {
     }
   }
 
-  /// Show the preloaded interstitial (silently skips + retries when the ad
-  /// isn't ready — passive formats must never block the UI).
+  /// Show the preloaded interstitial (silently skips if the ad isn't ready
+  /// or if another full-screen ad is active — passive formats must never
+  /// freeze the navigation).
   Future<void> showInterstitial({void Function()? onClosed}) async {
-    final ad = _inter ?? await preloadInterstitial();
-    if (ad == null) {
+    if (!adsEnabled || _isShowingFullScreenAd) {
       onClosed?.call();
       return;
     }
-    _inter = null; // one-shot
+
+    final ad =
+        _inter ??
+        await preloadInterstitial(timeout: const Duration(seconds: 2));
+    if (ad == null) {
+      debugPrint(
+        '[AdService] Interstitial not ready; skipping to avoid UX delay',
+      );
+      onClosed?.call();
+      // Trigger preload for the next opportunity
+      unawaited(preloadInterstitial());
+      return;
+    }
+
+    _inter = null;
+    _interState = AdState.showing;
+    _isShowingFullScreenAd = true;
 
     ad.fullScreenContentCallback = FullScreenContentCallback(
+      onAdShowedFullScreenContent: (a) {
+        debugPrint('[AdService] InterstitialAd displayed full screen');
+      },
+      onAdImpression: (a) {
+        debugPrint('[AdService] InterstitialAd impression recorded');
+      },
+      onAdClicked: (a) {
+        debugPrint('[AdService] InterstitialAd clicked');
+      },
       onAdDismissedFullScreenContent: (a) {
+        debugPrint('[AdService] InterstitialAd dismissed');
         a.dispose();
+        _isShowingFullScreenAd = false;
+        _interState = AdState.idle;
         onClosed?.call();
         unawaited(preloadInterstitial());
       },
       onAdFailedToShowFullScreenContent: (a, error) {
+        _logAdError(
+          'Interstitial',
+          AdUnits.interstitial,
+          error,
+          action: 'show',
+        );
         a.dispose();
+        _isShowingFullScreenAd = false;
+        _interState = AdState.idle;
         onClosed?.call();
         unawaited(preloadInterstitial());
       },
     );
 
-    await ad.show();
+    try {
+      await ad.show();
+    } catch (e) {
+      debugPrint('[AdService] Interstitial show exception: $e');
+      _isShowingFullScreenAd = false;
+      _interState = AdState.idle;
+      ad.dispose();
+      onClosed?.call();
+      unawaited(preloadInterstitial());
+    }
   }
 
   // ---------------------------------------------------------------------
-  // App open — passive profit on cold start, no coins.
+  // App open — passive profit on cold start, preloaded during splash.
   // ---------------------------------------------------------------------
 
-  /// Load + show an app-open ad once (e.g. right after the splash).
-  /// Failures are silent — this format must never interrupt the UX.
-  Future<void> showAppOpen({void Function()? onClosed}) async {
-    if (!adsEnabled) {
-      onClosed?.call();
-      return;
+  /// Preload App Open ad in the background.
+  Future<AppOpenAd?> preloadAppOpen({
+    Duration timeout = const Duration(seconds: 6),
+  }) async {
+    if (!adsEnabled) return null;
+
+    if (_appOpen != null) {
+      if (_isAdExpired(_appOpenLoadedTime)) {
+        debugPrint('[AdService] Cached AppOpenAd expired (>4h); clearing');
+        _appOpen?.dispose();
+        _appOpen = null;
+        _appOpenState = AdState.idle;
+      } else {
+        return _appOpen;
+      }
     }
+
+    if (_lastAppOpenFailTime != null && _appOpenRetryDelay != null) {
+      final elapsed = DateTime.now().difference(_lastAppOpenFailTime!);
+      if (elapsed < _appOpenRetryDelay!) {
+        return null;
+      }
+    }
+
+    if (_appOpenCompleter != null) {
+      try {
+        return await _appOpenCompleter!.future.timeout(timeout);
+      } catch (_) {
+        return _appOpen;
+      }
+    }
+
+    final completer = Completer<AppOpenAd?>();
+    _appOpenCompleter = completer;
+    _appOpenState = AdState.loading;
+
     try {
+      debugPrint(
+        '[AdService] Preloading AppOpenAd (unit: ${AdUnits.appOpen})...',
+      );
       await AppOpenAd.load(
         adUnitId: AdUnits.appOpen,
         request: const AdRequest(),
         adLoadCallback: AppOpenAdLoadCallback(
           onAdLoaded: (ad) {
-            ad.fullScreenContentCallback = FullScreenContentCallback(
-              onAdDismissedFullScreenContent: (a) {
-                a.dispose();
-                onClosed?.call();
-              },
-              onAdFailedToShowFullScreenContent: (a, error) {
-                a.dispose();
-                onClosed?.call();
-              },
+            _appOpenState = AdState.loaded;
+            _appOpenLoadedTime = DateTime.now();
+            _lastAppOpenFailTime = null;
+            _lastAppOpenErrorCode = null;
+            _appOpenRetryAttempts = 0;
+            _appOpenRetryDelay = null;
+            _appOpen?.dispose();
+            _appOpen = ad;
+            _appOpenCompleter = null;
+            final adapter =
+                ad.responseInfo?.mediationAdapterClassName ?? 'None';
+            final responseId = ad.responseInfo?.responseId ?? 'None';
+            final isUnity = adapter.toLowerCase().contains('unity');
+            debugPrint(
+              '[AdService] AppOpenAd loaded successfully via adapter="$adapter"'
+              '${isUnity ? " (Unity Ads Mediation)" : ""}'
+              ' (responseId: $responseId)',
             );
-            unawaited(ad.show());
+            if (!completer.isCompleted) completer.complete(ad);
           },
-          onAdFailedToLoad: (_) {
-            onClosed?.call();
+          onAdFailedToLoad: (err) {
+            _appOpenState = AdState.failed;
+            _lastAppOpenFailTime = DateTime.now();
+            _lastAppOpenErrorCode = err.code;
+            _appOpenRetryAttempts++;
+            _appOpenRetryDelay = _calculateBackoff(
+              _appOpenRetryAttempts,
+              isNoFill: err.code == 3,
+            );
+            _logAdError('AppOpen', AdUnits.appOpen, err, action: 'load');
+            _appOpenCompleter = null;
+            if (!completer.isCompleted) completer.complete(null);
           },
         ),
       );
+    } catch (e) {
+      _appOpenState = AdState.failed;
+      _lastAppOpenFailTime = DateTime.now();
+      _appOpenRetryAttempts++;
+      _appOpenRetryDelay = _calculateBackoff(_appOpenRetryAttempts);
+      _logAdError('AppOpen', AdUnits.appOpen, e, action: 'load_exception');
+      _appOpenCompleter = null;
+      if (!completer.isCompleted) completer.complete(null);
+    }
+
+    try {
+      return await completer.future.timeout(timeout);
     } catch (_) {
+      return _appOpen;
+    }
+  }
+
+  /// Show App Open ad ONLY IF it was preloaded and is already ready.
+  /// Never delays or cold-loads over active UI.
+  Future<void> showAppOpenIfAvailable({void Function()? onClosed}) async {
+    if (!adsEnabled || _isShowingFullScreenAd) {
+      onClosed?.call();
+      return;
+    }
+
+    final ad = _appOpen;
+    if (ad == null || _isAdExpired(_appOpenLoadedTime)) {
+      debugPrint('[AdService] AppOpen ad not preloaded; skipping presentation');
+      onClosed?.call();
+      return;
+    }
+
+    _appOpen = null;
+    _appOpenState = AdState.showing;
+    _isShowingFullScreenAd = true;
+
+    ad.fullScreenContentCallback = FullScreenContentCallback(
+      onAdShowedFullScreenContent: (a) {
+        debugPrint('[AdService] AppOpenAd displayed full screen');
+      },
+      onAdImpression: (a) {
+        debugPrint('[AdService] AppOpenAd impression recorded');
+      },
+      onAdClicked: (a) {
+        debugPrint('[AdService] AppOpenAd clicked');
+      },
+      onAdDismissedFullScreenContent: (a) {
+        debugPrint('[AdService] AppOpenAd dismissed');
+        a.dispose();
+        _isShowingFullScreenAd = false;
+        _appOpenState = AdState.idle;
+        onClosed?.call();
+      },
+      onAdFailedToShowFullScreenContent: (a, error) {
+        _logAdError('AppOpen', AdUnits.appOpen, error, action: 'show');
+        a.dispose();
+        _isShowingFullScreenAd = false;
+        _appOpenState = AdState.idle;
+        onClosed?.call();
+      },
+    );
+
+    try {
+      await ad.show();
+    } catch (e) {
+      debugPrint('[AdService] AppOpen show exception: $e');
+      _isShowingFullScreenAd = false;
+      _appOpenState = AdState.idle;
+      ad.dispose();
       onClosed?.call();
     }
   }
 
-  /// App-wide cleanup (only when the whole application shuts down).
+  /// Backwards-compatible signature for `showAppOpen`.
+  Future<void> showAppOpen({void Function()? onClosed}) =>
+      showAppOpenIfAvailable(onClosed: onClosed);
+
+  /// Application-wide teardown (only when the whole application process terminates).
+  /// Individual widgets MUST NOT call this method on the singleton.
   void dispose() {
     _ad?.dispose();
     _ad = null;
+    _adState = AdState.idle;
+
     _ri?.dispose();
     _ri = null;
+    _riState = AdState.idle;
+
     _inter?.dispose();
     _inter = null;
+    _interState = AdState.idle;
+
+    _appOpen?.dispose();
+    _appOpen = null;
+    _appOpenState = AdState.idle;
+
+    _isShowingFullScreenAd = false;
   }
 }

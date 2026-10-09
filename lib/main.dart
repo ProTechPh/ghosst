@@ -104,11 +104,15 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
 
   Future<void> _initializeAds() async {
     try {
-      if (!await ConsentService.gatherConsent()) return;
-      await MobileAds.instance.initialize();
-      AdService.adsEnabled = true;
+      final canRequest = await ConsentService.gatherConsent();
+      if (!canRequest) {
+        debugPrint('[Consent] Ads not permitted by consent gate.');
+        return;
+      }
+      await AdService.instance.initialize();
       unawaited(AdService.instance.preload());
-      unawaited(AdService.instance.preloadRewardedInterstitial());
+      unawaited(AdService.instance.preloadInterstitial());
+      unawaited(AdService.instance.preloadAppOpen());
     } catch (e) {
       debugPrint('MobileAds initialization failed: $e');
     }
@@ -125,7 +129,6 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _ads.dispose();
     super.dispose();
   }
 
@@ -195,16 +198,10 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
             onDone: () async {
               if (!mounted) return;
               setState(() => _splash = false);
-              // Passive app-open ad right after the intro — profit only,
-              // never over a gate and never touches the balance.
+              // Show preloaded app-open ad if ready during intro.
+              // Never delay-load to interrupt the user over active UI.
               if (!blocked) {
-                Future.delayed(const Duration(milliseconds: 500), () {
-                  try {
-                    _ads.showAppOpen();
-                  } catch (e) {
-                    debugPrint('showAppOpen error: $e');
-                  }
-                });
+                _ads.showAppOpenIfAvailable();
               }
             },
           ),
@@ -325,6 +322,8 @@ class _HomeShellState extends State<HomeShell> {
   final _ads = AdService();
   BannerAd? _banner;
   bool _bannerWanted = false;
+  int _bannerRetryAttempts = 0;
+  Timer? _bannerRetryTimer;
   int _tabSwitches = 0;
   DateTime? _lastInterstitial;
 
@@ -340,31 +339,43 @@ class _HomeShellState extends State<HomeShell> {
     _refresh();
   }
 
+  void _onAdsEnabledForBanner() {
+    if (AdService.adsEnabled && mounted && _banner == null) {
+      _loadBanner();
+    }
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     // MediaQuery is available here (not in initState) — load the banner once.
     if (!_bannerWanted) {
       _bannerWanted = true;
-      _loadBanner();
+      AdService.instance.adsEnabledNotifier.addListener(_onAdsEnabledForBanner);
+      if (AdService.adsEnabled) {
+        _loadBanner();
+      }
     }
   }
 
   @override
   void dispose() {
-    _ads.dispose();
+    _bannerRetryTimer?.cancel();
+    AdService.instance.adsEnabledNotifier.removeListener(_onAdsEnabledForBanner);
     _banner?.dispose();
+    _banner = null;
     super.dispose();
   }
 
   /// Adaptive banner sized to the screen width, parked above the nav pill.
   Future<void> _loadBanner() async {
-    if (!AdService.adsEnabled) return;
+    if (!AdService.adsEnabled || !mounted) return;
     final width = MediaQuery.sizeOf(context).width.round();
     final size =
         await AdSize.getLargeAnchoredAdaptiveBannerAdSize(width) ??
         AdSize.banner;
     if (!mounted) return;
+    _bannerRetryTimer?.cancel();
     late final BannerAd ad;
     ad = BannerAd(
       adUnitId: AdUnits.banner,
@@ -372,9 +383,33 @@ class _HomeShellState extends State<HomeShell> {
       request: const AdRequest(),
       listener: BannerAdListener(
         onAdLoaded: (_) {
-          if (mounted) setState(() => _banner = ad);
+          if (mounted) {
+            _bannerRetryAttempts = 0;
+            setState(() => _banner = ad);
+          } else {
+            ad.dispose();
+          }
         },
-        onAdFailedToLoad: (a, _) => a.dispose(),
+        onAdFailedToLoad: (a, error) {
+          a.dispose();
+          debugPrint(
+            '[HomeShell] BannerAd failed to load: code ${error.code}, message: ${error.message}, domain: ${error.domain}',
+          );
+          if (!mounted) return;
+          setState(() => _banner = null);
+          if (_bannerRetryAttempts < 3) {
+            final delaySeconds = 4 * (1 << _bannerRetryAttempts);
+            _bannerRetryAttempts++;
+            debugPrint(
+              '[HomeShell] Retrying banner in ${delaySeconds}s (attempt $_bannerRetryAttempts/3)',
+            );
+            _bannerRetryTimer = Timer(Duration(seconds: delaySeconds), () {
+              if (mounted) _loadBanner();
+            });
+          }
+        },
+        onAdImpression: (_) => debugPrint('[HomeShell] BannerAd impression'),
+        onAdClicked: (_) => debugPrint('[HomeShell] BannerAd clicked'),
       ),
     );
     await ad.load();
@@ -389,8 +424,7 @@ class _HomeShellState extends State<HomeShell> {
         now.difference(_lastInterstitial!) >= _interCooldown;
     if (_tabSwitches % 2 != 0 || !cooled) return;
     _lastInterstitial = now;
-    // ignore: unawaited_futures
-    _ads.showInterstitial();
+    unawaited(_ads.showInterstitial());
   }
 
   Future<void> _refresh() async {

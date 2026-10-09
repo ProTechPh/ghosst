@@ -18,6 +18,14 @@
 -dontwarn com.google.android.gms.**
 -dontwarn com.google.ads.**
 
+# Unity Ads Mediation rules
+-keep class com.unity3d.ads.** { *; }
+-keep class com.unity3d.services.** { *; }
+-keep class com.google.ads.mediation.unity.** { *; }
+-dontwarn com.unity3d.ads.**
+-dontwarn com.unity3d.services.**
+-dontwarn com.google.ads.mediation.unity.**
+
 # Appwrite & Networking
 -keepattributes Signature
 -keepattributes *Annotation*

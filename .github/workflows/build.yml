@@ -1,9 +1,7 @@
-# Builds the Play Store bundle and attaches the raw .aab to a GitHub Release.
-# Every push to main auto-bumps the build number (+N) first, so each build
-# publishes a NEW tag/release. Version name (x.y.z) comes from pubspec.yaml;
-# Google Play is the only update channel. Release assets are stored as-is
-# (no zip wrapper).
-name: Build Play Bundle
+# Builds every Android QA/distribution variant and publishes the raw files to
+# one GitHub Release. Live artifacts always force production ad units; QA
+# artifacts always force Google's sample test units.
+name: Build Android Releases
 
 on:
   push:
@@ -11,14 +9,14 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write # create the release and upload the .aab asset
+  contents: write
 
 concurrency:
-  group: build-play-bundle
+  group: build-android-releases
   cancel-in-progress: false
 
 jobs:
-  build-play:
+  build-android:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -40,8 +38,8 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # 1.0.0+25 → 1.0.0+26 (x.y.z is bumped by hand, +N is CI's).
-      # The [skip ci] tag keeps this commit from triggering another build.
+      # 2.0.0+29 -> 2.0.0+30. The skip marker prevents the bot's version
+      # commit from starting a second workflow run.
       - name: Bump build number
         run: |
           set -euo pipefail
@@ -52,6 +50,7 @@ jobs:
           NEW=$((BUILD + 1))
           sed -i "s/^version: .*/version: ${BASE}+${NEW}/" pubspec.yaml
           echo "APP_VERSION=${BASE}+${NEW}" >> "$GITHUB_ENV"
+          echo "ASSET_VERSION=${BASE}-${NEW}" >> "$GITHUB_ENV"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pubspec.yaml
@@ -63,50 +62,100 @@ jobs:
             sleep 5
           done
           echo "BUMP_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-          echo "Bumped ${VER} → ${BASE}+${NEW}"
+          echo "Bumped ${VER} -> ${BASE}+${NEW}"
 
-      # Quality gate — a failing test stops the bundle build (and the bump
-      # commit above already landed, so a retry just bumps again).
+      - name: Analyze
+        run: flutter analyze
+
       - name: Run tests
         run: flutter test
 
-      - name: Build Play release bundle
-        run: flutter build appbundle --release --flavor play
+      - name: Prepare release assets
+        run: mkdir -p release-assets
 
-      # R8 obfuscation mapping — de-obfuscates Play Console crash/ANR traces.
-      # Raw text is 45 MB; gzipped it's a few MB, and it's still a plain file
-      # (never zip-wrapped).
+      # Debug mode normally defaults to test ads, but the define is explicit so
+      # a future default change cannot accidentally put live ads in this APK.
+      - name: Build debug APK (test ads)
+        run: |
+          set -euo pipefail
+          flutter build apk --debug --flavor play --dart-define=USE_TEST_ADS=true
+          cp build/app/outputs/flutter-apk/app-play-debug.apk \
+            "release-assets/ghosst-play-debug-test-ads-${ASSET_VERSION}.apk"
+
+      # Release-mode QA catches optimizer/release-only bugs while still using
+      # Google's guaranteed-fill sample IDs. Never publish this APK to users.
+      - name: Build release QA APK (test ads)
+        run: |
+          set -euo pipefail
+          flutter build apk --release --flavor play --dart-define=USE_TEST_ADS=true
+          cp build/app/outputs/flutter-apk/app-play-release.apk \
+            "release-assets/ghosst-play-release-test-ads-${ASSET_VERSION}.apk"
+
+      # Closed-testing bundle. Upload this OR the live bundle for a given
+      # version code, never both; Play accepts each version code only once.
+      - name: Build closed-beta bundle (test ads)
+        run: |
+          set -euo pipefail
+          flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=true
+          cp build/app/outputs/bundle/playRelease/app-play-release.aab \
+            "release-assets/ghosst-play-closed-beta-test-ads-${ASSET_VERSION}.aab"
+
+      - name: Build release APK (live ads)
+        run: |
+          set -euo pipefail
+          flutter build apk --release --flavor play --dart-define=USE_TEST_ADS=false
+          cp build/app/outputs/flutter-apk/app-play-release.apk \
+            "release-assets/ghosst-play-release-live-ads-${ASSET_VERSION}.apk"
+
+      - name: Build Play bundle (live ads)
+        run: |
+          set -euo pipefail
+          flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=false
+          cp build/app/outputs/bundle/playRelease/app-play-release.aab \
+            "release-assets/ghosst-play-live-ads-${ASSET_VERSION}.aab"
+
+      # R8 mapping corresponds to the final live-ads Play bundle build.
       - name: Compress deobfuscation mapping
         run: |
           set -euo pipefail
           MAP=build/app/outputs/mapping/playRelease/mapping.txt
           test -f "$MAP"
-          gzip -c "$MAP" > mapping.txt.gz
-          echo "mapping.txt.gz: $(stat -c%s mapping.txt.gz) bytes"
+          gzip -c "$MAP" > "release-assets/mapping-play-release-${ASSET_VERSION}.txt.gz"
 
-      # The .aab and mapping are attached directly as release assets — GitHub
-      # artifacts are always zipped, releases are not.
-      - name: Publish release with raw .aab
+      # Keep a downloadable Actions artifact even if GitHub Release publishing
+      # is temporarily unavailable. GitHub wraps this copy in a zip; the files
+      # attached to the Release below remain raw APK/AAB/GZ assets.
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ghosst-android-${{ env.ASSET_VERSION }}
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          VER="${APP_VERSION}"
-          TAG="v${VER}"
-          AAB=build/app/outputs/bundle/playRelease/app-play-release.aab
+          TAG="v${APP_VERSION}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          NOTES="Ghosst **${VER}** — Play bundle (\`.aab\`) + R8 mapping (\`mapping.txt.gz\`)"
-          NOTES="${NOTES}"$'\n'"Commit: \`${GITHUB_SHA:0:7}\`"
-          NOTES="${NOTES}"$'\n'"Build: ${RUN_URL}"
+          NOTES="Ghosst **${APP_VERSION}** Android builds"
+          NOTES="${NOTES}"$'\n\n'"- **Play AAB / live-ads APK:** production AdMob IDs"
+          NOTES="${NOTES}"$'\n'"- **closed-beta-test-ads AAB:** temporary closed testing only; do not promote to production"
+          NOTES="${NOTES}"$'\n'"- **release-test-ads APK:** release-mode QA with Google sample ads; do not distribute"
+          NOTES="${NOTES}"$'\n'"- **debug-test-ads APK:** debug/testing only"
+          NOTES="${NOTES}"$'\n'"- Upload only one AAB for this version code; Play version codes cannot be reused"
+          NOTES="${NOTES}"$'\n\n'"Source commit: \`${GITHUB_SHA:0:7}\`"
+          NOTES="${NOTES}"$'\n'"Workflow: ${RUN_URL}"
 
           if gh release view "$TAG" >/dev/null 2>&1; then
-            # Re-run of an already-published version — replace the assets.
-            gh release upload "$TAG" "$AAB" mapping.txt.gz --clobber
+            gh release upload "$TAG" release-assets/* --clobber
           else
-            gh release create "$TAG" "$AAB" mapping.txt.gz \
-              --title "Ghosst v${VER}" \
+            gh release create "$TAG" release-assets/* \
+              --title "Ghosst v${APP_VERSION}" \
               --notes "$NOTES" \
               --target "$BUMP_SHA" \
               --latest
           fi
-          echo "Published ${TAG} → app-play-release.aab + mapping.txt.gz"
+          echo "Published ${TAG} with live, debug, and test-ad builds"

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -64,38 +66,79 @@ class _StoreScreenState extends State<StoreScreen>
   /// Sponsored native card at the end of the shelf (passive revenue).
   NativeAd? _nativeAd;
   bool _nativeLoaded = false;
+  int _nativeRetryAttempts = 0;
+  Timer? _nativeRetryTimer;
+
+  void _onAdsEnabledForNative() {
+    if (AdService.adsEnabled && mounted && _nativeAd == null && !_nativeLoaded) {
+      _loadNative();
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _load();
-    _loadNative();
+    AdService.instance.adsEnabledNotifier.addListener(_onAdsEnabledForNative);
+    if (AdService.adsEnabled) {
+      _loadNative();
+    }
   }
 
   @override
   void dispose() {
     _pulse.dispose();
+    _nativeRetryTimer?.cancel();
+    AdService.instance.adsEnabledNotifier.removeListener(_onAdsEnabledForNative);
     _nativeAd?.dispose();
     _nativeAd = null;
+    _nativeLoaded = false;
     super.dispose();
   }
 
   /// Medium native template, styled dark to match the store chrome.
   /// Rendered only after [onAdLoaded] — a failed ad simply never shows.
   void _loadNative() {
-    if (!AdService.adsEnabled) return;
+    if (!AdService.adsEnabled || !mounted) return;
+    _nativeRetryTimer?.cancel();
     NativeAd(
       adUnitId: AdUnits.native,
       request: const AdRequest(),
       listener: NativeAdListener(
         onAdLoaded: (a) {
-          if (!mounted) return;
+          if (!mounted) {
+            a.dispose();
+            return;
+          }
+          _nativeRetryAttempts = 0;
           setState(() {
             _nativeAd = a as NativeAd;
             _nativeLoaded = true;
           });
         },
-        onAdFailedToLoad: (a, _) => a.dispose(),
+        onAdFailedToLoad: (a, error) {
+          a.dispose();
+          debugPrint(
+            '[StoreScreen] NativeAd failed to load: code ${error.code}, message: ${error.message}, domain: ${error.domain}',
+          );
+          if (!mounted) return;
+          setState(() {
+            _nativeAd = null;
+            _nativeLoaded = false;
+          });
+          if (_nativeRetryAttempts < 3) {
+            final delaySeconds = 4 * (1 << _nativeRetryAttempts);
+            _nativeRetryAttempts++;
+            debugPrint(
+              '[StoreScreen] Retrying native ad in ${delaySeconds}s (attempt $_nativeRetryAttempts/3)',
+            );
+            _nativeRetryTimer = Timer(Duration(seconds: delaySeconds), () {
+              if (mounted) _loadNative();
+            });
+          }
+        },
+        onAdImpression: (_) => debugPrint('[StoreScreen] NativeAd impression'),
+        onAdClicked: (_) => debugPrint('[StoreScreen] NativeAd clicked'),
       ),
       nativeTemplateStyle: NativeTemplateStyle(
         templateType: TemplateType.medium,

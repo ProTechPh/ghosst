@@ -30,18 +30,32 @@ class _EarnScreenState extends State<EarnScreen> {
   /// so the waiting screen visibly moves instead of sitting on a dead line.
   bool verifying = false;
   double verifyProgress = 0;
+  bool _lastActionSucceeded = false;
 
   @override
   void initState() {
     super.initState();
-    // Both earn formats preloaded so either button responds instantly.
-    _ads.preload();
-    _ads.preloadRewardedInterstitial();
+    AdService.instance.adsEnabledNotifier.addListener(_onAdsEnabled);
+    if (AdService.adsEnabled) {
+      _ads.preload();
+      if (!_ads.riReady) {
+        _ads.preloadRewardedInterstitial();
+      }
+    }
     _checkCooldown();
+  }
+
+  void _onAdsEnabled() {
+    if (AdService.adsEnabled && mounted) {
+      if (!_ads.ready) _ads.preload();
+      if (!_ads.riReady) _ads.preloadRewardedInterstitial();
+      setState(() {});
+    }
   }
 
   @override
   void dispose() {
+    AdService.instance.adsEnabledNotifier.removeListener(_onAdsEnabled);
     _ticker?.cancel();
     super.dispose();
   }
@@ -79,8 +93,9 @@ class _EarnScreenState extends State<EarnScreen> {
     }
   }
 
-  /// [instant] picks the rewarded interstitial (second earn method);
-  /// both reward coins through the same SSV callback.
+  /// [instant] prefers the rewarded interstitial. If that unit has no fill,
+  /// AdService automatically tries the other rewarded format. Both reward
+  /// coins through the same SSV callback.
   Future<void> _watchAd({bool instant = false}) async {
     if (_remainingCooldown > 0) return;
 
@@ -91,10 +106,15 @@ class _EarnScreenState extends State<EarnScreen> {
     }
     setState(() {
       busy = true;
+      _lastActionSucceeded = false;
       status = 'Loading ad…';
     });
 
     void onError(String e) {
+      if (e.startsWith('No rewarded ads are available from any ad source')) {
+        unawaited(_claimBetaBonus());
+        return;
+      }
       if (mounted) {
         setState(() {
           busy = false;
@@ -115,21 +135,14 @@ class _EarnScreenState extends State<EarnScreen> {
     }
 
     try {
-      if (instant) {
-        await _ads.showRewardedInterstitial(
-          userId: user.$id,
-          onEarned: (_) => _verify(),
-          onError: onError,
-          onClosed: onClosed,
-        );
-      } else {
-        await _ads.show(
-          userId: user.$id,
-          onEarned: (_) => _verify(),
-          onError: onError,
-          onClosed: onClosed,
-        );
-      }
+      await _ads.showRewardedWithFallback(
+        userId: user.$id,
+        preferInterstitial: instant,
+        onEarned: (_) =>
+            AdUnits.useTestAds ? _claimBetaBonus(afterTestAd: true) : _verify(),
+        onError: onError,
+        onClosed: onClosed,
+      );
     } catch (e) {
       debugPrint('[EarnScreen] Ad exception: $e');
       if (mounted) {
@@ -138,6 +151,59 @@ class _EarnScreenState extends State<EarnScreen> {
           status = 'Unable to play ad right now. Please try again in a moment.';
         });
       }
+    }
+  }
+
+  Future<void> _claimBetaBonus({bool afterTestAd = false}) async {
+    if (!mounted) return;
+    setState(() {
+      busy = true;
+      status = afterTestAd
+          ? 'Test ad completed — claiming your daily beta bonus…'
+          : 'No ads available — checking your daily beta bonus…';
+    });
+
+    try {
+      final result = await Backend.claimBetaBonus();
+      if (!mounted) return;
+      if (result.granted) {
+        try {
+          await widget.onRefresh();
+        } catch (_) {
+          // The server already committed the credit; a later refresh will show it.
+        }
+        if (!mounted) return;
+        setState(() {
+          busy = false;
+          _lastActionSucceeded = true;
+          status = '+${result.amount} coins daily beta bonus added!';
+        });
+        _startCooldown(30);
+        return;
+      }
+
+      final alreadyClaimed = result.code == 'already_claimed';
+      setState(() {
+        busy = false;
+        status = alreadyClaimed
+            ? afterTestAd
+                  ? 'Test ad completed. Today’s beta bonus was already claimed.'
+                  : 'No ads available. Today’s beta bonus was already claimed; try ads again later.'
+            : afterTestAd
+            ? 'Test ad completed, but the beta bonus is unavailable right now.'
+            : 'No ads available right now. Please try again in a few minutes.';
+      });
+      _startCooldown(alreadyClaimed ? 60 : 30);
+    } catch (e) {
+      debugPrint('[EarnScreen] Beta bonus exception: $e');
+      if (!mounted) return;
+      setState(() {
+        busy = false;
+        status = afterTestAd
+            ? 'Test ad completed, but the beta bonus is unavailable right now.'
+            : 'No ads available right now. Please try again in a few minutes.';
+      });
+      _startCooldown(30);
     }
   }
 
@@ -180,7 +246,8 @@ class _EarnScreenState extends State<EarnScreen> {
       setState(() {
         verifying = false;
         busy = false;
-        status = 'Verification is taking longer than usual. Your coins will be added automatically once your reward is confirmed.';
+        status =
+            'Verification is taking longer than usual. Your coins will be added automatically once your reward is confirmed.';
       });
       _startCooldown(30);
     }
@@ -188,7 +255,7 @@ class _EarnScreenState extends State<EarnScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final success = status == 'Coins added!';
+    final success = status == 'Coins added!' || _lastActionSucceeded;
     final statusColor = success ? AppColors.green : AppColors.cyan;
     final inCooldown = _remainingCooldown > 0;
 
@@ -372,37 +439,37 @@ class _EarnScreenState extends State<EarnScreen> {
                   ],
                 )
               : inCooldown
-                  ? Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.timer_outlined,
-                          size: 19,
-                          color: AppColors.textDim,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Next ad in ${_remainingCooldown}s',
-                          style: const TextStyle(
-                            color: AppColors.textDim,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    )
-                  : const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.play_circle_rounded,
-                          size: 20,
-                          color: Colors.white,
-                        ),
-                        SizedBox(width: 8),
-                        Text('Watch ad & earn coins'),
-                      ],
+              ? Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.timer_outlined,
+                      size: 19,
+                      color: AppColors.textDim,
                     ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Next ad in ${_remainingCooldown}s',
+                      style: const TextStyle(
+                        color: AppColors.textDim,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                )
+              : const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.play_circle_rounded,
+                      size: 20,
+                      color: Colors.white,
+                    ),
+                    SizedBox(width: 8),
+                    Text('Watch ad & earn coins'),
+                  ],
+                ),
         ),
         const SizedBox(height: 12),
         // Second earn method — rewarded interstitial (same SSV payout).
@@ -410,7 +477,9 @@ class _EarnScreenState extends State<EarnScreen> {
           expand: true,
           outline: true,
           glow: false,
-          onPressed: (busy || inCooldown) ? null : () => _watchAd(instant: true),
+          onPressed: (busy || inCooldown)
+              ? null
+              : () => _watchAd(instant: true),
           child: inCooldown
               ? Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -435,7 +504,11 @@ class _EarnScreenState extends State<EarnScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.flash_on_rounded, size: 18, color: AppColors.cyan),
+                    Icon(
+                      Icons.flash_on_rounded,
+                      size: 18,
+                      color: AppColors.cyan,
+                    ),
                     SizedBox(width: 8),
                     Text('Instant ad & earn coins'),
                   ],
@@ -445,7 +518,7 @@ class _EarnScreenState extends State<EarnScreen> {
         Text(
           inCooldown
               ? 'Short cooldown between ads protects your reward eligibility and prevents traffic limits.'
-              : 'Rewards are verified before being credited to your balance within a few minutes.',
+              : 'Rewards are verified before crediting. During beta, a small once-daily server bonus is used only when both ad formats have no inventory.',
           textAlign: TextAlign.center,
           style: const TextStyle(
             color: AppColors.textDim,
