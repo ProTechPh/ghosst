@@ -288,6 +288,7 @@ class StockWriteResult {
 class Backend {
   static final _db = Databases(client);
   static final _account = Account(client);
+  static final _teams = Teams(client);
   static final _functions = Functions(client);
   static final _storage = Storage(client);
 
@@ -529,14 +530,12 @@ class Backend {
 
   // ---- admin ----
 
-  /// True when the caller can read the `keys` collection (team:admins).
+  /// True when the signed-in caller is an active member of the `admins` team.
+  /// Collection permissions remain the authorization layer for every admin
+  /// operation; this check only decides whether to expose the admin UI.
   static Future<bool> isAdmin() async {
     try {
-      await _db.listDocuments(
-        databaseId: Col.dbId,
-        collectionId: Col.keys,
-        queries: [Query.limit(1)],
-      );
+      await _teams.get(teamId: 'admins');
       return true;
     } on AppwriteException {
       return false;

@@ -490,14 +490,14 @@ class _HomeShellState extends State<HomeShell> {
       ),
       EarnScreen(coins: coins, onRefresh: _refresh),
       const MyKeysScreen(),
-      if (isAdmin && Distribution.isDirect) const AdminScreen(),
+      if (isAdmin) const AdminScreen(),
     ];
 
     final destinations = <_NavItem>[
       _NavItem(Icons.storefront_outlined, Icons.storefront, 'Store'),
       _NavItem(Icons.play_circle_outline, Icons.play_circle, 'Earn'),
       _NavItem(Icons.shopping_bag_outlined, Icons.shopping_bag, 'Purchases'),
-      if (isAdmin && Distribution.isDirect)
+      if (isAdmin)
         _NavItem(
           Icons.admin_panel_settings_outlined,
           Icons.admin_panel_settings,
