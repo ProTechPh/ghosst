@@ -59,8 +59,11 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // R8 shrinks/obfuscates release code — Play can then ingest the
+            // generated mapping.txt to de-obfuscate crash stack traces.
+            // Mapping: build/app/outputs/mapping/<variant>/mapping.txt
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

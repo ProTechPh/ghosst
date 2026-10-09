@@ -324,6 +324,14 @@ flutter build apk --release --flavor direct
       Bump `x.y.z` by hand when the release needs a new feature version;
       Play Store is the only update channel and `N` must always increase.
 - [ ] Product costs / reward amount reviewed.
+- [ ] Upload the release's deobfuscation file to Play Console so crashes are
+      readable: download `mapping.txt.gz` from the matching GitHub release
+      `vX.Y.Z+N`, `gunzip` it, then **Play Console → your app → Testing →
+      Internal testing → the release → App bundle explorer → version code →
+      Upload deobfuscation file** (`mapping.txt`). R8 is on for release
+      builds (`android/app/build.gradle.kts`), so Play's raw stack traces are
+      obfuscated without it. Keep the mapping for every shipped version code —
+      it must match the exact bundle.
 
 ## Troubleshooting
 
@@ -340,6 +348,8 @@ flutter build apk --release --flavor direct
 | Buy app → `Collection not found` | `app_files` collection / `products.type` column not created yet, or `claim` not redeployed |
 | Download stuck / `Could not resolve` | MediaFire link invalid or page changed — paste a fresh share link; direct `downloadNN.mediafire.com` links usually rotate and expire |
 | APK won't install | `REQUEST_INSTALL_PACKAGES` missing from the manifest, or "install unknown apps" disabled for Ghosst in Android settings |
+| Release build: `Missing classes detected while running R8` | Flutter references Play Core split-install classes it doesn't ship — copy the `-dontwarn` lines from `build/app/outputs/mapping/<variant>/missing_rules.txt` into `android/app/proguard-rules.pro` |
+| Release build: `Gradle build daemon disappeared unexpectedly` / `hs_err_pid*.log` says out of RAM | `org.gradle.jvmargs` in `android/gradle.properties` too big for the machine (R8 needs real headroom) — lower `-Xmx` (4G works on 12 GB Windows and 7 GB CI runners) |
 
 ## Architecture notes / limits
 
