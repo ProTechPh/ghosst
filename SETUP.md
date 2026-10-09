@@ -319,7 +319,9 @@ flutter build apk --release --flavor direct
       has `documents.read`, `documents.write`, `users.read`, and `users.write`
       scopes. Verify both a product claim and Profile → Delete account.
 - [ ] Each published APK/file product has a working MediaFire link.
-- [ ] Increase `version: x.y.z+N` in `pubspec.yaml` before each Play upload;
+- [ ] Play upload uses the `N` from CI: every push to `main` auto-bumps
+      `version: x.y.z+N` in `pubspec.yaml` and publishes release `vX.Y.Z+N`.
+      Bump `x.y.z` by hand when the release needs a new feature version;
       Play Store is the only update channel and `N` must always increase.
 - [ ] Product costs / reward amount reviewed.
 
