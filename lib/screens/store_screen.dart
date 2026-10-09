@@ -6,6 +6,7 @@ import '../appwrite_client.dart';
 import '../premium.dart';
 import '../services/ad_service.dart';
 import '../services/backend.dart';
+import '../services/distribution.dart';
 import '../theme.dart';
 import 'product_detail.dart';
 
@@ -82,6 +83,7 @@ class _StoreScreenState extends State<StoreScreen>
   /// Medium native template, styled dark to match the store chrome.
   /// Rendered only after [onAdLoaded] — a failed ad simply never shows.
   void _loadNative() {
+    if (!AdService.adsEnabled) return;
     NativeAd(
       adUnitId: AdUnits.native,
       request: const AdRequest(),
@@ -140,7 +142,9 @@ class _StoreScreenState extends State<StoreScreen>
       );
       if (!mounted) return;
       setState(() {
-        products = ps;
+        products = Distribution.isPlay
+            ? ps.where((product) => product.isKey).toList()
+            : ps;
         stock = counts;
         owned = mine;
         if (!silent) loading = false;
@@ -245,11 +249,13 @@ class _StoreScreenState extends State<StoreScreen>
           const SizedBox(height: 18),
 
           // ---- shelf switch (Keys | Apps) -------------------------------
-          ScrollReveal(
-            delay: const Duration(milliseconds: 60),
-            child: _segment(),
-          ),
-          const SizedBox(height: 22),
+          if (Distribution.isDirect) ...[
+            ScrollReveal(
+              delay: const Duration(milliseconds: 60),
+              child: _segment(),
+            ),
+            const SizedBox(height: 22),
+          ],
 
           // ---- balance hero --------------------------------------------
           ScrollReveal(

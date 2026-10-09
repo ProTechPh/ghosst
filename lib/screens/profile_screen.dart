@@ -2,9 +2,12 @@ import 'package:appwrite/models.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../premium.dart';
 import '../services/backend.dart';
+import '../services/consent_service.dart';
+import '../services/distribution.dart';
 import '../theme.dart';
 import 'my_apps_screen.dart';
 import 'wallet_screen.dart';
@@ -13,11 +16,15 @@ class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
     super.key,
     required this.onSignOut,
+    required this.onAccountDeleted,
     required this.onGoToTab,
   });
 
   /// Signs out of the session. The shell flips back to the landing page.
   final VoidCallback onSignOut;
+
+  /// Returns the shell to its signed-out state after permanent deletion.
+  final VoidCallback onAccountDeleted;
 
   /// Pops this route and activates a bottom-bar tab (e.g. My Purchases).
   final void Function(int tab) onGoToTab;
@@ -106,14 +113,114 @@ class _ProfileScreenState extends State<ProfileScreen> {
     widget.onSignOut();
   }
 
+  Future<void> _privacyChoices() async {
+    final required = await ConsentService.privacyOptionsRequired();
+    if (!mounted) return;
+    if (!required) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No additional ad privacy choices are required in your region.',
+          ),
+        ),
+      );
+      return;
+    }
+    final error = await ConsentService.showPrivacyOptions();
+    if (error != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not open privacy choices: ${error.message}'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _openPrivacyPolicy() async {
+    await launchUrl(
+      Uri.parse('https://protechph.github.io/ghosst/'),
+      mode: LaunchMode.externalApplication,
+    );
+  }
+
+  Future<void> _deleteAccount() async {
+    final controller = TextEditingController();
+    var confirmed = false;
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          icon: const Icon(Icons.warning_amber_rounded, color: AppColors.red),
+          title: const Text('Delete account permanently?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'This permanently deletes your account, coin balance, ad-reward history, and purchase records. This cannot be undone.',
+                style: TextStyle(color: AppColors.textDim, height: 1.45),
+              ),
+              const SizedBox(height: 16),
+              const Text('Type DELETE to confirm.'),
+              const SizedBox(height: 8),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                textCapitalization: TextCapitalization.characters,
+                onChanged: (value) =>
+                    setDialogState(() => confirmed = value.trim() == 'DELETE'),
+                decoration: const InputDecoration(hintText: 'DELETE'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: confirmed
+                  ? () => Navigator.pop(dialogContext, true)
+                  : null,
+              child: const Text('Delete permanently'),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    if (approved != true || !mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    try {
+      await Backend.deleteAccount();
+      if (!mounted) return;
+      Navigator.of(context).pop(); // progress
+      Navigator.of(context).pop(); // profile
+      widget.onAccountDeleted();
+    } catch (error) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Account could not be deleted: $error')),
+      );
+    }
+  }
+
   void _openWallet() {
-    Navigator.of(context)
-        .push(MaterialPageRoute<void>(builder: (_) => const WalletScreen()));
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const WalletScreen()));
   }
 
   void _openAppOwned() {
-    Navigator.of(context)
-        .push(MaterialPageRoute<void>(builder: (_) => const MyAppsScreen()));
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const MyAppsScreen()));
   }
 
   @override
@@ -418,12 +525,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           height: 1,
                           color: Colors.white.withValues(alpha: 0.06),
                         ),
+                        if (Distribution.isDirect) ...[
+                          _menuRow(
+                            icon: Icons.phone_iphone_rounded,
+                            color: AppColors.green,
+                            label: 'App Owned',
+                            hint: '$_appsOwned claimed',
+                            onTap: _openAppOwned,
+                          ),
+                          Divider(
+                            height: 1,
+                            color: Colors.white.withValues(alpha: 0.06),
+                          ),
+                        ],
                         _menuRow(
-                          icon: Icons.phone_iphone_rounded,
-                          color: AppColors.green,
-                          label: 'App Owned',
-                          hint: '$_appsOwned claimed',
-                          onTap: _openAppOwned,
+                          icon: Icons.privacy_tip_outlined,
+                          color: AppColors.cyan,
+                          label: 'Privacy choices',
+                          onTap: _privacyChoices,
+                        ),
+                        Divider(
+                          height: 1,
+                          color: Colors.white.withValues(alpha: 0.06),
+                        ),
+                        _menuRow(
+                          icon: Icons.policy_outlined,
+                          color: AppColors.primary,
+                          label: 'Privacy policy',
+                          onTap: _openPrivacyPolicy,
                         ),
                         Divider(
                           height: 1,
@@ -434,6 +563,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           color: AppColors.red,
                           label: 'Sign out',
                           onTap: _signOut,
+                        ),
+                        Divider(
+                          height: 1,
+                          color: Colors.white.withValues(alpha: 0.06),
+                        ),
+                        _menuRow(
+                          icon: Icons.delete_forever_outlined,
+                          color: AppColors.red,
+                          label: 'Delete account',
+                          hint: 'Permanent',
+                          onTap: _deleteAccount,
                         ),
                       ],
                     ),

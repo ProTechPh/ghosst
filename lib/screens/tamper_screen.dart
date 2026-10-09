@@ -6,24 +6,20 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../premium.dart';
 import '../services/apk_download.dart';
-import '../services/backend.dart';
 import '../services/mediafire.dart';
 import '../services/security.dart';
 import '../theme.dart';
 
-/// Last-resort official APK link, used when the backend has **no** active
-/// forced-update announcement to borrow a download from.
-///
-/// Point it at your current official share page (MediaFire, etc). Leave it
-/// empty to show a disabled button rather than a dead link.
+/// Optional recovery APK for the Direct build only. This is not an updater;
+/// Play builds use Google Play and bypass this recovery screen.
 const String kOfficialApkUrl = '';
 
 /// Full-screen, un-skippable integrity gate.
 ///
 /// Replaces the entire app tree at launch when [SecurityReport.blocked] says
 /// the running build was modified (re-signed, debug, patched). Same shape as
-/// `UpdateRequiredScreen`: no route to pop, no close button — the only way
-/// out is the official app.
+/// There is no route to pop and no close button; the only way out is the
+/// official app.
 ///
 /// Why the download is fetched in-app but into public Downloads: a modified
 /// build is **re-signed**, so Android refuses to install the official APK
@@ -33,21 +29,19 @@ const String kOfficialApkUrl = '';
 class TamperDetectedScreen extends StatelessWidget {
   const TamperDetectedScreen({
     super.key,
-    this.info,
+    this.officialUrl,
     this.flags = const <String>[],
   });
 
-  /// Active forced-update announcement, when there is one — its `url` is the
-  /// official APK the backend already points every other build at.
-  final UpdateInfo? info;
+  final String? officialUrl;
 
   /// Native flags from the integrity check (what tripped it).
   final List<String> flags;
 
   /// Where the official APK can be fetched from.
   String? get _downloadUrl {
-    final fromUpdate = info?.url.trim();
-    if (fromUpdate != null && fromUpdate.isNotEmpty) return fromUpdate;
+    final supplied = officialUrl?.trim();
+    if (supplied != null && supplied.isNotEmpty) return supplied;
     final fallback = kOfficialApkUrl.trim();
     return fallback.isEmpty ? null : fallback;
   }
@@ -170,16 +164,18 @@ class TamperDetectedScreen extends StatelessWidget {
                             const SizedBox(height: 8),
                             const _Step(
                               n: 2,
-                              text: 'Remove this copy — Android won’t '
-                                   'install the official APK over a modified '
-                                   'one.',
+                              text:
+                                  'Remove this copy — Android won’t '
+                                  'install the official APK over a modified '
+                                  'one.',
                             ),
                             const SizedBox(height: 8),
                             const _Step(
                               n: 3,
-                              text: 'Open Ghosst.apk to install it, then '
-                                   'sign back in — your keys and coins live '
-                                   'in the cloud.',
+                              text:
+                                  'Open Ghosst.apk to install it, then '
+                                  'sign back in — your keys and coins live '
+                                  'in the cloud.',
                             ),
                           ],
                         ),
@@ -252,10 +248,7 @@ class _Step extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '0$n',
-          style: monoStyle(fontSize: 12, color: AppColors.primary),
-        ),
+        Text('0$n', style: monoStyle(fontSize: 12, color: AppColors.primary)),
         const SizedBox(width: 12),
         Expanded(
           child: Text(
@@ -482,9 +475,9 @@ class _DownloadOfficialApkState extends State<_DownloadOfficialApk> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                _total > 0 ? '${_fmt(_received)} / ${_fmt(_total)}' : _fmt(
-                  _received,
-                ),
+                _total > 0
+                    ? '${_fmt(_received)} / ${_fmt(_total)}'
+                    : _fmt(_received),
                 style: monoStyle(fontSize: 11.5, color: AppColors.textDim),
               ),
               Text(

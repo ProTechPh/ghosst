@@ -1,9 +1,9 @@
+import 'dart:async';
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 
 import 'premium.dart';
 import 'screens/adblock_screen.dart';
@@ -15,35 +15,26 @@ import 'screens/profile_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/store_screen.dart';
 import 'screens/tamper_screen.dart';
-import 'screens/update_screen.dart';
 import 'screens/wallet_screen.dart';
 import 'services/ad_service.dart';
 import 'services/adblock_detector.dart';
 import 'services/backend.dart';
+import 'services/consent_service.dart';
+import 'services/distribution.dart';
 import 'services/security.dart';
 import 'sign_in.dart';
 import 'sign_up.dart';
 import 'theme.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Distribution.initialize();
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
     debugPrint('FlutterError: ${details.exception}');
   };
 
   runApp(const MyApp());
-
-  // Initialize MobileAds asynchronously so it never delays or crashes app launch
-  MobileAds.instance
-      .initialize()
-      .then((_) {
-        AdService.instance.preload();
-        AdService.instance.preloadRewardedInterstitial();
-      })
-      .catchError((e) {
-        debugPrint('MobileAds initialization failed: $e');
-      });
 }
 
 class MyApp extends StatelessWidget {
@@ -80,13 +71,6 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
   bool _splash = true;
   final _ads = AdService();
 
-  /// Forced-update gate — set when the launch check finds a newer build.
-  UpdateInfo? _pendingUpdate;
-
-  /// Latest announcement regardless of version. The integrity gate borrows
-  /// its download link so both gates point at the same official APK.
-  UpdateInfo? _latestUpdate;
-
   /// Integrity verdict (cracked / re-packed / modded build). Null until the
   /// check answers — each leg is bounded and fails open.
   SecurityReport? _security;
@@ -99,7 +83,6 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
   /// so returning from a settings screen never hammers the probes.
   DateTime? _lastAdblockCheck;
 
-  int _currentBuild = 0;
   late final Future<void> _boot;
 
   @override
@@ -113,10 +96,22 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
 
   Future<void> _launchChecks() async {
     await Future.wait<void>([
-      _checkUpdate(),
+      _initializeAds(),
       _checkSecurity(),
       _checkAdblock(),
     ]);
+  }
+
+  Future<void> _initializeAds() async {
+    try {
+      if (!await ConsentService.gatherConsent()) return;
+      await MobileAds.instance.initialize();
+      AdService.adsEnabled = true;
+      unawaited(AdService.instance.preload());
+      unawaited(AdService.instance.preloadRewardedInterstitial());
+    } catch (e) {
+      debugPrint('MobileAds initialization failed: $e');
+    }
   }
 
   /// Blockers are toggled outside the app (quick-settings tile, Private
@@ -134,35 +129,17 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  /// Asks the backend for a forced update and compares it to this build.
-  /// Any failure (offline, collection missing, signed out) = no gate —
-  /// a broken check must never brick the launch.
-  Future<void> _checkUpdate() async {
-    UpdateInfo? info;
-    try {
-      info = await Backend.checkForcedUpdate().timeout(
-        const Duration(seconds: 8),
-      );
-    } catch (_) {
-      info = null;
-    }
-    var build = 0;
-    try {
-      final pkg = await PackageInfo.fromPlatform();
-      build = int.tryParse(pkg.buildNumber) ?? 0;
-    } catch (_) {}
-    if (!mounted) return;
-    setState(() {
-      _latestUpdate = info;
-      _currentBuild = build;
-      if (info != null && info.versionCode > build) _pendingUpdate = info;
-    });
-  }
-
   /// Signature/debug verdict from the platform side — the modded-build
   /// detector. Fails open on any error so a broken check can't lock out a
   /// legitimate install.
   Future<void> _checkSecurity() async {
+    // The Play artifact is protected by Play App Signing. Until its separate
+    // certificate is enrolled locally, do not route Play users into the
+    // direct-build APK recovery flow.
+    if (Distribution.isPlay) {
+      if (mounted) setState(() => _security = SecurityReport.clean);
+      return;
+    }
     final report = await Security.check();
     if (!mounted) return;
     setState(() => _security = report);
@@ -186,12 +163,11 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    // A modified build outranks a newer build: it must not be handed an APK
-    // to install over something Android would refuse anyway. The ad-blocker
-    // gate ranks last — it's the only one the user can clear in-place.
+    // A modified build outranks the ad-blocker gate. App updates are handled
+    // exclusively by Google Play and never block launch from inside the app.
     final tampered = _security?.blocked ?? false;
     final adBlocked = _adblock?.blocked ?? false;
-    final blocked = tampered || _pendingUpdate != null || adBlocked;
+    final blocked = tampered || adBlocked;
     return Stack(
       children: [
         // The gate replaces the entire router — nothing to pop, no UI to
@@ -200,13 +176,7 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
           child: blocked
               ? (tampered
                     ? TamperDetectedScreen(
-                        info: _latestUpdate,
                         flags: _security?.flags ?? const <String>[],
-                      )
-                    : _pendingUpdate != null
-                    ? UpdateRequiredScreen(
-                        info: _pendingUpdate!,
-                        currentBuild: _currentBuild,
                       )
                     : AdblockScreen(
                         report: _adblock!,
@@ -389,6 +359,7 @@ class _HomeShellState extends State<HomeShell> {
 
   /// Adaptive banner sized to the screen width, parked above the nav pill.
   Future<void> _loadBanner() async {
+    if (!AdService.adsEnabled) return;
     final width = MediaQuery.sizeOf(context).width.round();
     final size =
         await AdSize.getLargeAnchoredAdaptiveBannerAdSize(width) ??
@@ -459,6 +430,7 @@ class _HomeShellState extends State<HomeShell> {
       MaterialPageRoute<void>(
         builder: (_) => ProfileScreen(
           onSignOut: widget.onSignOut,
+          onAccountDeleted: widget.onSignOut,
           onGoToTab: (t) {
             Navigator.of(context).pop();
             setState(() => tab = t);
@@ -484,14 +456,14 @@ class _HomeShellState extends State<HomeShell> {
       ),
       EarnScreen(coins: coins, onRefresh: _refresh),
       const MyKeysScreen(),
-      if (isAdmin) const AdminScreen(),
+      if (isAdmin && Distribution.isDirect) const AdminScreen(),
     ];
 
     final destinations = <_NavItem>[
       _NavItem(Icons.storefront_outlined, Icons.storefront, 'Store'),
       _NavItem(Icons.play_circle_outline, Icons.play_circle, 'Earn'),
       _NavItem(Icons.shopping_bag_outlined, Icons.shopping_bag, 'Purchases'),
-      if (isAdmin)
+      if (isAdmin && Distribution.isDirect)
         _NavItem(
           Icons.admin_panel_settings_outlined,
           Icons.admin_panel_settings,

@@ -43,6 +43,14 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BUILD_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "distribution" -> result.success(BuildConfig.FLAVOR)
+                    else -> result.notImplemented()
+                }
+            }
+
         // Official-APK download: the system DownloadManager writes straight
         // into public Downloads, so the file outlives this (modified) copy
         // and survives the uninstall step of the recovery flow.
@@ -50,6 +58,10 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "start" -> {
+                        if (BuildConfig.FLAVOR == "play") {
+                            result.error("play-build", "APK downloads are unavailable in the Play build", null)
+                            return@setMethodCallHandler
+                        }
                         val url = call.argument<String>("url")
                         val name = call.argument<String>("name")
                         if (url.isNullOrBlank() || name.isNullOrBlank()) {
@@ -154,7 +166,7 @@ class MainActivity : FlutterActivity() {
 
         // A modded build is often renamed so it installs NEXT TO the official
         // app (cracked clones). Must match `applicationId` in build.gradle.kts.
-        if (packageName != APPLICATION_ID) flags.add("package-changed")
+        if (packageName != BuildConfig.APPLICATION_ID) flags.add("package-changed")
 
         // Release builds are never debuggable; a rebuilt debug APK is.
         if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
@@ -272,11 +284,9 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val CHANNEL = "com.astrixtech.ghosst/security"
+        private const val BUILD_CHANNEL = "com.astrixtech.ghosst/build"
         private const val APK_CHANNEL = "com.astrixtech.ghosst/apk"
         private const val APK_MIME = "application/vnd.android.package-archive"
-
-        // Keep in sync with `applicationId` in android/app/build.gradle.kts.
-        private const val APPLICATION_ID = "com.astrixtech.ghosst"
 
         // SHA-256 of the official release certificate (`ghosst-release.jks`,
         // alias `ghosst`). Re-derive any time the keystore changes:

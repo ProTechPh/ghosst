@@ -9,6 +9,10 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -27,6 +31,20 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("play") {
+            dimension = "distribution"
+            manifestPlaceholders["appLabel"] = "Ghosst"
+        }
+        create("direct") {
+            dimension = "distribution"
+            applicationIdSuffix = ".direct"
+            versionNameSuffix = "-direct"
+            manifestPlaceholders["appLabel"] = "Ghosst Direct"
+        }
     }
 
     signingConfigs {

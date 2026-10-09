@@ -35,6 +35,9 @@ class AdService {
   static final AdService instance = AdService._internal();
   factory AdService() => instance;
 
+  /// Set only after UMP allows ad requests and Mobile Ads initializes.
+  static bool adsEnabled = false;
+
   /// Real rewarded ad unit with SSV (reward item: coins).
   static const rewardedAdUnitId = AdUnits.rewarded;
 
@@ -76,6 +79,7 @@ class AdService {
   Future<RewardedAd?> preload({
     Duration timeout = const Duration(seconds: 8),
   }) async {
+    if (!adsEnabled) return null;
     if (_ad != null) return _ad;
 
     // Rate-limit backoff: if Google just returned No Fill, wait at least 15s
@@ -148,6 +152,10 @@ class AdService {
     required void Function() onClosed,
     Duration waitTimeout = const Duration(seconds: 8),
   }) async {
+    if (!adsEnabled) {
+      onError('Ads are unavailable until privacy choices are completed.');
+      return;
+    }
     final ad = _ad ?? await preload(timeout: waitTimeout);
 
     if (ad == null) {
@@ -190,6 +198,7 @@ class AdService {
   Future<RewardedInterstitialAd?> preloadRewardedInterstitial({
     Duration timeout = const Duration(seconds: 8),
   }) async {
+    if (!adsEnabled) return null;
     if (_ri != null) return _ri;
 
     if (_lastRiFailTime != null &&
@@ -301,6 +310,7 @@ class AdService {
   Future<InterstitialAd?> preloadInterstitial({
     Duration timeout = const Duration(seconds: 6),
   }) async {
+    if (!adsEnabled) return null;
     if (_inter != null) return _inter;
 
     if (_interCompleter != null) {
@@ -377,6 +387,10 @@ class AdService {
   /// Load + show an app-open ad once (e.g. right after the splash).
   /// Failures are silent — this format must never interrupt the UX.
   Future<void> showAppOpen({void Function()? onClosed}) async {
+    if (!adsEnabled) {
+      onClosed?.call();
+      return;
+    }
     try {
       await AppOpenAd.load(
         adUnitId: AdUnits.appOpen,

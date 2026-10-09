@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../appwrite_client.dart';
 import '../services/backend.dart';
+import '../services/distribution.dart';
 import '../theme.dart';
 import 'download_screen.dart';
 
@@ -37,7 +38,10 @@ class _MyKeysScreenState extends State<MyKeysScreen> {
       error = '';
     });
     try {
-      final c = await Backend.myClaims();
+      final allClaims = await Backend.myClaims();
+      final c = Distribution.isPlay
+          ? allClaims.where((claim) => !claim.isDownload).toList()
+          : allClaims;
 
       // Cover art per product — cosmetic, never blocks the list.
       final art = <String, String>{};
@@ -282,7 +286,8 @@ class _MyKeysScreenState extends State<MyKeysScreen> {
             const EmptyState(
               icon: Icons.shopping_bag_outlined,
               title: 'No purchases yet',
-              message: 'Watch ads to earn coins, then claim your first key or app in the Store.',
+              message:
+                  'Watch ads to earn coins, then claim your first key or app in the Store.',
             ),
           for (final c in claims) ...[
             GlowCard(

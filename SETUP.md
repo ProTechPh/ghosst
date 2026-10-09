@@ -11,22 +11,25 @@ products**, the MediaFire download link).
 APK) or `file` (generic file). APK/file products are bought with the same coins
 and deliver a MediaFire link instead of a key — see §2.1.
 
-Function IDs are referenced by the app as **`claim`** and **`reward-ssv`** —
-create them with those exact `$id`s.
+The app uses exactly one Appwrite function: **`claim`**. It handles product
+claims, AdMob SSV rewards, and authenticated permanent account deletion. The
+old **`reward-ssv`** folder is kept for source reference only; do not deploy it.
 
 ---
 
 ## 1. Project / platform settings
 
 1. Appwrite Console → **Settings → Platforms → Add platform → Flutter app**:
-   - Name: `ghosst`, Package name: `com.astrixtech.ghosst`.
+   - Name: `ghosst-play`, Package name: `com.astrixtech.ghosst`.
+   - Add a second platform for sideload releases: Name `ghosst-direct`,
+     package name `com.astrixtech.ghosst.direct`.
 2. Platform scopes — make sure these are enabled (leave defaults if unsure):
    `account.read`, `account.write`, `databases.read`, `databases.write`,
    `functions.read`, `functions.write`.
-3. `android/app/src/main/AndroidManifest.xml` also declares
-   `android.permission.REQUEST_INSTALL_PACKAGES` (so the download screen can
-   prompt **Install** for APKs) plus a `<queries>` entry for the
-   `application/vnd.android.package-archive` MIME type.
+3. There are two Android flavors. `direct` keeps
+   `REQUEST_INSTALL_PACKAGES` for its APK store. The `play` manifest explicitly
+   removes that permission and hides all APK/file download paths. Neither
+   flavor has an in-app updater; Google Play owns Play-build updates.
 
 ## 2. Database
 
@@ -163,47 +166,6 @@ replayed callbacks hit id-exists (409) and are ignored.
 > (acquire) and deletes it afterwards (release); a crashed execution is
 > taken over after 30s. Don't create documents with that id manually.
 
-### Collection: `updates`  (forced-update announcements)
-
-| Attribute | Type | Required |
-|---|---|---|
-| `versionCode` | integer | yes |
-| `versionName` | string(32) | no |
-| `url` | string(2048) | yes |
-| `message` | string(512) | no |
-| `active` | boolean | yes |
-
-Permissions: **Read → All users**, **Create / Delete → Team admins**.
-
-At launch the app reads the active announcement; when `versionCode` is
-higher than its own build number the whole UI is replaced by the blocking
-update gate (in-app download with progress → system install prompt — there
-is no dismiss; cancelling the install sheet lands back on the gate).
-Each publish retires the previous announcement, so exactly one `active`
-doc should exist. There is no publish UI in the app anymore — CI is the
-publisher (below), or insert/delete `updates` docs from the Appwrite
-console if you ever need to do it by hand.
-
-**CI publishes this automatically.** Every push to `main` that ships a
-release runs `.github/workflows/release.yml` → *Open forced-update gate*:
-it deletes the previous announcement and posts the new build number with
-the fixed download URL
-`https://github.com/ProTechPh/ghosst/releases/latest/download/Ghosst.apk`
-(the repo is public, so the app downloads it anonymously). One-time setup:
-
-1. **Appwrite → Settings → API keys → Create key** (e.g. `github-release`)
-   scoped to **Databases → `updates` → documents: read, create, delete**
-   (or the umbrella `documents.read` / `documents.create` /
-   `documents.delete` scopes if collection-level scoping isn't available).
-2. **GitHub → repo Settings → Secrets and variables → Actions → New
-   repository secret** → name `APPWRITE_API_KEY`, value = that key.
-3. Optional secret `UPDATE_URL` — overrides the download link (e.g. a
-   MediaFire page) if you don't want to serve the APK from GitHub.
-
-Until the secret exists the step is skipped (the release itself still
-succeeds) and no gate opens — insert an `updates` doc from the Appwrite
-console if you need to force an update before the secret is set.
-
 ## 3. Team
 
 **Auth → Teams → Create team** → ID/name: `admins`, then add your own user as
@@ -211,46 +173,48 @@ member. That's what unlocks the Admin tab and key/product write permissions.
 
 ## 4. Functions
 
-> **Single-function variant (recommended):** everything below is now merged
-> into ONE function with ID **`claim`** (`functions/claim/`, package
-> `claim.tar.gz`). It routes internally: `?signature=...` → AdMob SSV,
+### Claims, ad rewards, and account deletion
+
+> Everything is merged into ONE function with ID **`claim`**
+> (`functions/claim/`, package `claim.tar.gz`). It routes internally:
+> `?signature=...` → AdMob SSV,
 > `{productId}` → license claim **or app/file claim** (reads `product.type`;
 > for `apk`/`file` it looks up `app_files`, deducts coins and returns
-> `{ok, downloadUrl, type, cost}`), `?yt=...` → YouTube embed HTML.
-> Deploy just
+> `{ok, downloadUrl, type, cost}`),
+> `{action: "deleteAccount", confirm: "DELETE"}` → authenticated permanent
+> deletion, and `?yt=...` → YouTube embed HTML. Deploy just
 > `claim` with a **domain (HTTP)**, env var `COINS_PER_REWARD=10` (fallback),
-> scopes `documents.read`/`documents.write`, Execute access = Any. AdMob
+> scopes `documents.read`, `documents.write`, `users.read`, and `users.write`;
+> Execute access = Any. The deletion route still requires the caller's valid
+> user JWT. AdMob
 > callback URL = **`https://claim.sgp.appwrite.run/`** (bare — verify the URL
 > *without* query parameters; AdMob's Verify button fails on `?...` URLs).
 > The old two-function layout below (`functions/reward-ssv/`) is kept for
 > reference only.
 
-Both are dependency-free Node.js (they call the Appwrite REST API with the
+It is dependency-free Node.js (it calls the Appwrite REST API with the
 ephemeral key, so no `node_modules`).
 
 Package them locally (**`.tar.gz`**, works on Windows 10+ `tar`):
 
 ```powershell
 tar -czf claim.tar.gz -C functions/claim .
-# legacy/reference only:
-tar -czf reward-ssv.tar.gz -C functions/reward-ssv .
 ```
 
 > Zip also works (`Compress-Archive -Path functions\claim\* -DestinationPath claim.zip -Force`),
 > but `.tar.gz` is the Appwrite CLI convention — upload either as the deployment archive.
 
-For **each** function: **Functions → Create function** with the exact ID
-(`claim` / `reward-ssv`), then in **Settings**:
+Create only **Functions → `claim`**, then in **Settings**:
 
-| Setting | `claim` | `reward-ssv` |
-|---|---|---|
-| Runtime | Node.js (latest) | Node.js (latest) |
-| Entrypoint | `index.js` | `index.js` |
-| Trigger | **SDK + domain (HTTP)** | **HTTP** |
-| Execute access | **Any** (function itself checks the JWT) | **Any** (Google can't authenticate) |
-| Timeout | 30s default | 30s default |
-| Scopes (ephemeral key) | `documents.read`, `documents.write` | `databases.read`, `databases.write` |
-| Env vars | `COINS_PER_REWARD` = `10` (fallback) | – (legacy, not deployed) |
+| Setting | `claim` |
+|---|---|
+| Runtime | Node.js (latest) |
+| Entrypoint | `index.js` |
+| Trigger | **SDK + domain (HTTP)** |
+| Execute access | **Any** (AdMob cannot authenticate; protected app routes validate JWT) |
+| Timeout | 30s default |
+| Scopes (ephemeral key) | `documents.read`, `documents.write`, `users.read`, `users.write` |
+| Env vars | `COINS_PER_REWARD` = `10` (fallback) |
 
 Upload the zip under **Deployments → Create deployment** (build command:
 default `npm install` is fine).
@@ -301,7 +265,11 @@ App ID (already in the manifest): `ca-app-pub-7791552060229072~1855578469`.
 
 ```powershell
 flutter pub get
-flutter run
+flutter run --flavor play
+# or for the sideload-only feature set:
+flutter run --flavor direct
+flutter build appbundle --release --flavor play
+flutter build apk --release --flavor direct
 ```
 
 1. Sign up → **Admin** tab appears only for the `admins` team member.
@@ -348,12 +316,11 @@ flutter run
 - [ ] `products` has the `type` / `version` / `fileSize` columns and `claims`
       has `downloadUrl`.
 - [ ] `claim` function redeployed (it must contain the app-claim route) and
-      each published APK/file product has a working MediaFire link.
-- [ ] `updates` collection created (Read → users; Create/Delete → admins)
-      before any release that should open the forced-update gate.
-- [ ] Repo secret `APPWRITE_API_KEY` set, so releases **auto-open** the
-      forced-update gate (without it CI skips the gate step — insert the
-      `updates` doc from the Appwrite console instead).
+      has `documents.read`, `documents.write`, `users.read`, and `users.write`
+      scopes. Verify both a product claim and Profile → Delete account.
+- [ ] Each published APK/file product has a working MediaFire link.
+- [ ] Increase `version: x.y.z+N` in `pubspec.yaml` before each Play upload;
+      Play Store is the only update channel and `N` must always increase.
 - [ ] Product costs / reward amount reviewed.
 
 ## Troubleshooting

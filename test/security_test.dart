@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/premium.dart';
 import 'package:ghosst/screens/tamper_screen.dart';
 import 'package:ghosst/services/apk_download.dart';
-import 'package:ghosst/services/backend.dart';
 import 'package:ghosst/services/security.dart';
 import 'package:ghosst/theme.dart';
 
@@ -35,13 +34,10 @@ void main() {
 
       expect(report.blocked, isTrue);
       expect(report.flags, ['signature-mismatch', 'debuggable-build']);
-      expect(
-        report.flags.map(securityReason),
-        [
-          "App signature doesn't match the official release",
-          'Debug build — not an official release',
-        ],
-      );
+      expect(report.flags.map(securityReason), [
+        "App signature doesn't match the official release",
+        'Debug build — not an official release',
+      ]);
     });
 
     test('passes a clean verdict through', () async {
@@ -112,11 +108,7 @@ void main() {
         MaterialApp(
           theme: AppTheme.dark,
           home: TamperDetectedScreen(
-            info: UpdateInfo(
-              versionCode: 17,
-              versionName: '2.0.1',
-              url: 'https://www.mediafire.com/file/official.apk',
-            ),
+            officialUrl: 'https://www.mediafire.com/file/official.apk',
             flags: const ['signature-mismatch'],
           ),
         ),
@@ -151,11 +143,7 @@ void main() {
         MaterialApp(
           theme: AppTheme.dark,
           home: TamperDetectedScreen(
-            info: UpdateInfo(
-              versionCode: 17,
-              versionName: '2.0.1',
-              url: 'https://example.com/ghosst-official.apk',
-            ),
+            officialUrl: 'https://example.com/ghosst-official.apk',
             flags: const ['signature-mismatch'],
           ),
         ),
@@ -165,7 +153,9 @@ void main() {
         find.widgetWithText(IslandButton, 'Download official app'),
       );
       await tester.pump();
-      await tester.tap(find.widgetWithText(IslandButton, 'Download official app'));
+      await tester.tap(
+        find.widgetWithText(IslandButton, 'Download official app'),
+      );
       await tester.pumpAndSettle();
 
       // The link never leaks into the UI — the download stays in-app.
@@ -223,11 +213,7 @@ void main() {
         MaterialApp(
           theme: AppTheme.dark,
           home: TamperDetectedScreen(
-            info: UpdateInfo(
-              versionCode: 0,
-              versionName: '',
-              url: 'https://example.com/ghosst-official.apk',
-            ),
+            officialUrl: 'https://example.com/ghosst-official.apk',
           ),
         ),
       );

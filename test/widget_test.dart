@@ -4,8 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/premium.dart';
 import 'package:ghosst/screens/splash_screen.dart';
-import 'package:ghosst/screens/update_screen.dart';
-import 'package:ghosst/services/backend.dart';
 import 'package:ghosst/sign_in.dart';
 import 'package:ghosst/sign_up.dart';
 import 'package:ghosst/theme.dart';
@@ -225,7 +223,8 @@ void main() {
     await tester.enterText(find.byType(TextField).at(1), 'user@test.com');
     await tester.enterText(find.byType(TextField).at(2), 'short');
     await tester.ensureVisible(
-        find.widgetWithText(IslandButton, 'Create account'));
+      find.widgetWithText(IslandButton, 'Create account'),
+    );
     await tester.pump(); // let the scroll offset hit layout
     await tester.tap(find.widgetWithText(IslandButton, 'Create account'));
     await tester.pump();
@@ -236,8 +235,9 @@ void main() {
     expect(find.text('Minimum 8 characters'), findsNothing); // hint swapped out
   });
 
-  testWidgets('sign-in rejects a password below the Appwrite minimum',
-      (tester) async {
+  testWidgets('sign-in rejects a password below the Appwrite minimum', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.dark,
@@ -270,47 +270,23 @@ void main() {
       'Password must be between 8 and 256 characters',
     );
     expect(
-      friendlyAuthError('A user with the same id already exists',
-          fallback: 'Sign up failed'),
+      friendlyAuthError(
+        'A user with the same id already exists',
+        fallback: 'Sign up failed',
+      ),
       'An account with this email already exists',
     );
     expect(
-      friendlyAuthError('Invalid credentials',
-          fallback: 'Sign in failed'),
+      friendlyAuthError('Invalid credentials', fallback: 'Sign in failed'),
       'Incorrect email or password',
     );
-    expect(friendlyAuthError('', fallback: 'Sign in failed'),
-        'Sign in failed');
+    expect(friendlyAuthError('', fallback: 'Sign in failed'), 'Sign in failed');
     expect(
-      friendlyAuthError('something new from the server',
-          fallback: 'Sign in failed'),
+      friendlyAuthError(
+        'something new from the server',
+        fallback: 'Sign in failed',
+      ),
       'something new from the server', // unmapped messages pass through
     );
-  });
-
-  testWidgets('update gate renders through the shared APK installer', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.dark,
-        home: UpdateRequiredScreen(
-          currentBuild: 16,
-          info: UpdateInfo(
-            versionCode: 17,
-            versionName: '2.0.1',
-            url: 'https://www.mediafire.com/file/next.apk',
-            message: 'Faster store',
-          ),
-        ),
-      ),
-    );
-
-    expect(find.text('A new Ghosst version is ready'), findsOneWidget);
-    expect(find.text('build 16'), findsOneWidget);
-    expect(find.textContaining('build 17'), findsOneWidget);
-    expect(find.text('Faster store'), findsOneWidget);
-    // The CTA now lives in ApkInstaller — same label, same behaviour.
-    expect(find.text('Update now'), findsOneWidget);
   });
 }

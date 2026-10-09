@@ -3,6 +3,7 @@
  *
  * Routes on the request:
  *   - query ?signature=<AdMob SSV signature>               -> verified reward callback
+ *   - body { action: "deleteAccount", confirm: "DELETE" } -> permanent account deletion
  *   - body { action: "simulate" }                          -> rejected (debug path removed)
  *   - body { productId }                                   -> license claim (type=key)
  *                                                          -> download unlock (type=apk|file)
@@ -12,7 +13,8 @@
  *
  * Caller identity : x-appwrite-user-jwt header (forwarded by Appwrite)
  * Privileged DB   : x-appwrite-key header (ephemeral API key — configure
- *                   scopes: documents.read, documents.write in the console)
+ *                   scopes: documents.read, documents.write, users.read,
+ *                   users.write in the console)
  *
  * Env vars: COINS_PER_REWARD (fallback reward when callback omits reward_amount)
  *
@@ -678,6 +680,93 @@ async function finishClaim(context, key, opts) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Permanent account deletion                                         */
+/* ------------------------------------------------------------------ */
+
+async function deleteUserDocuments(key, collection, uid, skipId = '') {
+  const base = `/databases/${DB}/collections/${collection}/documents`;
+  while (true) {
+    const page = await api('GET', base, {
+      key,
+      queries: [
+        JSON.stringify({ method: 'equal', attribute: 'userId', values: [uid] }),
+        JSON.stringify({ method: 'limit', values: [100] }),
+      ],
+    });
+    const documents = (page.documents || []).filter(
+      (document) => document.$id !== skipId,
+    );
+    if (documents.length === 0) return;
+    for (const document of documents) {
+      await api('DELETE', `${base}/${document.$id}`, { key });
+    }
+  }
+}
+
+async function anonymizeClaimedKeys(key, uid) {
+  const base = `/databases/${DB}/collections/${COL.keys}/documents`;
+  while (true) {
+    const page = await api('GET', base, {
+      key,
+      queries: [
+        JSON.stringify({ method: 'equal', attribute: 'claimedBy', values: [uid] }),
+        JSON.stringify({ method: 'limit', values: [100] }),
+      ],
+    });
+    const documents = page.documents || [];
+    if (documents.length === 0) return;
+    for (const document of documents) {
+      await api('PATCH', `${base}/${document.$id}`, {
+        key,
+        body: { data: { claimedBy: '' } },
+      });
+    }
+  }
+}
+
+async function handleDeleteAccount(context, key, params) {
+  const { req, res, log } = context;
+  const jwt = req.headers['x-appwrite-user-jwt'];
+  if (!jwt) return res.json({ ok: false, error: 'Not signed in' }, 200);
+  if (params.confirm !== 'DELETE') {
+    return res.json({ ok: false, error: 'Deletion was not confirmed' }, 200);
+  }
+
+  const user = await api('GET', '/account', { jwt });
+  const uid = user.$id;
+  const locked = await acquireLock(key, uid);
+  if (!locked) {
+    return res.json(
+      { ok: false, error: 'Busy right now — try again in a second' },
+      200,
+    );
+  }
+
+  try {
+    await deleteUserDocuments(key, COL.claims, uid);
+    // Keep the global mutex document until the whole deletion finishes.
+    await deleteUserDocuments(key, COL.adRewards, uid, LOCK_ID);
+    await anonymizeClaimedKeys(key, uid);
+    try {
+      await api(
+        'DELETE',
+        `/databases/${DB}/collections/${COL.profiles}/documents/${uid}`,
+        { key },
+      );
+    } catch (e) {
+      if (e.status !== 404) throw e;
+    }
+
+    // Delete auth last so a partial failure remains safely retryable.
+    await api('DELETE', `/users/${uid}`, { key });
+    log(`deleted account user=${uid}`);
+    return res.json({ ok: true }, 200);
+  } finally {
+    await releaseLock(key);
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Reward: AdMob SSV callback                                          */
 /* ------------------------------------------------------------------ */
 
@@ -909,6 +998,9 @@ module.exports = async (context) => {
   try {
     if (params.signature || params.action === 'simulate') {
       return await handleReward(context, key, params);
+    }
+    if (params.action === 'deleteAccount') {
+      return await handleDeleteAccount(context, key, params);
     }
     return await handleClaim(context, key, params);
   } catch (e) {

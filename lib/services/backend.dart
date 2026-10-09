@@ -16,9 +16,6 @@ class Col {
   static const claims = 'claims';
   static const adRewards = 'ad_rewards';
 
-  /// Forced-update announcements published from the Admin screen — read by
-  /// every client at launch (older builds get blocked until they update).
-  static const updates = 'updates';
   static const imageBucket = 'product-images';
 
   /// MediaFire download links for non-key products (APK / generic files).
@@ -29,7 +26,7 @@ class Col {
 
 /// Appwrite function ids.
 class Fn {
-  // Single combined Appwrite function (claim + AdMob SSV reward callback).
+  // Single combined Appwrite function (claims, rewards, account deletion).
   static const claim = 'claim';
 }
 
@@ -270,38 +267,6 @@ class StockWriteResult {
   bool get ok => failed == 0;
 }
 
-/// A forced-update announcement published from the Admin screen.
-///
-/// Clients compare [versionCode] against their own build number at launch;
-/// a higher value replaces the whole UI with the blocking update gate.
-class UpdateInfo {
-  UpdateInfo({
-    required this.versionCode,
-    required this.versionName,
-    required this.url,
-    this.message = '',
-  });
-
-  /// APK build number this announcement demands (`pubspec` `1.0.0+N` → N).
-  final int versionCode;
-
-  /// Human label, e.g. `1.0.1` (shown on the gate and admin status card).
-  final String versionName;
-
-  /// Download link for the new APK (MediaFire share page or direct URL).
-  final String url;
-
-  /// Optional "what's new" copy shown on the gate.
-  final String message;
-
-  factory UpdateInfo.fromDoc(Document d) => UpdateInfo(
-    versionCode: (d.data['versionCode'] as num?)?.toInt() ?? 0,
-    versionName: d.data['versionName'] as String? ?? '',
-    url: d.data['url'] as String? ?? '',
-    message: d.data['message'] as String? ?? '',
-  );
-}
-
 class Backend {
   static final _db = Databases(client);
   static final _account = Account(client);
@@ -330,6 +295,22 @@ class Backend {
   }
 
   static Future<void> signOut() => _account.deleteSession(sessionId: 'current');
+
+  /// Permanently deletes the signed-in Appwrite user and app-owned personal
+  /// records through the privileged account-deletion route in `claim`.
+  static Future<void> deleteAccount() async {
+    final exec = await _runFunction(Fn.claim, {
+      'action': 'deleteAccount',
+      'confirm': 'DELETE',
+    });
+    final body = _parseOutput(exec);
+    if (body['ok'] != true) {
+      throw AppwriteException(
+        body['error'] as String? ?? 'Account deletion failed',
+        400,
+      );
+    }
+  }
 
   // ---- profile ----
 
@@ -539,7 +520,11 @@ class Backend {
     var skippedExisting = 0;
     List<String> toInsert = cleanBatch;
     if (skipExisting && cleanBatch.isNotEmpty) {
-      onProgress?.call(0, cleanBatch.length, 'Checking existing keys in stock…');
+      onProgress?.call(
+        0,
+        cleanBatch.length,
+        'Checking existing keys in stock…',
+      );
       try {
         final existing = await keysForProduct(productId, limit: 5000);
         final existingSet = existing.map((e) => e.keyText.trim()).toSet();
@@ -621,8 +606,7 @@ class Backend {
     }
 
     for (var start = 0; start < total; start += chunkSize) {
-      final chunk =
-          toInsert.sublist(start, math.min(start + chunkSize, total));
+      final chunk = toInsert.sublist(start, math.min(start + chunkSize, total));
       await _pooled(chunk, workerWidth, (k) async {
         final docId = ID.unique();
         final data = <String, dynamic>{
@@ -707,7 +691,10 @@ class Backend {
   /// dialog's lists can display up to 5 000 rows. [usedOnly] counts the
   /// claimed rows: `claimed` is the only non-`available` value this app ever
   /// writes, and the filter rides the existing `product_status` index.
-  static Future<int> countKeys(String productId, {bool usedOnly = false}) async {
+  static Future<int> countKeys(
+    String productId, {
+    bool usedOnly = false,
+  }) async {
     final r = await _db.listDocuments(
       databaseId: Col.dbId,
       collectionId: Col.keys,
@@ -1075,11 +1062,13 @@ class Backend {
       var anyRemoved = false;
       await _pooled(page, _stockWidth, (d) async {
         try {
-          await _retry(() => _db.deleteDocument(
-                databaseId: Col.dbId,
-                collectionId: Col.keys,
-                documentId: d.$id,
-              ));
+          await _retry(
+            () => _db.deleteDocument(
+              databaseId: Col.dbId,
+              collectionId: Col.keys,
+              documentId: d.$id,
+            ),
+          );
           anyRemoved = true;
           done++;
           onProgress?.call(done, total);
@@ -1121,8 +1110,11 @@ class Backend {
   /// Retries transient failures (rate limit, server error, dead connection)
   /// with a short backoff; everything else — permissions, validation — fails
   /// immediately, since repeating it won't help.
-  static Future<T> _retry<T>(Future<T> Function() op, {int attempts = 4}) async {
-    for (var attempt = 1;; attempt++) {
+  static Future<T> _retry<T>(
+    Future<T> Function() op, {
+    int attempts = 4,
+  }) async {
+    for (var attempt = 1; ; attempt++) {
       try {
         return await op();
       } on AppwriteException catch (e) {
@@ -1132,69 +1124,6 @@ class Backend {
         final delayMs = code == 429 ? 2000 * attempt : 350 * attempt;
         await Future.delayed(Duration(milliseconds: delayMs));
       }
-    }
-  }
-
-  // ---- forced app update ----
-
-  /// Latest active announcement (highest version wins), or null when none.
-  ///
-  /// Never throws: the launch gate must not break the app when the
-  /// `updates` collection doesn't exist yet or the client can't read it.
-  static Future<UpdateInfo?> checkForcedUpdate() async {
-    try {
-      final r = await _db.listDocuments(
-        databaseId: Col.dbId,
-        collectionId: Col.updates,
-        queries: [Query.equal('active', true), Query.limit(100)],
-      );
-      UpdateInfo? best;
-      for (final d in r.documents) {
-        final u = UpdateInfo.fromDoc(d);
-        if (best == null || u.versionCode > best.versionCode) best = u;
-      }
-      return best;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// Publishes a new forced update, retiring any previous announcement first
-  /// so exactly one active doc exists. Create/Delete = team admins only.
-  static Future<void> publishUpdate({
-    required int versionCode,
-    required String versionName,
-    required String url,
-    String message = '',
-  }) async {
-    await clearUpdates();
-    await _db.createDocument(
-      databaseId: Col.dbId,
-      collectionId: Col.updates,
-      documentId: ID.unique(),
-      data: {
-        'versionCode': versionCode,
-        'versionName': versionName.trim(),
-        'url': url.trim(),
-        'message': message.trim(),
-        'active': true,
-      },
-    );
-  }
-
-  /// Retires every active announcement — older builds are allowed in again.
-  static Future<void> clearUpdates() async {
-    final r = await _db.listDocuments(
-      databaseId: Col.dbId,
-      collectionId: Col.updates,
-      queries: [Query.equal('active', true), Query.limit(100)],
-    );
-    for (final d in r.documents) {
-      await _db.deleteDocument(
-        databaseId: Col.dbId,
-        collectionId: Col.updates,
-        documentId: d.$id,
-      );
     }
   }
 
