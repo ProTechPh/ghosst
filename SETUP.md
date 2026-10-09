@@ -285,8 +285,8 @@ flutter pub get
 flutter run --flavor play
 # or for the sideload-only feature set:
 flutter run --flavor direct
-# Release-mode QA with guaranteed-fill Google test ads (never publish this):
-flutter run --release --flavor play --dart-define=USE_TEST_ADS=true
+# Closed-beta/QA mode: test ads + temporary Apps shelf (never promote):
+flutter run --release --flavor play --dart-define=USE_TEST_ADS=true --dart-define=ENABLE_DOWNLOAD_STORE=true
 flutter build appbundle --release --flavor play
 flutter build apk --release --flavor direct
 ```
@@ -343,7 +343,8 @@ flutter build apk --release --flavor direct
        Bump `x.y.z` by hand when the release needs a new feature version;
        Play Store is the only update channel and `N` must always increase.
 - [ ] Use the correct GitHub Release asset: `live-ads.aab` for production Play,
-      `closed-beta-test-ads.aab` for temporary closed testing,
+      `closed-beta-test-ads.aab` for temporary closed testing (test ads plus
+      the Apps shelf through `ENABLE_DOWNLOAD_STORE=true`),
       `release-live-ads.apk` for production sideload testing,
       `release-test-ads.apk` for release-mode QA, and `debug-test-ads.apk` for
       development. Upload only one AAB for each version code. Never promote a

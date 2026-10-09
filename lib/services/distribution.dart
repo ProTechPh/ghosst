@@ -11,10 +11,18 @@ class Distribution {
 
   static const channel = MethodChannel('com.astrixtech.ghosst/build');
 
+  /// Explicit exception for closed-beta/QA Play builds. Live Play artifacts
+  /// leave this false so APK/file downloads are not exposed to production.
+  static const bool _enableDownloadStoreForPlay = bool.fromEnvironment(
+    'ENABLE_DOWNLOAD_STORE',
+    defaultValue: false,
+  );
+
   static bool _isPlay = true;
 
   static bool get isPlay => _isPlay;
   static bool get isDirect => !_isPlay;
+  static bool get showsDownloadStore => isDirect || _enableDownloadStoreForPlay;
 
   static Future<void> initialize() async {
     if (!Platform.isAndroid) {

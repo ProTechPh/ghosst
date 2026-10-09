@@ -543,7 +543,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           height: 1,
                           color: Colors.white.withValues(alpha: 0.06),
                         ),
-                        if (Distribution.isDirect) ...[
+                        if (Distribution.showsDownloadStore) ...[
                           _menuRow(
                             icon: Icons.phone_iphone_rounded,
                             color: AppColors.green,

@@ -78,7 +78,7 @@ jobs:
       - name: Build debug APK (test ads)
         run: |
           set -euo pipefail
-          flutter build apk --debug --flavor play --dart-define=USE_TEST_ADS=true
+          flutter build apk --debug --flavor play --dart-define=USE_TEST_ADS=true --dart-define=ENABLE_DOWNLOAD_STORE=true
           cp build/app/outputs/flutter-apk/app-play-debug.apk \
             "release-assets/ghosst-play-debug-test-ads-${ASSET_VERSION}.apk"
 
@@ -87,7 +87,7 @@ jobs:
       - name: Build release QA APK (test ads)
         run: |
           set -euo pipefail
-          flutter build apk --release --flavor play --dart-define=USE_TEST_ADS=true
+          flutter build apk --release --flavor play --dart-define=USE_TEST_ADS=true --dart-define=ENABLE_DOWNLOAD_STORE=true
           cp build/app/outputs/flutter-apk/app-play-release.apk \
             "release-assets/ghosst-play-release-test-ads-${ASSET_VERSION}.apk"
 
@@ -96,21 +96,21 @@ jobs:
       - name: Build closed-beta bundle (test ads)
         run: |
           set -euo pipefail
-          flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=true
+          flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=true --dart-define=ENABLE_DOWNLOAD_STORE=true
           cp build/app/outputs/bundle/playRelease/app-play-release.aab \
             "release-assets/ghosst-play-closed-beta-test-ads-${ASSET_VERSION}.aab"
 
       - name: Build release APK (live ads)
         run: |
           set -euo pipefail
-          flutter build apk --release --flavor play --dart-define=USE_TEST_ADS=false
+          flutter build apk --release --flavor play --dart-define=USE_TEST_ADS=false --dart-define=ENABLE_DOWNLOAD_STORE=false
           cp build/app/outputs/flutter-apk/app-play-release.apk \
             "release-assets/ghosst-play-release-live-ads-${ASSET_VERSION}.apk"
 
       - name: Build Play bundle (live ads)
         run: |
           set -euo pipefail
-          flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=false
+          flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=false --dart-define=ENABLE_DOWNLOAD_STORE=false
           cp build/app/outputs/bundle/playRelease/app-play-release.aab \
             "release-assets/ghosst-play-live-ads-${ASSET_VERSION}.aab"
 
@@ -142,7 +142,7 @@ jobs:
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           NOTES="Ghosst **${APP_VERSION}** Android builds"
           NOTES="${NOTES}"$'\n\n'"- **Play AAB / live-ads APK:** production AdMob IDs"
-          NOTES="${NOTES}"$'\n'"- **closed-beta-test-ads AAB:** temporary closed testing only; do not promote to production"
+          NOTES="${NOTES}"$'\n'"- **closed-beta-test-ads AAB:** test ads + temporary Apps shelf; do not promote to production"
           NOTES="${NOTES}"$'\n'"- **release-test-ads APK:** release-mode QA with Google sample ads; do not distribute"
           NOTES="${NOTES}"$'\n'"- **debug-test-ads APK:** debug/testing only"
           NOTES="${NOTES}"$'\n'"- Upload only one AAB for this version code; Play version codes cannot be reused"

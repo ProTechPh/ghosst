@@ -70,7 +70,10 @@ class _StoreScreenState extends State<StoreScreen>
   Timer? _nativeRetryTimer;
 
   void _onAdsEnabledForNative() {
-    if (AdService.adsEnabled && mounted && _nativeAd == null && !_nativeLoaded) {
+    if (AdService.adsEnabled &&
+        mounted &&
+        _nativeAd == null &&
+        !_nativeLoaded) {
       _loadNative();
     }
   }
@@ -89,7 +92,9 @@ class _StoreScreenState extends State<StoreScreen>
   void dispose() {
     _pulse.dispose();
     _nativeRetryTimer?.cancel();
-    AdService.instance.adsEnabledNotifier.removeListener(_onAdsEnabledForNative);
+    AdService.instance.adsEnabledNotifier.removeListener(
+      _onAdsEnabledForNative,
+    );
     _nativeAd?.dispose();
     _nativeAd = null;
     _nativeLoaded = false;
@@ -185,7 +190,7 @@ class _StoreScreenState extends State<StoreScreen>
       );
       if (!mounted) return;
       setState(() {
-        products = Distribution.isPlay
+        products = !Distribution.showsDownloadStore
             ? ps.where((product) => product.isKey).toList()
             : ps;
         stock = counts;
@@ -292,7 +297,7 @@ class _StoreScreenState extends State<StoreScreen>
           const SizedBox(height: 18),
 
           // ---- shelf switch (Keys | Apps) -------------------------------
-          if (Distribution.isDirect) ...[
+          if (Distribution.showsDownloadStore) ...[
             ScrollReveal(
               delay: const Duration(milliseconds: 60),
               child: _segment(),

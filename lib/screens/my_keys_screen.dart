@@ -39,7 +39,7 @@ class _MyKeysScreenState extends State<MyKeysScreen> {
     });
     try {
       final allClaims = await Backend.myClaims();
-      final c = Distribution.isPlay
+      final c = !Distribution.showsDownloadStore
           ? allClaims.where((claim) => !claim.isDownload).toList()
           : allClaims;
 
