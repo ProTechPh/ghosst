@@ -11,8 +11,9 @@ class Distribution {
 
   static const channel = MethodChannel('com.astrixtech.ghosst/build');
 
-  /// Explicit exception for closed-beta/QA Play builds. Live Play artifacts
-  /// leave this false so APK/file downloads are not exposed to production.
+  /// Explicit build switch for Play artifacts. CI enables it for both QA and
+  /// production so APK/file products remain part of the shipped store; the
+  /// false default is a fail-safe for ad-hoc builds that omit the define.
   static const bool _enableDownloadStoreForPlay = bool.fromEnvironment(
     'ENABLE_DOWNLOAD_STORE',
     defaultValue: false,
