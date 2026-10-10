@@ -26,10 +26,15 @@ old **`reward-ssv`** folder is kept for source reference only; do not deploy it.
 2. Platform scopes — make sure these are enabled (leave defaults if unsure):
    `account.read`, `account.write`, `databases.read`, `databases.write`,
    `functions.read`, `functions.write`.
-3. There are two Android flavors. `direct` keeps
-   `REQUEST_INSTALL_PACKAGES` for its APK store. The `play` manifest explicitly
-   removes that permission and hides all APK/file download paths. Neither
-   flavor has an in-app updater; Google Play owns Play-build updates.
+3. There are two Android flavors. Both keep
+   `REQUEST_INSTALL_PACKAGES` and the package-archive `<queries>` entry —
+   `direct` from `src/main`, and `play` inherits them so the QA Play build
+   (`ENABLE_DOWNLOAD_STORE=true`) can hand a freshly downloaded APK to the
+   system installer. (Removing them from `play` broke the **Install** button:
+   Android 11+ package visibility hid the installer and `open_filex` failed
+   with `ActivityNotFoundException`.) Production Play artifacts declare the
+   permission but never expose an APK product. Neither flavor has an in-app
+   updater; Google Play owns Play-build updates.
 
 ## 2. Database
 
@@ -214,7 +219,7 @@ Create only **Functions → `claim`**, then in **Settings**:
 | Execute access | **Any** (AdMob cannot authenticate; protected app routes validate JWT) |
 | Timeout | 30s default |
 | Scopes (ephemeral key) | `documents.read`, `documents.write`, `users.read`, `users.write` |
-| Env vars | `COINS_PER_REWARD=10`, `BETA_BONUS_ENABLED=true`, `BETA_DAILY_COINS=5`, `BETA_TEST_REWARDS_ENABLED=true`, `BETA_TEST_COINS=5`, `BETA_TEST_COOLDOWN_SECONDS=30` |
+| Env vars | `COINS_PER_REWARD=10`, `BETA_BONUS_ENABLED=true`, `BETA_DAILY_COINS=5`, `BETA_TEST_REWARDS_ENABLED=true`, `BETA_TEST_COINS=5`, `BETA_TEST_COOLDOWN_SECONDS=30`, `YANDEX_REWARDS_ENABLED=true`, `YANDEX_REWARD_COINS=5`, `YANDEX_REWARD_COOLDOWN_SECONDS=30`, `YANDEX_MAX_REWARDS_PER_DAY=20` |
 
 `BETA_BONUS_ENABLED=true` enables the temporary no-fill fallback. It is
 authenticated and limited server-side to one claim per Appwrite user per UTC
@@ -225,6 +230,12 @@ completed test ad after a server-enforced cooldown. The amount is controlled by
 `BETA_TEST_COINS` (1–100) and the cooldown by
 `BETA_TEST_COOLDOWN_SECONDS` (10–3600). Disable both beta flags and reset beta
 balances before promoting a live-ads bundle to Production.
+
+`YANDEX_REWARDS_ENABLED=true` enables direct Yandex rewarded payouts. Yandex
+does not provide the AdMob-style cryptographic SSV used by this project, so the
+function never trusts a client amount: it owns the amount, enforces a cooldown,
+and caps rewards per user per UTC day. Disable this flag immediately if the
+Yandex placement is paused or removed.
 
 Upload the zip under **Deployments → Create deployment** (build command:
 default `npm install` is fine).
@@ -268,9 +279,28 @@ App ID (already in the manifest): `ca-app-pub-7791552060229072~1855578469`.
    adding `gma_mediation_unity` to the app does not enable Unity inventory in
    AdMob. Confirm startup logs contain `Unity Ads Adapter: ready`; load-error
    waterfall logs should list a Unity adapter response.
-5. The passive formats (banner, interstitial, app open, native) need **no
+5. **Yandex direct fallback (no-fill only):** Google/Unity stays the primary
+   path for every format — Yandex is only asked after Google reports no
+   inventory. The app uses:
+
+   | Placement | Yandex unit | Demo unit (`USE_TEST_ADS=true`) | Trigger |
+   |---|---|---|---|
+   | Rewarded (coins) | `R-M-20209152-1` | `demo-rewarded-yandex` | both Google rewarded formats no-fill |
+   | Banner | `R-M-20209152-2` | `demo-banner-yandex` | AdMob banner no-fill / retries exhausted |
+   | Interstitial | `R-M-20209152-4` | `demo-interstitial-yandex` | AdMob interstitial not ready |
+
+   There is intentionally **no Yandex app-open fallback** — an app-open ad
+   landing under the user's first tap caused accidental advertiser
+   click-throughs. Deploy the latest `functions/claim` code and configure the
+   `YANDEX_*` variables above before enabling live rewards.
+6. The passive formats (banner, interstitial, app open, native) need **no
    SSV** — they earn you revenue only and never touch the coin balance.
-6. **Ad-blocker gate:** ads pay for the app, so a device that filters them
+7. **No Yandex native unit:** `yandex_mobileads` exposes no native-ad API, so
+   the Store's "Sponsored" slot falls back to the **banner** unit
+   `R-M-20209152-2` when AdMob native no-fills. A Yandex block created with
+   the "Native" format (e.g. `R-M-20209152-3`) cannot be requested from
+   Flutter and may be deleted in the Yandex cabinet.
+8. **Ad-blocker gate:** ads pay for the app, so a device that filters them
    is locked out. `lib/services/adblock_detector.dart` probes three real
    AdMob hosts against the Appwrite endpoint as control — 2 of 3 blocked
    while the control answers = gate (`lib/screens/adblock_screen.dart`,

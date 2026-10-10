@@ -7,6 +7,7 @@
  *   - body { action: "simulate" }                          -> rejected (debug path removed)
  *   - body { action: "claimBetaBonus" }                    -> daily beta no-fill bonus
  *   - body { action: "claimBetaTestReward" }               -> cooldown-limited test-ad reward
+ *   - body { action: "claimYandexReward" }                 -> capped direct-Yandex reward
  *   - body { productId }                                   -> license claim (type=key)
  *                                                          -> download unlock (type=apk|file)
  *
@@ -23,6 +24,8 @@
  *           BETA_DAILY_COINS=5 (small server-controlled daily amount)
  *           BETA_TEST_REWARDS_ENABLED=true (defaults to BETA_BONUS_ENABLED)
  *           BETA_TEST_COINS=5, BETA_TEST_COOLDOWN_SECONDS=30
+ *           YANDEX_REWARDS_ENABLED=true, YANDEX_REWARD_COINS=5
+ *           YANDEX_REWARD_COOLDOWN_SECONDS=30, YANDEX_MAX_REWARDS_PER_DAY=20
  *
  * Returns: { ok: true, key }                     (license claim)
  *          { ok: true, downloadUrl, type }       (app-store claim)
@@ -434,6 +437,23 @@ async function recordClaim(key, uid, data) {
   });
 }
 
+/** Previous purchase of an app-store product by this user, or null. */
+async function findOwnedClaim(key, uid, productId) {
+  const prior = await api(
+    'GET',
+    `/databases/${DB}/collections/${COL.claims}/documents`,
+    {
+      key,
+      queries: [
+        JSON.stringify({ method: 'equal', attribute: 'userId', values: [uid] }),
+        JSON.stringify({ method: 'equal', attribute: 'productId', values: [productId] }),
+        JSON.stringify({ method: 'limit', values: [1] }),
+      ],
+    },
+  );
+  return (prior.documents && prior.documents[0]) || null;
+}
+
 /** App-store purchase: spend coins, unlock the MediaFire download link. */
 async function handleAppClaim(ctx, key, opts) {
   const { log } = ctx;
@@ -453,9 +473,59 @@ async function handleAppClaim(ctx, key, opts) {
   );
   const file = list.documents && list.documents[0];
   const downloadUrl = file && file.url ? String(file.url) : '';
+
+  // App-store items are single-purchase. The client can fire this twice — a
+  // double tap, a back-key dismissal mid-flight, or a retry after a flaky
+  // response — so re-claiming must never spend coins again. This runs under
+  // the global coins lock, so two simultaneous requests cannot both miss the
+  // prior claim and both charge.
+  const prior = await findOwnedClaim(key, uid, productId);
+  if (prior) {
+    const storedUrl = prior.downloadUrl ? String(prior.downloadUrl) : '';
+    const url = downloadUrl || storedUrl;
+    if (!url) {
+      return ctx.res.json(
+        { ok: false, error: 'Already purchased — download link unavailable' },
+        200,
+      );
+    }
+    // Keep the stored link current when the admin rotated the file URL.
+    if (downloadUrl && storedUrl !== downloadUrl) {
+      try {
+        await api(
+          'PATCH',
+          `/databases/${DB}/collections/${COL.claims}/documents/${prior.$id}`,
+          {
+            key,
+            body: { data: { downloadUrl } },
+          },
+        );
+      } catch (e) {
+        log(`claim link sync skipped user=${uid}: ${e.message || e}`);
+      }
+    }
+    log(
+      `app claim already owned user=${uid} product=${productId} — no charge`,
+    );
+    return ctx.res.json({
+      ok: true,
+      downloadUrl: url,
+      type,
+      cost: Number(prior.cost || 0),
+      alreadyOwned: true,
+    });
+  }
+
   if (!downloadUrl) {
     return ctx.res.json(
       { ok: false, error: 'Download not configured' },
+      200,
+    );
+  }
+
+  if (coins < cost) {
+    return ctx.res.json(
+      { ok: false, error: `Not enough coins (need ${cost}, have ${coins})` },
       200,
     );
   }
@@ -588,14 +658,9 @@ async function finishClaim(context, key, opts) {
     else throw e;
   }
 
-  if (coins < cost) {
-    return res.json(
-      { ok: false, error: `Not enough coins (need ${cost}, have ${coins})` },
-      200,
-    );
-  }
-
   // 3b. App-store product (APK / file) → unlock the MediaFire download.
+  // Handled before the balance check: re-opening an already-purchased item
+  // must work even when the balance has since dropped below the price.
   const type = String(product.type || 'key');
   if (type !== 'key') {
     return handleAppClaim(context, key, {
@@ -608,6 +673,13 @@ async function finishClaim(context, key, opts) {
       profileExists,
       type,
     });
+  }
+
+  if (coins < cost) {
+    return res.json(
+      { ok: false, error: `Not enough coins (need ${cost}, have ${coins})` },
+      200,
+    );
   }
 
   // 4. Pick the oldest available key.
@@ -908,6 +980,164 @@ async function handleBetaBonus(context, key) {
 
     log(`beta bonus user=${uid} +${amount} total=${total} day=${dedupeKey}`);
     return res.json({ ok: true, amount, coins: total, nextAt }, 200);
+  } finally {
+    await releaseLock(key);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Direct Yandex reward: authenticated, cooldown + daily cap           */
+/* ------------------------------------------------------------------ */
+
+function yandexRewardsEnabled() {
+  return /^(1|true|yes)$/i.test(String(process.env.YANDEX_REWARDS_ENABLED || ''));
+}
+
+function boundedEnvInt(name, fallback, min, max) {
+  const configured = parseInt(process.env[name] || String(fallback), 10);
+  return Number.isFinite(configured)
+    ? Math.max(min, Math.min(configured, max))
+    : fallback;
+}
+
+function yandexMarkerId(uid) {
+  const userHash = crypto.createHash('sha256').update(String(uid)).digest('hex').slice(0, 20);
+  return `yandex-${userHash}`;
+}
+
+function yandexDayState(nonce, today) {
+  const match = /^YANDEX:(\d{4}-\d{2}-\d{2}):(\d+)$/.exec(String(nonce || ''));
+  if (!match || match[1] !== today) return { count: 0 };
+  return { count: Math.max(0, parseInt(match[2], 10) || 0) };
+}
+
+async function handleYandexReward(context, key) {
+  const { req, res, log } = context;
+  const jwt = req.headers['x-appwrite-user-jwt'];
+  if (!jwt) return res.json({ ok: false, code: 'unauthorized', error: 'Not signed in' }, 200);
+  if (!yandexRewardsEnabled()) {
+    return res.json(
+      { ok: false, code: 'disabled', error: 'Yandex rewards are not active' },
+      200,
+    );
+  }
+
+  const user = await api('GET', '/account', { jwt });
+  const uid = user.$id;
+  const amount = boundedEnvInt('YANDEX_REWARD_COINS', 5, 1, 100);
+  const cooldownSeconds = boundedEnvInt(
+    'YANDEX_REWARD_COOLDOWN_SECONDS',
+    30,
+    10,
+    3600,
+  );
+  const dailyLimit = boundedEnvInt('YANDEX_MAX_REWARDS_PER_DAY', 20, 1, 100);
+  const markerId = yandexMarkerId(uid);
+  const markerPath =
+    `/databases/${DB}/collections/${COL.adRewards}/documents/${markerId}`;
+
+  const locked = await acquireLock(key, uid);
+  if (!locked) {
+    return res.json(
+      { ok: false, code: 'busy', error: 'Busy right now — try again in a second' },
+      200,
+    );
+  }
+
+  try {
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const today = nowIso.slice(0, 10);
+    let previous = null;
+    try {
+      previous = await api('GET', markerPath, { key });
+    } catch (e) {
+      if (e.status !== 404) throw e;
+    }
+
+    const state = yandexDayState(previous && previous.nonce, today);
+    if (state.count >= dailyLimit) {
+      return res.json(
+        {
+          ok: false,
+          code: 'daily_limit',
+          error: 'Daily Yandex reward limit reached',
+          nextAt: nextUtcDayIso(now),
+        },
+        200,
+      );
+    }
+
+    const lastAt = previous ? Date.parse(previous.eventTime || '') : NaN;
+    const cooldownMs = cooldownSeconds * 1000;
+    if (!Number.isNaN(lastAt) && now.getTime() - lastAt < cooldownMs) {
+      return res.json(
+        {
+          ok: false,
+          code: 'cooldown',
+          error: 'Yandex reward cooldown is active',
+          nextAt: new Date(lastAt + cooldownMs).toISOString(),
+        },
+        200,
+      );
+    }
+
+    const markerData = {
+      userId: uid,
+      reward: amount,
+      nonce: `YANDEX:${today}:${state.count + 1}`,
+      adUnit: 'R-M-20209152-1',
+      eventTime: nowIso,
+      createdAt: previous ? String(previous.createdAt || nowIso) : nowIso,
+    };
+
+    if (previous) {
+      await api('PATCH', markerPath, { key, body: { data: markerData } });
+    } else {
+      await api('POST', `/databases/${DB}/collections/${COL.adRewards}/documents`, {
+        key,
+        body: { documentId: markerId, data: markerData },
+      });
+    }
+
+    let total;
+    try {
+      total = await credit(key, uid, amount);
+    } catch (e) {
+      // Do not consume cooldown/cap when the balance update itself fails.
+      try {
+        if (previous) {
+          await api('PATCH', markerPath, {
+            key,
+            body: {
+              data: {
+                userId: String(previous.userId || uid),
+                reward: Number(previous.reward || 0),
+                nonce: String(previous.nonce || ''),
+                adUnit: String(previous.adUnit || 'R-M-20209152-1'),
+                eventTime: String(previous.eventTime || ''),
+                createdAt: String(previous.createdAt || previous.$createdAt || ''),
+              },
+            },
+          });
+        } else {
+          await api('DELETE', markerPath, { key });
+        }
+      } catch (_) {}
+      throw e;
+    }
+
+    log(
+      `yandex reward user=${uid} +${amount} total=${total} ` +
+        `count=${state.count + 1}/${dailyLimit}`,
+    );
+    return res.json({
+      ok: true,
+      amount,
+      coins: total,
+      remainingToday: dailyLimit - state.count - 1,
+      nextAt: new Date(now.getTime() + cooldownMs).toISOString(),
+    }, 200);
   } finally {
     await releaseLock(key);
   }
@@ -1241,6 +1471,9 @@ module.exports = async (context) => {
     }
     if (params.action === 'claimBetaTestReward') {
       return await handleBetaTestReward(context, key);
+    }
+    if (params.action === 'claimYandexReward') {
+      return await handleYandexReward(context, key);
     }
     return await handleClaim(context, key, params);
   } catch (e) {

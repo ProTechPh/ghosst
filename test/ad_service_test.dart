@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/services/ad_service.dart';
+import 'package:ghosst/services/yandex_ad_service.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 void main() {
@@ -60,12 +61,66 @@ void main() {
       AdUnits.useTestAds = true;
     });
 
-    test('contains registered test device IDs', () {
-      expect(
-        AdUnits.testDeviceIds,
-        contains('F3ED0CCF90379B60EE0479B837D1D143'),
-      );
+    test('does not force production devices into AdMob test mode', () {
+      expect(AdUnits.testDeviceIds, isEmpty);
     });
+
+    test('Yandex rewarded switches between demo and production units', () {
+      AdUnits.useTestAds = true;
+      expect(
+        YandexAdService.rewardedAdUnitId,
+        YandexAdService.demoRewardedAdUnitId,
+      );
+
+      AdUnits.useTestAds = false;
+      expect(
+        YandexAdService.rewardedAdUnitId,
+        YandexAdService.productionRewardedAdUnitId,
+      );
+      expect(YandexAdService.productionRewardedAdUnitId, 'R-M-20209152-1');
+
+      AdUnits.useTestAds = true;
+    });
+
+    test(
+      'Yandex banner and interstitial switch between demo and production',
+      () {
+        AdUnits.useTestAds = true;
+        expect(
+          YandexAdService.bannerAdUnitId,
+          YandexAdService.demoBannerAdUnitId,
+        );
+        expect(
+          YandexAdService.interstitialAdUnitId,
+          YandexAdService.demoInterstitialAdUnitId,
+        );
+
+        AdUnits.useTestAds = false;
+        expect(
+          YandexAdService.bannerAdUnitId,
+          YandexAdService.productionBannerAdUnitId,
+        );
+        expect(
+          YandexAdService.interstitialAdUnitId,
+          YandexAdService.productionInterstitialAdUnitId,
+        );
+        expect(YandexAdService.productionBannerAdUnitId, 'R-M-20209152-2');
+        expect(
+          YandexAdService.productionInterstitialAdUnitId,
+          'R-M-20209152-4',
+        );
+
+        // Each placement must stay on its own ad unit — reusing one unit for
+        // every format makes reporting and house-cut debugging impossible.
+        expect({
+          YandexAdService.productionRewardedAdUnitId,
+          YandexAdService.productionBannerAdUnitId,
+          YandexAdService.productionInterstitialAdUnitId,
+        }, hasLength(3));
+
+        AdUnits.useTestAds = true;
+      },
+    );
   });
 
   group('AdService State & Error Mapping', () {

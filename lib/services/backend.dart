@@ -384,6 +384,22 @@ class Backend {
     );
   }
 
+  /// Claims a server-controlled reward after the direct Yandex SDK reports
+  /// completion. The function enforces its own cooldown, amount, and daily cap.
+  static Future<BetaBonusResult> claimYandexReward() async {
+    final exec = await _runFunction(Fn.claim, {'action': 'claimYandexReward'});
+    final body = _parseOutput(exec);
+    final nextRaw = body['nextAt'] as String?;
+    return BetaBonusResult(
+      granted: body['ok'] == true,
+      amount: (body['amount'] as num?)?.toInt() ?? 0,
+      coins: (body['coins'] as num?)?.toInt() ?? 0,
+      code: body['code'] as String? ?? '',
+      message: body['error'] as String? ?? '',
+      nextAt: nextRaw == null ? null : DateTime.tryParse(nextRaw),
+    );
+  }
+
   // ---- store ----
 
   static Future<List<Product>> products() async {

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../services/ad_service.dart';
 import '../services/backend.dart';
+import '../services/yandex_ad_service.dart';
 import '../theme.dart';
 
 class EarnScreen extends StatefulWidget {
@@ -16,8 +17,9 @@ class EarnScreen extends StatefulWidget {
   State<EarnScreen> createState() => _EarnScreenState();
 }
 
-class _EarnScreenState extends State<EarnScreen> {
+class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
   final _ads = AdService();
+  final _yandexAds = YandexAdService.instance;
   bool busy = false;
   String status = '';
 
@@ -31,16 +33,19 @@ class _EarnScreenState extends State<EarnScreen> {
   bool verifying = false;
   double verifyProgress = 0;
   bool _lastActionSucceeded = false;
+  Completer<void>? _verificationWakeup;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     AdService.instance.adsEnabledNotifier.addListener(_onAdsEnabled);
     if (AdService.adsEnabled) {
       _ads.preload();
       if (!_ads.riReady) {
         _ads.preloadRewardedInterstitial();
       }
+      unawaited(_yandexAds.preload());
     }
     _checkCooldown();
   }
@@ -49,15 +54,30 @@ class _EarnScreenState extends State<EarnScreen> {
     if (AdService.adsEnabled && mounted) {
       if (!_ads.ready) _ads.preload();
       if (!_ads.riReady) _ads.preloadRewardedInterstitial();
+      unawaited(_yandexAds.preload());
       setState(() {});
     }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     AdService.instance.adsEnabledNotifier.removeListener(_onAdsEnabled);
+    final wakeup = _verificationWakeup;
+    if (wakeup != null && !wakeup.isCompleted) wakeup.complete();
     _ticker?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    _checkCooldown();
+
+    // An ad click can temporarily move the user to Play Store. Wake the SSV
+    // poll immediately on return instead of leaving the UI on "Verifying".
+    final wakeup = _verificationWakeup;
+    if (verifying && wakeup != null && !wakeup.isCompleted) wakeup.complete();
   }
 
   void _startCooldown([int seconds = 30]) {
@@ -110,9 +130,16 @@ class _EarnScreenState extends State<EarnScreen> {
       status = 'Loading ad…';
     });
 
+    // Let the Watch-button pointer sequence and route animation fully finish
+    // before attaching a third-party fullscreen ad. This prevents the launch
+    // tap from being interpreted as an accidental creative/CTA click by an
+    // adapter that can present a cached ad immediately.
+    await Future<void>.delayed(const Duration(milliseconds: 650));
+    if (!mounted) return;
+
     void onError(String e) {
       if (e.startsWith('No rewarded ads are available from any ad source')) {
-        unawaited(_claimBetaBonus());
+        unawaited(_tryYandexAd());
         return;
       }
       if (mounted) {
@@ -152,6 +179,40 @@ class _EarnScreenState extends State<EarnScreen> {
         });
       }
     }
+  }
+
+  Future<void> _tryYandexAd() async {
+    if (!mounted) return;
+    setState(() {
+      busy = true;
+      status = 'Google ads unavailable — trying Yandex…';
+    });
+
+    var rewardStarted = false;
+    await _yandexAds.showRewarded(
+      onRewarded: (_) {
+        rewardStarted = true;
+        if (AdUnits.useTestAds) {
+          unawaited(_claimBetaTestReward());
+        } else {
+          unawaited(_claimYandexReward());
+        }
+      },
+      onError: (error) {
+        debugPrint('[EarnScreen] Yandex fallback unavailable: $error');
+        if (!rewardStarted) unawaited(_claimBetaBonus());
+      },
+      onClosed: () {
+        if (!mounted || rewardStarted) return;
+        if (status == 'Google ads unavailable — trying Yandex…') {
+          setState(() {
+            busy = false;
+            status = 'Ad closed before a reward was earned.';
+          });
+          _startCooldown(15);
+        }
+      },
+    );
   }
 
   Future<void> _claimBetaBonus({bool afterTestAd = false}) async {
@@ -248,24 +309,79 @@ class _EarnScreenState extends State<EarnScreen> {
     }
   }
 
+  Future<void> _claimYandexReward() async {
+    if (!mounted) return;
+    setState(() {
+      busy = true;
+      status = 'Yandex reward earned — adding coins…';
+    });
+
+    try {
+      final result = await Backend.claimYandexReward();
+      if (!mounted) return;
+      if (result.granted) {
+        try {
+          await widget.onRefresh();
+        } catch (_) {
+          // Credit is already committed server-side.
+        }
+        if (!mounted) return;
+        setState(() {
+          busy = false;
+          _lastActionSucceeded = true;
+          status = '+${result.amount} Yandex ad coins added!';
+        });
+        _startCooldown(30);
+        return;
+      }
+
+      setState(() {
+        busy = false;
+        status = switch (result.code) {
+          'cooldown' =>
+            'Reward cooldown is still active. Please wait a moment.',
+          'daily_limit' =>
+            'Today’s Yandex reward limit has been reached. Try again tomorrow.',
+          _ => 'Ad completed, but coins could not be added right now.',
+        };
+      });
+      _startCooldown(result.code == 'daily_limit' ? 60 : 30);
+    } catch (e) {
+      debugPrint('[EarnScreen] Yandex reward exception: $e');
+      if (!mounted) return;
+      setState(() {
+        busy = false;
+        status = 'Ad completed, but coins could not be added right now.';
+      });
+      _startCooldown(30);
+    }
+  }
+
   /// Called from onEarned (ad still on screen). Polls the profile until
   /// AdMob's SSV callback has credited the coins server-side.
   Future<void> _verify() async {
+    if (!mounted || verifying) return;
     setState(() {
       verifying = true;
       verifyProgress = 0;
       status = 'Reward earned — verifying with server…';
     });
     final before = widget.coins;
+    final deadline = DateTime.now().add(const Duration(seconds: 75));
     for (var i = 0; i < 23; i++) {
-      await Future.delayed(const Duration(seconds: 2));
-      final now = await Backend.coins().catchError((_) => before);
-      if (mounted) {
-        setState(() {
-          status = 'Verifying reward…';
-          verifyProgress = (i + 1) / 23;
-        });
-      }
+      await _waitForVerificationPoll();
+      if (!mounted) return;
+
+      // Appwrite requests can be interrupted when an ad opens Play Store.
+      // Bound every poll so one suspended socket can never strand the UI.
+      final now = await Backend.coins()
+          .timeout(const Duration(seconds: 6), onTimeout: () => before)
+          .catchError((_) => before);
+      if (!mounted) return;
+      setState(() {
+        status = 'Verifying reward…';
+        verifyProgress = (i + 1) / 23;
+      });
       if (now > before) {
         try {
           await widget.onRefresh();
@@ -282,6 +398,7 @@ class _EarnScreenState extends State<EarnScreen> {
         }
         return;
       }
+      if (DateTime.now().isAfter(deadline)) break;
     }
     if (mounted) {
       setState(() {
@@ -291,6 +408,18 @@ class _EarnScreenState extends State<EarnScreen> {
             'Verification is taking longer than usual. Your coins will be added automatically once your reward is confirmed.';
       });
       _startCooldown(30);
+    }
+  }
+
+  Future<void> _waitForVerificationPoll() async {
+    final wakeup = Completer<void>();
+    _verificationWakeup = wakeup;
+    await Future.any<void>([
+      Future<void>.delayed(const Duration(seconds: 2)),
+      wakeup.future,
+    ]);
+    if (identical(_verificationWakeup, wakeup)) {
+      _verificationWakeup = null;
     }
   }
 

@@ -143,7 +143,7 @@
     <p>Depending on your usage, the app may request the following permissions:</p>
     <ul>
       <li><strong>Internet Access:</strong> To synchronize coin balances, authenticate, retrieve products, and load ad networks.</li>
-      <li><strong>Install Packages (REQUEST_INSTALL_PACKAGES):</strong> This permission is present only in the separately distributed Ghosst Direct build for user-initiated APK installation. The Google Play build does not request this permission and does not download or install APKs.</li>
+      <li><strong>Install Packages (REQUEST_INSTALL_PACKAGES):</strong> Used solely to hand an APK that you explicitly chose to download from the in-app store to Android's system installer. It is never used automatically, and the Google Play production build does not expose the app-download shelf at all.</li>
     </ul>
 
     <h2>4. How We Use Information</h2>

@@ -4,6 +4,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:yandex_mobileads/mobile_ads.dart' as yandex;
 
 import 'premium.dart';
 import 'screens/adblock_screen.dart';
@@ -22,6 +23,7 @@ import 'services/backend.dart';
 import 'services/consent_service.dart';
 import 'services/distribution.dart';
 import 'services/security.dart';
+import 'services/yandex_ad_service.dart';
 import 'sign_in.dart';
 import 'sign_up.dart';
 import 'theme.dart';
@@ -69,7 +71,6 @@ class _AppEntry extends StatefulWidget {
 
 class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
   bool _splash = true;
-  final _ads = AdService();
 
   /// Integrity verdict (cracked / re-packed / modded build). Null until the
   /// check answers — each leg is bounded and fails open.
@@ -103,8 +104,9 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
   }
 
   Future<void> _initializeAds() async {
+    var canRequest = false;
     try {
-      final canRequest = await ConsentService.gatherConsent();
+      canRequest = await ConsentService.gatherConsent();
       if (!canRequest) {
         debugPrint('[Consent] Ads not permitted by consent gate.');
         return;
@@ -112,9 +114,16 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
       await AdService.instance.initialize();
       unawaited(AdService.instance.preload());
       unawaited(AdService.instance.preloadInterstitial());
-      unawaited(AdService.instance.preloadAppOpen());
     } catch (e) {
       debugPrint('MobileAds initialization failed: $e');
+    }
+    if (!canRequest) return;
+    try {
+      await YandexAdService.instance.initialize();
+      unawaited(YandexAdService.instance.preload());
+    } catch (e, st) {
+      // Yandex is supplemental; its failure must never disable Google ads.
+      debugPrint('[YandexAds] Initialization failed: $e\n$st');
     }
   }
 
@@ -198,11 +207,9 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
             onDone: () async {
               if (!mounted) return;
               setState(() => _splash = false);
-              // Show preloaded app-open ad if ready during intro.
-              // Never delay-load to interrupt the user over active UI.
-              if (!blocked) {
-                _ads.showAppOpenIfAvailable();
-              }
+              // Do not present an app-open ad after revealing interactive UI.
+              // It can land under the user's first tap and cause an accidental
+              // advertiser click just as they press a navigation/earn button.
             },
           ),
       ],
@@ -324,6 +331,8 @@ class _HomeShellState extends State<HomeShell> {
   bool _bannerWanted = false;
   int _bannerRetryAttempts = 0;
   Timer? _bannerRetryTimer;
+  yandex.BannerAd? _yandexBanner;
+  StreamSubscription<yandex.BannerAdLoadState>? _yandexBannerSub;
   int _tabSwitches = 0;
   DateTime? _lastInterstitial;
 
@@ -361,10 +370,58 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void dispose() {
     _bannerRetryTimer?.cancel();
-    AdService.instance.adsEnabledNotifier.removeListener(_onAdsEnabledForBanner);
+    AdService.instance.adsEnabledNotifier.removeListener(
+      _onAdsEnabledForBanner,
+    );
     _banner?.dispose();
     _banner = null;
+    unawaited(_disposeYandexBanner());
     super.dispose();
+  }
+
+  Future<void> _disposeYandexBanner() async {
+    await _yandexBannerSub?.cancel();
+    _yandexBannerSub = null;
+    final ad = _yandexBanner;
+    _yandexBanner = null;
+    if (ad != null) await YandexAdService.instance.destroyBanner(ad);
+  }
+
+  /// Loads a Yandex banner as a no-fill fallback for the AdMob banner.
+  ///
+  /// The plugin only issues its request once `AdWidget` is attached, so the
+  /// ad is primed first and mounted immediately after.
+  Future<void> _loadYandexBanner() async {
+    if (!mounted || !AdService.adsEnabled || _yandexBanner != null) return;
+    final width = MediaQuery.sizeOf(context).width.round();
+    final ad = await YandexAdService.instance.prepareBanner(width: width);
+    if (!mounted) {
+      if (ad != null) await YandexAdService.instance.destroyBanner(ad);
+      return;
+    }
+    if (ad == null) {
+      debugPrint('[HomeShell] Yandex BannerAd unavailable.');
+      return;
+    }
+
+    await _yandexBannerSub?.cancel();
+    _yandexBannerSub = ad.loadStateStream.listen((state) {
+      if (!mounted) return;
+      if (state is yandex.BannerAdLoadStateLoaded) {
+        debugPrint(
+          '[HomeShell] Yandex BannerAd loaded ${state.width}x${state.height}',
+        );
+        setState(() {});
+      } else if (state is yandex.BannerAdLoadStateError) {
+        debugPrint('[HomeShell] Yandex BannerAd failed: ${state.error}');
+        final failed = _yandexBanner;
+        setState(() => _yandexBanner = null);
+        if (failed != null) {
+          unawaited(YandexAdService.instance.destroyBanner(failed));
+        }
+      }
+    });
+    setState(() => _yandexBanner = ad);
   }
 
   /// Adaptive banner sized to the screen width, parked above the nav pill.
@@ -385,6 +442,11 @@ class _HomeShellState extends State<HomeShell> {
         onAdLoaded: (_) {
           if (mounted) {
             _bannerRetryAttempts = 0;
+            // AdMob won the race — drop any Yandex fallback so only one
+            // banner is ever rendered.
+            if (_yandexBanner != null) {
+              unawaited(_disposeYandexBanner());
+            }
             setState(() => _banner = ad);
           } else {
             ad.dispose();
@@ -397,6 +459,13 @@ class _HomeShellState extends State<HomeShell> {
           );
           if (!mounted) return;
           setState(() => _banner = null);
+          if (error.code == 3) {
+            debugPrint(
+              '[HomeShell] BannerAd no fill; falling back to Yandex banner.',
+            );
+            unawaited(_loadYandexBanner());
+            return;
+          }
           if (_bannerRetryAttempts < 3) {
             final delaySeconds = 4 * (1 << _bannerRetryAttempts);
             _bannerRetryAttempts++;
@@ -406,6 +475,11 @@ class _HomeShellState extends State<HomeShell> {
             _bannerRetryTimer = Timer(Duration(seconds: delaySeconds), () {
               if (mounted) _loadBanner();
             });
+          } else {
+            debugPrint(
+              '[HomeShell] BannerAd retries exhausted; falling back to Yandex banner.',
+            );
+            unawaited(_loadYandexBanner());
           }
         },
         onAdImpression: (_) => debugPrint('[HomeShell] BannerAd impression'),
@@ -424,7 +498,15 @@ class _HomeShellState extends State<HomeShell> {
         now.difference(_lastInterstitial!) >= _interCooldown;
     if (_tabSwitches % 2 != 0 || !cooled) return;
     _lastInterstitial = now;
-    unawaited(_ads.showInterstitial());
+    unawaited(_showInterstitialWithFallback());
+  }
+
+  /// AdMob first; when it has no inventory, quietly use the Yandex unit so
+  /// the placement still earns instead of rendering nothing. Never awaited,
+  /// so a slow fallback cannot stall navigation.
+  Future<void> _showInterstitialWithFallback() async {
+    if (await _ads.showInterstitial()) return;
+    await YandexAdService.instance.showInterstitial(onClosed: () {});
   }
 
   Future<void> _refresh() async {
@@ -599,6 +681,13 @@ class _HomeShellState extends State<HomeShell> {
                     color: AppColors.bg,
                     child: AdWidget(ad: _banner!),
                   ),
+                )
+              else if (_yandexBanner != null)
+                // Yandex's AdWidget sizes itself once the native view reports
+                // its measured dimensions, so it is mounted unconstrained.
+                ColoredBox(
+                  color: AppColors.bg,
+                  child: yandex.AdWidget(bannerAd: _yandexBanner!),
                 ),
               // Floating glass pill — never an edge-to-edge Material bar.
               _GlassNavBar(

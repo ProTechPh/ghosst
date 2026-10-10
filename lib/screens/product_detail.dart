@@ -41,6 +41,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   final _page = PageController();
   int _pageIdx = 0;
   bool claiming = false;
+
+  /// Ownership mirrored locally. [ProductDetailScreen.owned] is a snapshot
+  /// taken when this route was pushed and never updates, so a completed
+  /// purchase used to leave a live "Buy" button under the buyer's thumb —
+  /// one more tap meant a second charge.
+  late bool _owned = widget.owned;
+
   WebViewController? _yt;
 
   /// Duration option currently picked on the chip row (key products with
@@ -95,6 +102,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   void dispose() {
     _page.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProductDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Only ever moves towards owned — a stale parent snapshot must not undo
+    // a purchase this screen already recorded.
+    if (widget.owned && !_owned) _owned = true;
   }
 
   /// Extracts the video id from a watch / shorts / embed / youtu.be URL.
@@ -216,13 +231,18 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     setState(() {
       coins = c;
       claiming = false;
+      // Flip before the first await: the CTA can never be "Buy" again for
+      // something the server just charged for.
+      if (ok && isApp) _owned = true;
     });
     await widget.onRefresh();
     if (!mounted) return;
     if (ok) {
       if (isApp) {
         if (_lastUrl.isEmpty) {
-          _lastUrl = await Backend.claimApp(p.id).catchError((_) => '');
+          // Defensive only — the claim already succeeded, so read the link
+          // back from the existing purchase instead of charging again.
+          _lastUrl = await _ownedUrl();
         }
         if (!mounted) return;
         if (_lastUrl.isNotEmpty) await _openDownload();
@@ -244,7 +264,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   Widget build(BuildContext context) {
     final p = widget.product;
     final isApp = p.isDownloadable;
-    final isOwned = isApp && widget.owned;
+    final isOwned = isApp && _owned;
     final sel = _selectedDuration(p);
     final cost = sel?.cost ?? p.cost;
     final affordable = coins >= cost;

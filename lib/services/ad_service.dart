@@ -34,12 +34,9 @@ class AdUnits {
   static const testAppOpen = 'ca-app-pub-3940256099942544/9257395921';
   static const testNative = 'ca-app-pub-3940256099942544/2247696110';
 
-  /// Registered test device IDs for Google Mobile Ads SDK.
-  /// Testing on physical devices with registered testDeviceIds guarantees
-  /// test ad fills (solving error code 3: No fill) and prevents invalid traffic penalties.
-  static const List<String> testDeviceIds = [
-    'F3ED0CCF90379B60EE0479B837D1D143', // TECNO LJ6
-  ];
+  /// No production device is registered as an AdMob test device. Builds using
+  /// [useTestAds] remain safe because they use Google's official sample units.
+  static const List<String> testDeviceIds = [];
 
   /// Debug builds use Google's guaranteed-fill sample inventory. Release builds
   /// use the real Ghosst units unless explicitly overridden for release QA with
@@ -264,6 +261,54 @@ class AdService {
     return Duration(seconds: clamped + jitter);
   }
 
+  // ---------------------------------------------------------------------
+  // Startup request pacing
+  // ---------------------------------------------------------------------
+
+  /// When the first full-screen load fired; opens the pacing window.
+  static DateTime? _pacingWindowStart;
+
+  /// Earliest wall-clock time the next full-screen load may start.
+  static DateTime? _nextFullscreenSlot;
+
+  /// Paces full-screen load requests [gap] apart — but only during the
+  /// startup burst.
+  ///
+  /// Rewarded, Rewarded Interstitial and Interstitial are kicked off by
+  /// different widgets (App boot, Earn tab, tab switching) that all mount in
+  /// the same few hundred milliseconds. Firing three simultaneous requests
+  /// from one device against a brand-new AdMob app looks like request spam
+  /// and can contribute to ad-serving limits and blanket no-fill responses.
+  ///
+  /// The window closes after [pacingWindow], so steady-state behaviour — a
+  /// user tapping Watch, or a tab switch waiting on an interstitial — is
+  /// never delayed by this gate.
+  static Future<void> _paceFullscreenRequest() async {
+    const gap = Duration(seconds: 2);
+    const pacingWindow = Duration(seconds: 30);
+
+    final now = DateTime.now();
+    _pacingWindowStart ??= now;
+    if (now.difference(_pacingWindowStart!) > pacingWindow) return;
+
+    // Reserve the slot before awaiting. There is no `await` between the read
+    // and the write, so concurrent callers queue behind one another instead
+    // of all resolving against the same deadline.
+    final slot = _nextFullscreenSlot;
+    final startAt = (slot == null || now.isAfter(slot)) ? now : slot;
+    _nextFullscreenSlot = startAt.add(gap);
+
+    if (startAt.isAfter(now)) {
+      final wait = startAt.difference(now);
+      debugPrint(
+        '[AdService] Pacing full-screen ad request by '
+        '${(wait.inMilliseconds / 1000).toStringAsFixed(1)}s '
+        '(startup burst window).',
+      );
+      await Future<void>.delayed(wait);
+    }
+  }
+
   /// Structured diagnostic logging for all ad lifecycle events.
   static void _logAdError(
     String format,
@@ -281,9 +326,9 @@ class AdService {
         'code=${error.code}, domain="${error.domain}", message="${error.message}", '
         'adapter="$adapter", responseId="$responseId", unit="$adUnitId"',
       );
-      if (responseInfo?.adapterResponses != null &&
-          responseInfo!.adapterResponses!.isNotEmpty) {
-        for (final ar in responseInfo.adapterResponses!) {
+      final responses = responseInfo?.adapterResponses;
+      if (responses != null && responses.isNotEmpty) {
+        for (final ar in responses) {
           final isUnity =
               ar.adapterClassName.toLowerCase().contains('unity') ||
               ar.adSourceName.toLowerCase().contains('unity');
@@ -295,6 +340,16 @@ class AdService {
             '${isUnity ? " [Unity Ads]" : ""}',
           );
         }
+      } else {
+        // Distinguish "nobody bid" from "a mediator bid and lost": an empty
+        // adapterResponses on code 3 means no mediation line item responded
+        // at all (Unity never bid), which is a console-side inventory issue
+        // rather than an in-app block.
+        debugPrint(
+          '[$timestamp][AdService][$format][Waterfall] '
+          'no mediator responded — Google had no ad to serve and no '
+          'mediation source (Unity) placed a bid.',
+        );
       }
     } else if (error is AdError) {
       debugPrint(
@@ -371,6 +426,7 @@ class AdService {
     _adState = AdState.loading;
 
     try {
+      await _paceFullscreenRequest();
       debugPrint(
         '[AdService] Preloading RewardedAd (unit: ${AdUnits.rewarded})...',
       );
@@ -575,6 +631,7 @@ class AdService {
     _riState = AdState.loading;
 
     try {
+      await _paceFullscreenRequest();
       debugPrint(
         '[AdService] Preloading RewardedInterstitialAd (unit: ${AdUnits.rewardedInterstitial})...',
       );
@@ -870,6 +927,7 @@ class AdService {
     _interState = AdState.loading;
 
     try {
+      await _paceFullscreenRequest();
       debugPrint(
         '[AdService] Preloading InterstitialAd (unit: ${AdUnits.interstitial})...',
       );
@@ -943,10 +1001,14 @@ class AdService {
   /// Show the preloaded interstitial (silently skips if the ad isn't ready
   /// or if another full-screen ad is active — passive formats must never
   /// freeze the navigation).
-  Future<void> showInterstitial({void Function()? onClosed}) async {
+  ///
+  /// Returns `true` only when an AdMob interstitial was actually handed to
+  /// the SDK, so callers can fall back to another network when inventory is
+  /// missing.
+  Future<bool> showInterstitial({void Function()? onClosed}) async {
     if (!adsEnabled || _isShowingFullScreenAd) {
       onClosed?.call();
-      return;
+      return false;
     }
 
     final ad =
@@ -959,15 +1021,17 @@ class AdService {
       onClosed?.call();
       // Trigger preload for the next opportunity
       unawaited(preloadInterstitial());
-      return;
+      return false;
     }
 
     _inter = null;
     _interState = AdState.showing;
     _isShowingFullScreenAd = true;
+    var presented = false;
 
     ad.fullScreenContentCallback = FullScreenContentCallback(
       onAdShowedFullScreenContent: (a) {
+        presented = true;
         debugPrint('[AdService] InterstitialAd displayed full screen');
       },
       onAdImpression: (a) {
@@ -1001,6 +1065,7 @@ class AdService {
 
     try {
       await ad.show();
+      return presented;
     } catch (e) {
       debugPrint('[AdService] Interstitial show exception: $e');
       _isShowingFullScreenAd = false;
@@ -1008,6 +1073,7 @@ class AdService {
       ad.dispose();
       onClosed?.call();
       unawaited(preloadInterstitial());
+      return false;
     }
   }
 

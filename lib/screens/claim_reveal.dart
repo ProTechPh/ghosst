@@ -618,35 +618,44 @@ class _ClaimFlowState extends State<_ClaimFlow> {
     // `showGeneralDialog` has no Material ancestor, so Texts here would
     // inherit MaterialApp's _errorTextStyle (yellow double underline +
     // monospace fallback). A transparent Material resets DefaultTextStyle.
-    return Material(
-      type: MaterialType.transparency,
-      child: Stack(
-        children: [
-          const MeshBackground(),
-          SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(26, 40, 26, 40),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 500),
-                  switchInCurve: kPremiumCurve,
-                  switchOutCurve: kPremiumCurve,
-                  transitionBuilder: (child, anim) => FadeTransition(
-                    opacity: anim,
-                    child: SlideTransition(
-                      position: Tween<Offset>(
-                        begin: const Offset(0, 0.04),
-                        end: Offset.zero,
-                      ).animate(anim),
-                      child: child,
+    //
+    // PopScope: `barrierDismissible: false` only blocks a barrier tap — the
+    // Android back key still pops the route. Blocking it while the charge is
+    // in flight keeps the payment and its result together; otherwise the
+    // dialog vanishes mid-claim and the buyer lands back on a live "Buy"
+    // button for something the server already billed.
+    return PopScope(
+      canPop: _phase != _Phase.processing,
+      child: Material(
+        type: MaterialType.transparency,
+        child: Stack(
+          children: [
+            const MeshBackground(),
+            SafeArea(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(26, 40, 26, 40),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 500),
+                    switchInCurve: kPremiumCurve,
+                    switchOutCurve: kPremiumCurve,
+                    transitionBuilder: (child, anim) => FadeTransition(
+                      opacity: anim,
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0, 0.04),
+                          end: Offset.zero,
+                        ).animate(anim),
+                        child: child,
+                      ),
                     ),
+                    child: KeyedSubtree(key: ValueKey(_phase), child: view),
                   ),
-                  child: KeyedSubtree(key: ValueKey(_phase), child: view),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
