@@ -10,12 +10,8 @@ void main() {
     Distribution.setPlayForTesting(true);
   });
 
-  test('Play builds respect the explicit download-store flag', () {
+  test('download store is unavailable in Play builds', () {
     Distribution.setPlayForTesting(true);
-    const enabled = bool.fromEnvironment(
-      'ENABLE_DOWNLOAD_STORE',
-      defaultValue: false,
-    );
-    expect(Distribution.showsDownloadStore, enabled);
+    expect(Distribution.showsDownloadStore, isFalse);
   });
 }

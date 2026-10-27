@@ -1,12 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-    <!-- REQUEST_INSTALL_PACKAGES and the package-archive <queries> entry are
-         inherited from src/main and must stay: Play builds ship the Apps
-         shelf (ENABLE_DOWNLOAD_STORE=true) and install the APK they just
-         downloaded. Removing them broke the Install button — with the query
-         gone, Android 11+ package visibility hid the system installer, so
-         open_filex hit ActivityNotFoundException ("No APP found to open this
-         file") and REQUEST_INSTALL_PACKAGES could never be granted. -->
+    <!-- Play builds intentionally cannot download or install APK products.
+         REQUEST_INSTALL_PACKAGES and the package-installer query exist only
+         in src/direct, keeping the Play artifact policy-compliant. -->
+    <uses-permission
+        android:name="android.permission.REQUEST_INSTALL_PACKAGES"
+        tools:node="remove" />
 
     <!-- Pulled in by open_filex (and file_picker) but never used here: every
          file the app does open lives in its own external-files dir, which

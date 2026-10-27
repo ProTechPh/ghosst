@@ -11,19 +11,13 @@ class Distribution {
 
   static const channel = MethodChannel('com.astrixtech.ghosst/build');
 
-  /// Explicit build switch for Play artifacts. CI enables it for both QA and
-  /// production so APK/file products remain part of the shipped store; the
-  /// false default is a fail-safe for ad-hoc builds that omit the define.
-  static const bool _enableDownloadStoreForPlay = bool.fromEnvironment(
-    'ENABLE_DOWNLOAD_STORE',
-    defaultValue: false,
-  );
-
   static bool _isPlay = true;
 
   static bool get isPlay => _isPlay;
   static bool get isDirect => !_isPlay;
-  static bool get showsDownloadStore => isDirect || _enableDownloadStoreForPlay;
+  /// APK/file products are sideload-only. Play builds must never expose them
+  /// because they do not declare REQUEST_INSTALL_PACKAGES.
+  static bool get showsDownloadStore => isDirect;
 
   static Future<void> initialize() async {
     if (!Platform.isAndroid) {

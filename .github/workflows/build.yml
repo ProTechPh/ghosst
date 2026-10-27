@@ -78,7 +78,7 @@ jobs:
       - name: Build debug APK (test ads)
         run: |
           set -euo pipefail
-          flutter build apk --debug --flavor play --dart-define=USE_TEST_ADS=true --dart-define=ENABLE_DOWNLOAD_STORE=true
+          flutter build apk --debug --flavor play --dart-define=USE_TEST_ADS=true
           cp build/app/outputs/flutter-apk/app-play-debug.apk \
             "release-assets/ghosst-play-debug-test-ads-${ASSET_VERSION}.apk"
 
@@ -87,7 +87,7 @@ jobs:
       - name: Build release QA APK (test ads)
         run: |
           set -euo pipefail
-          flutter build apk --release --flavor play --dart-define=USE_TEST_ADS=true --dart-define=ENABLE_DOWNLOAD_STORE=true
+          flutter build apk --release --flavor play --dart-define=USE_TEST_ADS=true
           cp build/app/outputs/flutter-apk/app-play-release.apk \
             "release-assets/ghosst-play-release-test-ads-${ASSET_VERSION}.apk"
 
@@ -96,21 +96,21 @@ jobs:
       - name: Build closed-beta bundle (test ads)
         run: |
           set -euo pipefail
-          flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=true --dart-define=ENABLE_DOWNLOAD_STORE=true
+          flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=true
           cp build/app/outputs/bundle/playRelease/app-play-release.aab \
             "release-assets/ghosst-play-closed-beta-test-ads-${ASSET_VERSION}.aab"
 
       - name: Build release APK (live ads)
         run: |
           set -euo pipefail
-          flutter build apk --release --flavor play --dart-define=USE_TEST_ADS=false --dart-define=ENABLE_DOWNLOAD_STORE=true
+          flutter build apk --release --flavor play --dart-define=USE_TEST_ADS=false
           cp build/app/outputs/flutter-apk/app-play-release.apk \
             "release-assets/ghosst-play-release-live-ads-${ASSET_VERSION}.apk"
 
       - name: Build Play bundle (live ads)
         run: |
           set -euo pipefail
-          flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=false --dart-define=ENABLE_DOWNLOAD_STORE=true
+          flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=false
           cp build/app/outputs/bundle/playRelease/app-play-release.aab \
             "release-assets/ghosst-play-live-ads-${ASSET_VERSION}.aab"
 

@@ -26,15 +26,10 @@ old **`reward-ssv`** folder is kept for source reference only; do not deploy it.
 2. Platform scopes — make sure these are enabled (leave defaults if unsure):
    `account.read`, `account.write`, `databases.read`, `databases.write`,
    `functions.read`, `functions.write`.
-3. There are two Android flavors. Both keep
-   `REQUEST_INSTALL_PACKAGES` and the package-archive `<queries>` entry —
-   `direct` from `src/main`, and `play` inherits them so the QA Play build
-   (`ENABLE_DOWNLOAD_STORE=true`) can hand a freshly downloaded APK to the
-   system installer. (Removing them from `play` broke the **Install** button:
-   Android 11+ package visibility hid the installer and `open_filex` failed
-   with `ActivityNotFoundException`.) Production Play artifacts declare the
-   permission but never expose an APK product. Neither flavor has an in-app
-   updater; Google Play owns Play-build updates.
+3. There are two Android flavors. Only `direct` declares
+   `REQUEST_INSTALL_PACKAGES` and the package-archive `<queries>` entry and
+   exposes APK/file products. The `play` flavor contains neither and shows only
+   license-key products. Google Play owns Play-build updates.
 
 ## 2. Database
 
@@ -315,10 +310,10 @@ flutter pub get
 flutter run --flavor play
 # or for the sideload-only feature set:
 flutter run --flavor direct
-# Closed-beta/QA mode: test ads + Apps shelf (never promote):
-flutter run --release --flavor play --dart-define=USE_TEST_ADS=true --dart-define=ENABLE_DOWNLOAD_STORE=true
-# Production Play: live ads + Apps/APK shelf:
-flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=false --dart-define=ENABLE_DOWNLOAD_STORE=true
+# Closed-beta/QA mode: test ads, Play-safe key-only store:
+flutter run --release --flavor play --dart-define=USE_TEST_ADS=true
+# Production Play: live ads, Play-safe key-only store:
+flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=false
 flutter build apk --release --flavor direct
 ```
 
@@ -331,7 +326,7 @@ flutter build apk --release --flavor direct
    polls your profile until Google's SSV callback lands (usually seconds;
    can take up to a minute — coins still arrive after a timeout message).
 5. Store → **Claim** → key shown + copied → **My Keys**.
-6. **App store test:** Admin → New product → type **APK** (or **File**) →
+6. **Direct-build app store test:** Admin → New product → type **APK** (or **File**) →
    paste a MediaFire link (page link like
    `https://www.mediafire.com/file/<key>/<name>/file` **or** a direct
    `https://downloadNN.mediafire.com/...` URL — both work) → **Add product**.
