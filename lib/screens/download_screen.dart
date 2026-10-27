@@ -8,6 +8,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../appwrite_client.dart';
 import '../premium.dart';
+import '../services/apk_download.dart';
+import '../services/distribution.dart';
 import '../services/download_service.dart';
 import '../services/mediafire.dart';
 import '../theme.dart';
@@ -58,7 +60,14 @@ class _DownloadScreenState extends State<DownloadScreen> {
   _State _state = _State.idle;
   DownloadProgress? _progress;
   DownloadTask? _task;
+  Timer? _publicDownloadPoll;
+  int _publicDownloadId = 0;
+  bool _checkingPublicDownload = false;
+  int _publicLastReceived = 0;
+  DateTime _publicLastTick = DateTime.now();
   File? _file;
+  String _savedName = '';
+  int _savedBytes = 0;
   String _error = '';
 
   bool get _isApk => widget.kind == 'apk';
@@ -72,15 +81,22 @@ class _DownloadScreenState extends State<DownloadScreen> {
   @override
   void dispose() {
     _task?.cancel();
+    _publicDownloadPoll?.cancel();
     super.dispose();
   }
 
   Future<void> _start() async {
+    if (_isApk && Distribution.isPlay) {
+      await _startPublicApkDownload();
+      return;
+    }
     setState(() {
       _state = _State.running;
       _error = '';
       _progress = null;
       _file = null;
+      _savedName = '';
+      _savedBytes = 0;
     });
     final name = widget.preferredName.trim().isEmpty
         ? null
@@ -129,8 +145,104 @@ class _DownloadScreenState extends State<DownloadScreen> {
     });
   }
 
+  /// Play builds may download APK products, but never invoke Android's package
+  /// installer. DownloadManager owns the transfer and saves it to the public
+  /// Downloads folder for the user to install later from Files/My Files.
+  Future<void> _startPublicApkDownload() async {
+    _publicDownloadPoll?.cancel();
+    final rawName = widget.preferredName.trim().isEmpty
+        ? '${widget.title}.apk'
+        : widget.preferredName.trim();
+    final safeName = rawName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    setState(() {
+      _state = _State.running;
+      _error = '';
+      _progress = null;
+      _file = null;
+      _savedName = safeName;
+      _savedBytes = 0;
+      _publicLastReceived = 0;
+      _publicLastTick = DateTime.now();
+    });
+    try {
+      final direct = await MediaFire.resolveDirectUrl(widget.url);
+      _publicDownloadId = await OfficialApk.start(url: direct, name: safeName);
+      if (!mounted) return;
+      _publicDownloadPoll = Timer.periodic(
+        const Duration(milliseconds: 400),
+        (_) => _checkPublicApkDownload(),
+      );
+      await _checkPublicApkDownload();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _state = _State.failed;
+        _error = e.toString();
+      });
+    }
+  }
+
+  Future<void> _checkPublicApkDownload() async {
+    if (_publicDownloadId == 0 || _checkingPublicDownload) return;
+    _checkingPublicDownload = true;
+    try {
+      final status = await OfficialApk.status(_publicDownloadId);
+      if (!mounted) return;
+      final now = DateTime.now();
+      final elapsed = now.difference(_publicLastTick).inMilliseconds;
+      final delta = status.received - _publicLastReceived;
+      final speed = elapsed > 0 && delta > 0 ? (delta * 1000) ~/ elapsed : 0;
+      _publicLastReceived = status.received;
+      _publicLastTick = now;
+      if (status.done) {
+        _publicDownloadPoll?.cancel();
+        setState(() {
+          _savedBytes = status.received;
+          _progress = DownloadProgress(
+            received: status.received,
+            total: status.total > 0 ? status.total : status.received,
+            speed: 0,
+            label: _savedName,
+          );
+          _state = _State.done;
+        });
+      } else if (status.failed) {
+        _publicDownloadPoll?.cancel();
+        setState(() {
+          _state = _State.failed;
+          _error = status.message.isEmpty
+              ? 'Download failed. Please try again.'
+              : status.message;
+        });
+      } else {
+        setState(() {
+          _progress = DownloadProgress(
+            received: status.received,
+            total: status.total,
+            speed: speed,
+            label: _savedName,
+          );
+        });
+      }
+    } catch (e) {
+      _publicDownloadPoll?.cancel();
+      if (!mounted) return;
+      setState(() {
+        _state = _State.failed;
+        _error = e.toString();
+      });
+    } finally {
+      _checkingPublicDownload = false;
+    }
+  }
+
   void _cancel() {
     _task?.cancel();
+    _publicDownloadPoll?.cancel();
+    if (_publicDownloadId != 0) {
+      unawaited(OfficialApk.cancel(_publicDownloadId));
+      _publicDownloadId = 0;
+    }
     setState(() => _state = _State.idle);
   }
 
@@ -147,8 +259,9 @@ class _DownloadScreenState extends State<DownloadScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
       }
     }
   }
@@ -377,6 +490,7 @@ class _DownloadScreenState extends State<DownloadScreen> {
   }
 
   Widget _doneView() {
+    final manualApkInstall = _isApk && Distribution.isPlay;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -407,24 +521,41 @@ class _DownloadScreenState extends State<DownloadScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                _file?.path.split(Platform.pathSeparator).last ?? '',
+                _file?.path.split(Platform.pathSeparator).last ?? _savedName,
                 style: monoStyle(fontSize: 13.5, color: AppColors.text),
               ),
               const SizedBox(height: 6),
               Text(
-                _file != null ? _fmt(_file!.lengthSync()) : '',
+                _file != null
+                    ? _fmt(_file!.lengthSync())
+                    : (_savedBytes > 0 ? _fmt(_savedBytes) : ''),
                 style: monoStyle(fontSize: 12.5, color: AppColors.textDim),
               ),
             ],
           ),
         ),
         const SizedBox(height: 16),
-        IslandButton(
-          expand: true,
-          label: _isApk ? 'Install' : 'Open file',
-          icon: _isApk ? Icons.android_rounded : Icons.open_in_new_rounded,
-          onPressed: _openFile,
-        ),
+        if (manualApkInstall)
+          const DoubleBezel(
+            padding: EdgeInsets.all(16),
+            child: Text(
+              'Saved to Downloads. Open Files or My Files, select the APK, '
+              'then follow Android’s installation steps.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.textDim,
+                fontSize: 13,
+                height: 1.5,
+              ),
+            ),
+          )
+        else
+          IslandButton(
+            expand: true,
+            label: _isApk ? 'Install' : 'Open file',
+            icon: _isApk ? Icons.android_rounded : Icons.open_in_new_rounded,
+            onPressed: _openFile,
+          ),
         const SizedBox(height: 10),
         IslandButton(
           expand: true,
@@ -448,9 +579,11 @@ class _DownloadScreenState extends State<DownloadScreen> {
           ),
         ],
         const SizedBox(height: 14),
-        const Center(
+        Center(
           child: Text(
-            'SAVED TO APP DOWNLOADS · FIND IT ANY TIME IN MY KEYS',
+            manualApkInstall
+                ? 'SAVED TO DEVICE DOWNLOADS · INSTALL MANUALLY'
+                : 'SAVED TO APP DOWNLOADS · FIND IT ANY TIME IN MY KEYS',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 9.5,

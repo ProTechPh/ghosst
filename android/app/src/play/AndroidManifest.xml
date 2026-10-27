@@ -1,8 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-    <!-- Play builds intentionally cannot download or install APK products.
-         REQUEST_INSTALL_PACKAGES and the package-installer query exist only
-         in src/direct, keeping the Play artifact policy-compliant. -->
+    <!-- Play builds may save APKs to public Downloads, but cannot launch the
+         package installer. REQUEST_INSTALL_PACKAGES and the installer query
+         exist only in src/direct, keeping this artifact policy-compliant. -->
     <uses-permission
         android:name="android.permission.REQUEST_INSTALL_PACKAGES"
         tools:node="remove" />

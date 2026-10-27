@@ -28,8 +28,10 @@ old **`reward-ssv`** folder is kept for source reference only; do not deploy it.
    `functions.read`, `functions.write`.
 3. There are two Android flavors. Only `direct` declares
    `REQUEST_INSTALL_PACKAGES` and the package-archive `<queries>` entry and
-   exposes APK/file products. The `play` flavor contains neither and shows only
-   license-key products. Google Play owns Play-build updates.
+   can launch the system installer. The `play` flavor contains neither, but
+   still shows APK/file products: APKs are saved to public Downloads and users
+   install them manually from their file manager. Google Play owns updates for
+   Ghosst itself.
 
 ## 2. Database
 
@@ -310,9 +312,9 @@ flutter pub get
 flutter run --flavor play
 # or for the sideload-only feature set:
 flutter run --flavor direct
-# Closed-beta/QA mode: test ads, Play-safe key-only store:
+# Closed-beta/QA mode: test ads, manual APK downloads:
 flutter run --release --flavor play --dart-define=USE_TEST_ADS=true
-# Production Play: live ads, Play-safe key-only store:
+# Production Play: live ads, manual APK downloads:
 flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=false
 flutter build apk --release --flavor direct
 ```

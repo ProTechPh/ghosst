@@ -15,9 +15,11 @@ class Distribution {
 
   static bool get isPlay => _isPlay;
   static bool get isDirect => !_isPlay;
-  /// APK/file products are sideload-only. Play builds must never expose them
-  /// because they do not declare REQUEST_INSTALL_PACKAGES.
-  static bool get showsDownloadStore => isDirect;
+
+  /// Both distributions show downloadable products. Play saves APKs to the
+  /// public Downloads folder for manual installation; only Direct can launch
+  /// Android's installer from inside the app.
+  static bool get showsDownloadStore => true;
 
   static Future<void> initialize() async {
     if (!Platform.isAndroid) {

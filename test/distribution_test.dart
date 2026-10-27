@@ -10,8 +10,8 @@ void main() {
     Distribution.setPlayForTesting(true);
   });
 
-  test('download store is unavailable in Play builds', () {
+  test('download store is available in Play builds', () {
     Distribution.setPlayForTesting(true);
-    expect(Distribution.showsDownloadStore, isFalse);
+    expect(Distribution.showsDownloadStore, isTrue);
   });
 }

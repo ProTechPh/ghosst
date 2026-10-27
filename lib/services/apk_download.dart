@@ -80,6 +80,11 @@ class OfficialApk {
       uri: (raw['uri'] as String?) ?? '',
     );
   }
+
+  /// Removes an unfinished DownloadManager item.
+  static Future<void> cancel(int id) async {
+    await channel.invokeMethod<bool>('cancel', <String, Object?>{'id': id});
+  }
 }
 
 /// A link the app refuses to hand to DownloadManager.

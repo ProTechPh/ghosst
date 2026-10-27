@@ -58,10 +58,6 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "start" -> {
-                        if (BuildConfig.FLAVOR == "play") {
-                            result.error("play-build", "APK downloads are unavailable in the Play build", null)
-                            return@setMethodCallHandler
-                        }
                         val url = call.argument<String>("url")
                         val name = call.argument<String>("name")
                         if (url.isNullOrBlank() || name.isNullOrBlank()) {
@@ -90,6 +86,15 @@ class MainActivity : FlutterActivity() {
                             }
                         }
                     }
+                    "cancel" -> {
+                        val id = call.argument<Number>("id")?.toLong()
+                        if (id == null) {
+                            result.error("bad-args", "id is required", null)
+                        } else {
+                            val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                            result.success(dm.remove(id) > 0)
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -104,8 +109,8 @@ class MainActivity : FlutterActivity() {
     private fun startApkDownload(url: String, fileName: String): Long {
         val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val request = DownloadManager.Request(Uri.parse(url))
-            .setTitle("Ghosst — official app")
-            .setDescription("Saving the official APK to your Downloads folder…")
+            .setTitle(fileName)
+            .setDescription("Saving APK to your Downloads folder…")
             .setMimeType(APK_MIME)
             // Visible while it runs AND after it finishes: the completion
             // notification is what the user taps to install once this copy
