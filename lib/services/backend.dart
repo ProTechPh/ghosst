@@ -200,24 +200,6 @@ class AdReward {
   );
 }
 
-class BetaBonusResult {
-  const BetaBonusResult({
-    required this.granted,
-    required this.amount,
-    required this.coins,
-    required this.code,
-    required this.message,
-    this.nextAt,
-  });
-
-  final bool granted;
-  final int amount;
-  final int coins;
-  final String code;
-  final String message;
-  final DateTime? nextAt;
-}
-
 class StockEntry {
   StockEntry({
     required this.keyId,
@@ -348,56 +330,6 @@ class Backend {
       if (e.code == 404) return 0;
       rethrow;
     }
-  }
-
-  /// Claims the temporary no-inventory beta fallback. The server owns both
-  /// the amount and the once-per-UTC-day limit; the client cannot mint coins.
-  static Future<BetaBonusResult> claimBetaBonus() async {
-    final exec = await _runFunction(Fn.claim, {'action': 'claimBetaBonus'});
-    final body = _parseOutput(exec);
-    final nextRaw = body['nextAt'] as String?;
-    return BetaBonusResult(
-      granted: body['ok'] == true,
-      amount: (body['amount'] as num?)?.toInt() ?? 0,
-      coins: (body['coins'] as num?)?.toInt() ?? 0,
-      code: body['code'] as String? ?? '',
-      message: body['error'] as String? ?? '',
-      nextAt: nextRaw == null ? null : DateTime.tryParse(nextRaw),
-    );
-  }
-
-  /// Credits one completed test ad during closed beta. The function enforces
-  /// its own cooldown, so bypassing the client timer cannot mint rapid rewards.
-  static Future<BetaBonusResult> claimBetaTestReward() async {
-    final exec = await _runFunction(Fn.claim, {
-      'action': 'claimBetaTestReward',
-    });
-    final body = _parseOutput(exec);
-    final nextRaw = body['nextAt'] as String?;
-    return BetaBonusResult(
-      granted: body['ok'] == true,
-      amount: (body['amount'] as num?)?.toInt() ?? 0,
-      coins: (body['coins'] as num?)?.toInt() ?? 0,
-      code: body['code'] as String? ?? '',
-      message: body['error'] as String? ?? '',
-      nextAt: nextRaw == null ? null : DateTime.tryParse(nextRaw),
-    );
-  }
-
-  /// Claims a server-controlled reward after the direct Yandex SDK reports
-  /// completion. The function enforces its own cooldown, amount, and daily cap.
-  static Future<BetaBonusResult> claimYandexReward() async {
-    final exec = await _runFunction(Fn.claim, {'action': 'claimYandexReward'});
-    final body = _parseOutput(exec);
-    final nextRaw = body['nextAt'] as String?;
-    return BetaBonusResult(
-      granted: body['ok'] == true,
-      amount: (body['amount'] as num?)?.toInt() ?? 0,
-      coins: (body['coins'] as num?)?.toInt() ?? 0,
-      code: body['code'] as String? ?? '',
-      message: body['error'] as String? ?? '',
-      nextAt: nextRaw == null ? null : DateTime.tryParse(nextRaw),
-    );
   }
 
   // ---- store ----

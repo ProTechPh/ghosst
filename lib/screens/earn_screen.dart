@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../services/ad_service.dart';
 import '../services/backend.dart';
-import '../services/yandex_ad_service.dart';
 import '../theme.dart';
 
 class EarnScreen extends StatefulWidget {
@@ -19,7 +18,6 @@ class EarnScreen extends StatefulWidget {
 
 class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
   final _ads = AdService();
-  final _yandexAds = YandexAdService.instance;
   bool busy = false;
   String status = '';
 
@@ -45,7 +43,6 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
       if (!_ads.riReady) {
         _ads.preloadRewardedInterstitial();
       }
-      unawaited(_yandexAds.preload());
     }
     _checkCooldown();
   }
@@ -54,7 +51,6 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
     if (AdService.adsEnabled && mounted) {
       if (!_ads.ready) _ads.preload();
       if (!_ads.riReady) _ads.preloadRewardedInterstitial();
-      unawaited(_yandexAds.preload());
       setState(() {});
     }
   }
@@ -138,10 +134,6 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
     if (!mounted) return;
 
     void onError(String e) {
-      if (e.startsWith('No rewarded ads are available from any ad source')) {
-        unawaited(_tryYandexAd());
-        return;
-      }
       if (mounted) {
         setState(() {
           busy = false;
@@ -165,8 +157,18 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
       await _ads.showRewardedWithFallback(
         userId: user.$id,
         preferInterstitial: instant,
-        onEarned: (_) =>
-            AdUnits.useTestAds ? _claimBetaBonus(afterTestAd: true) : _verify(),
+        onEarned: (_) {
+          if (AdUnits.useTestAds) {
+            if (!mounted) return;
+            setState(() {
+              busy = false;
+              status = 'Test ad completed. Test ads do not award coins.';
+            });
+            _startCooldown(30);
+            return;
+          }
+          unawaited(_verify());
+        },
         onError: onError,
         onClosed: onClosed,
       );
@@ -178,182 +180,6 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
           status = 'Unable to play ad right now. Please try again in a moment.';
         });
       }
-    }
-  }
-
-  Future<void> _tryYandexAd() async {
-    if (!mounted) return;
-    setState(() {
-      busy = true;
-      status = 'Google ads unavailable — trying Yandex…';
-    });
-
-    var rewardStarted = false;
-    await _yandexAds.showRewarded(
-      onRewarded: (_) {
-        rewardStarted = true;
-        if (AdUnits.useTestAds) {
-          unawaited(_claimBetaTestReward());
-        } else {
-          unawaited(_claimYandexReward());
-        }
-      },
-      onError: (error) {
-        debugPrint('[EarnScreen] Yandex fallback unavailable: $error');
-        if (!rewardStarted) unawaited(_claimBetaBonus());
-      },
-      onClosed: () {
-        if (!mounted || rewardStarted) return;
-        if (status == 'Google ads unavailable — trying Yandex…') {
-          setState(() {
-            busy = false;
-            status = 'Ad closed before a reward was earned.';
-          });
-          _startCooldown(15);
-        }
-      },
-    );
-  }
-
-  Future<void> _claimBetaBonus({bool afterTestAd = false}) async {
-    if (afterTestAd) {
-      await _claimBetaTestReward();
-      return;
-    }
-    if (!mounted) return;
-    setState(() {
-      busy = true;
-      status = 'No ads available — checking your daily beta bonus…';
-    });
-
-    try {
-      final result = await Backend.claimBetaBonus();
-      if (!mounted) return;
-      if (result.granted) {
-        try {
-          await widget.onRefresh();
-        } catch (_) {
-          // The server already committed the credit; a later refresh will show it.
-        }
-        if (!mounted) return;
-        setState(() {
-          busy = false;
-          _lastActionSucceeded = true;
-          status = '+${result.amount} coins daily beta bonus added!';
-        });
-        _startCooldown(30);
-        return;
-      }
-
-      final alreadyClaimed = result.code == 'already_claimed';
-      setState(() {
-        busy = false;
-        status = alreadyClaimed
-            ? 'No ads available. Today’s beta bonus was already claimed; try ads again later.'
-            : 'No ads available right now. Please try again in a few minutes.';
-      });
-      _startCooldown(alreadyClaimed ? 60 : 30);
-    } catch (e) {
-      debugPrint('[EarnScreen] Beta bonus exception: $e');
-      if (!mounted) return;
-      setState(() {
-        busy = false;
-        status =
-            'No ads available right now. Please try again in a few minutes.';
-      });
-      _startCooldown(30);
-    }
-  }
-
-  Future<void> _claimBetaTestReward() async {
-    if (!mounted) return;
-    setState(() {
-      busy = true;
-      status = 'Test ad completed — adding coins…';
-    });
-
-    try {
-      final result = await Backend.claimBetaTestReward();
-      if (!mounted) return;
-      if (result.granted) {
-        try {
-          await widget.onRefresh();
-        } catch (_) {
-          // Credit is already committed server-side.
-        }
-        if (!mounted) return;
-        setState(() {
-          busy = false;
-          _lastActionSucceeded = true;
-          status = '+${result.amount} test-ad coins added!';
-        });
-        _startCooldown(30);
-        return;
-      }
-
-      setState(() {
-        busy = false;
-        status = result.code == 'cooldown'
-            ? 'Test reward cooldown is still active. Please wait a moment.'
-            : 'Test ad completed, but coins could not be added right now.';
-      });
-      _startCooldown(30);
-    } catch (e) {
-      debugPrint('[EarnScreen] Beta test reward exception: $e');
-      if (!mounted) return;
-      setState(() {
-        busy = false;
-        status = 'Test ad completed, but coins could not be added right now.';
-      });
-      _startCooldown(30);
-    }
-  }
-
-  Future<void> _claimYandexReward() async {
-    if (!mounted) return;
-    setState(() {
-      busy = true;
-      status = 'Yandex reward earned — adding coins…';
-    });
-
-    try {
-      final result = await Backend.claimYandexReward();
-      if (!mounted) return;
-      if (result.granted) {
-        try {
-          await widget.onRefresh();
-        } catch (_) {
-          // Credit is already committed server-side.
-        }
-        if (!mounted) return;
-        setState(() {
-          busy = false;
-          _lastActionSucceeded = true;
-          status = '+${result.amount} Yandex ad coins added!';
-        });
-        _startCooldown(30);
-        return;
-      }
-
-      setState(() {
-        busy = false;
-        status = switch (result.code) {
-          'cooldown' =>
-            'Reward cooldown is still active. Please wait a moment.',
-          'daily_limit' =>
-            'Today’s Yandex reward limit has been reached. Try again tomorrow.',
-          _ => 'Ad completed, but coins could not be added right now.',
-        };
-      });
-      _startCooldown(result.code == 'daily_limit' ? 60 : 30);
-    } catch (e) {
-      debugPrint('[EarnScreen] Yandex reward exception: $e');
-      if (!mounted) return;
-      setState(() {
-        busy = false;
-        status = 'Ad completed, but coins could not be added right now.';
-      });
-      _startCooldown(30);
     }
   }
 

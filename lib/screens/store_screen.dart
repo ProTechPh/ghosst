@@ -3,14 +3,12 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'package:yandex_mobileads/mobile_ads.dart' as yandex;
 
 import '../appwrite_client.dart';
 import '../premium.dart';
 import '../services/ad_service.dart';
 import '../services/backend.dart';
 import '../services/distribution.dart';
-import '../services/yandex_ad_service.dart';
 import '../theme.dart';
 import 'product_detail.dart';
 
@@ -71,12 +69,6 @@ class _StoreScreenState extends State<StoreScreen>
   int _nativeRetryAttempts = 0;
   Timer? _nativeRetryTimer;
 
-  /// Yandex banner used when the native auction reports no inventory. The
-  /// Yandex Flutter SDK has no native-ad API, so a banner is the closest
-  /// drop-in for this slot.
-  yandex.BannerAd? _fallbackBanner;
-  StreamSubscription<yandex.BannerAdLoadState>? _fallbackBannerSub;
-
   void _onAdsEnabledForNative() {
     if (AdService.adsEnabled &&
         mounted &&
@@ -106,55 +98,7 @@ class _StoreScreenState extends State<StoreScreen>
     _nativeAd?.dispose();
     _nativeAd = null;
     _nativeLoaded = false;
-    unawaited(_disposeFallbackBanner());
     super.dispose();
-  }
-
-  /// Loads the Yandex banner stand-in for the Sponsored slot. The plugin only
-  /// issues its request once `AdWidget` is attached, so the ad is primed
-  /// first and mounted immediately after.
-  Future<void> _loadFallbackBanner() async {
-    if (!mounted || !AdService.adsEnabled || _fallbackBanner != null) return;
-    if (_nativeLoaded && _nativeAd != null) return;
-    final width = MediaQuery.sizeOf(context).width.round();
-    final ad = await YandexAdService.instance.prepareBanner(width: width);
-    if (!mounted) {
-      if (ad != null) await YandexAdService.instance.destroyBanner(ad);
-      return;
-    }
-    if (ad == null) {
-      debugPrint('[StoreScreen] Yandex fallback banner unavailable.');
-      return;
-    }
-
-    await _fallbackBannerSub?.cancel();
-    _fallbackBannerSub = ad.loadStateStream.listen((state) {
-      if (!mounted) return;
-      if (state is yandex.BannerAdLoadStateLoaded) {
-        debugPrint(
-          '[StoreScreen] Yandex fallback banner loaded ${state.width}x${state.height}',
-        );
-        setState(() {});
-      } else if (state is yandex.BannerAdLoadStateError) {
-        debugPrint(
-          '[StoreScreen] Yandex fallback banner failed: ${state.error}',
-        );
-        final failed = _fallbackBanner;
-        setState(() => _fallbackBanner = null);
-        if (failed != null) {
-          unawaited(YandexAdService.instance.destroyBanner(failed));
-        }
-      }
-    });
-    setState(() => _fallbackBanner = ad);
-  }
-
-  Future<void> _disposeFallbackBanner() async {
-    await _fallbackBannerSub?.cancel();
-    _fallbackBannerSub = null;
-    final ad = _fallbackBanner;
-    _fallbackBanner = null;
-    if (ad != null) await YandexAdService.instance.destroyBanner(ad);
   }
 
   /// Medium native template, styled dark to match the store chrome.
@@ -172,11 +116,6 @@ class _StoreScreenState extends State<StoreScreen>
             return;
           }
           _nativeRetryAttempts = 0;
-          // AdMob native won the auction — drop the banner stand-in so only
-          // one sponsored unit is ever rendered.
-          if (_fallbackBanner != null) {
-            unawaited(_disposeFallbackBanner());
-          }
           setState(() {
             _nativeAd = a as NativeAd;
             _nativeLoaded = true;
@@ -196,10 +135,7 @@ class _StoreScreenState extends State<StoreScreen>
           // request every few seconds cannot create inventory and only adds
           // unnecessary ad traffic. A later Store visit may try again.
           if (error.code == 3) {
-            debugPrint(
-              '[StoreScreen] NativeAd no fill; falling back to Yandex banner.',
-            );
-            unawaited(_loadFallbackBanner());
+            debugPrint('[StoreScreen] NativeAd no fill.');
           } else if (_nativeRetryAttempts < 3) {
             final delaySeconds = 4 * (1 << _nativeRetryAttempts);
             _nativeRetryAttempts++;
@@ -210,10 +146,7 @@ class _StoreScreenState extends State<StoreScreen>
               if (mounted) _loadNative();
             });
           } else {
-            debugPrint(
-              '[StoreScreen] NativeAd retries exhausted; falling back to Yandex banner.',
-            );
-            unawaited(_loadFallbackBanner());
+            debugPrint('[StoreScreen] NativeAd retries exhausted.');
           }
         },
         onAdImpression: (_) => debugPrint('[StoreScreen] NativeAd impression'),
@@ -511,12 +444,6 @@ class _StoreScreenState extends State<StoreScreen>
               constraints: const BoxConstraints(minHeight: 350, maxHeight: 400),
               child: AdWidget(ad: _nativeAd!),
             ),
-            const SizedBox(height: 22),
-          ] else if (shelf.isNotEmpty && _fallbackBanner != null) ...[
-            const SectionLabel('Sponsored'),
-            // Yandex's AdWidget sizes itself once the native view reports its
-            // measured dimensions, so it is mounted unconstrained.
-            yandex.AdWidget(bannerAd: _fallbackBanner!),
             const SizedBox(height: 22),
           ],
 

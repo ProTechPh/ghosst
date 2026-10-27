@@ -4,7 +4,6 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'package:yandex_mobileads/mobile_ads.dart' as yandex;
 
 import 'premium.dart';
 import 'screens/adblock_screen.dart';
@@ -23,7 +22,6 @@ import 'services/backend.dart';
 import 'services/consent_service.dart';
 import 'services/distribution.dart';
 import 'services/security.dart';
-import 'services/yandex_ad_service.dart';
 import 'sign_in.dart';
 import 'sign_up.dart';
 import 'theme.dart';
@@ -116,14 +114,6 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
       unawaited(AdService.instance.preloadInterstitial());
     } catch (e) {
       debugPrint('MobileAds initialization failed: $e');
-    }
-    if (!canRequest) return;
-    try {
-      await YandexAdService.instance.initialize();
-      unawaited(YandexAdService.instance.preload());
-    } catch (e, st) {
-      // Yandex is supplemental; its failure must never disable Google ads.
-      debugPrint('[YandexAds] Initialization failed: $e\n$st');
     }
   }
 
@@ -331,8 +321,6 @@ class _HomeShellState extends State<HomeShell> {
   bool _bannerWanted = false;
   int _bannerRetryAttempts = 0;
   Timer? _bannerRetryTimer;
-  yandex.BannerAd? _yandexBanner;
-  StreamSubscription<yandex.BannerAdLoadState>? _yandexBannerSub;
   int _tabSwitches = 0;
   DateTime? _lastInterstitial;
 
@@ -375,53 +363,7 @@ class _HomeShellState extends State<HomeShell> {
     );
     _banner?.dispose();
     _banner = null;
-    unawaited(_disposeYandexBanner());
     super.dispose();
-  }
-
-  Future<void> _disposeYandexBanner() async {
-    await _yandexBannerSub?.cancel();
-    _yandexBannerSub = null;
-    final ad = _yandexBanner;
-    _yandexBanner = null;
-    if (ad != null) await YandexAdService.instance.destroyBanner(ad);
-  }
-
-  /// Loads a Yandex banner as a no-fill fallback for the AdMob banner.
-  ///
-  /// The plugin only issues its request once `AdWidget` is attached, so the
-  /// ad is primed first and mounted immediately after.
-  Future<void> _loadYandexBanner() async {
-    if (!mounted || !AdService.adsEnabled || _yandexBanner != null) return;
-    final width = MediaQuery.sizeOf(context).width.round();
-    final ad = await YandexAdService.instance.prepareBanner(width: width);
-    if (!mounted) {
-      if (ad != null) await YandexAdService.instance.destroyBanner(ad);
-      return;
-    }
-    if (ad == null) {
-      debugPrint('[HomeShell] Yandex BannerAd unavailable.');
-      return;
-    }
-
-    await _yandexBannerSub?.cancel();
-    _yandexBannerSub = ad.loadStateStream.listen((state) {
-      if (!mounted) return;
-      if (state is yandex.BannerAdLoadStateLoaded) {
-        debugPrint(
-          '[HomeShell] Yandex BannerAd loaded ${state.width}x${state.height}',
-        );
-        setState(() {});
-      } else if (state is yandex.BannerAdLoadStateError) {
-        debugPrint('[HomeShell] Yandex BannerAd failed: ${state.error}');
-        final failed = _yandexBanner;
-        setState(() => _yandexBanner = null);
-        if (failed != null) {
-          unawaited(YandexAdService.instance.destroyBanner(failed));
-        }
-      }
-    });
-    setState(() => _yandexBanner = ad);
   }
 
   /// Adaptive banner sized to the screen width, parked above the nav pill.
@@ -442,11 +384,6 @@ class _HomeShellState extends State<HomeShell> {
         onAdLoaded: (_) {
           if (mounted) {
             _bannerRetryAttempts = 0;
-            // AdMob won the race — drop any Yandex fallback so only one
-            // banner is ever rendered.
-            if (_yandexBanner != null) {
-              unawaited(_disposeYandexBanner());
-            }
             setState(() => _banner = ad);
           } else {
             ad.dispose();
@@ -460,10 +397,7 @@ class _HomeShellState extends State<HomeShell> {
           if (!mounted) return;
           setState(() => _banner = null);
           if (error.code == 3) {
-            debugPrint(
-              '[HomeShell] BannerAd no fill; falling back to Yandex banner.',
-            );
-            unawaited(_loadYandexBanner());
+            debugPrint('[HomeShell] BannerAd no fill.');
             return;
           }
           if (_bannerRetryAttempts < 3) {
@@ -476,10 +410,7 @@ class _HomeShellState extends State<HomeShell> {
               if (mounted) _loadBanner();
             });
           } else {
-            debugPrint(
-              '[HomeShell] BannerAd retries exhausted; falling back to Yandex banner.',
-            );
-            unawaited(_loadYandexBanner());
+            debugPrint('[HomeShell] BannerAd retries exhausted.');
           }
         },
         onAdImpression: (_) => debugPrint('[HomeShell] BannerAd impression'),
@@ -498,15 +429,12 @@ class _HomeShellState extends State<HomeShell> {
         now.difference(_lastInterstitial!) >= _interCooldown;
     if (_tabSwitches % 2 != 0 || !cooled) return;
     _lastInterstitial = now;
-    unawaited(_showInterstitialWithFallback());
+    unawaited(_showInterstitial());
   }
 
-  /// AdMob first; when it has no inventory, quietly use the Yandex unit so
-  /// the placement still earns instead of rendering nothing. Never awaited,
-  /// so a slow fallback cannot stall navigation.
-  Future<void> _showInterstitialWithFallback() async {
-    if (await _ads.showInterstitial()) return;
-    await YandexAdService.instance.showInterstitial(onClosed: () {});
+  /// Fire-and-forget so ad loading never stalls navigation.
+  Future<void> _showInterstitial() async {
+    await _ads.showInterstitial();
   }
 
   Future<void> _refresh() async {
@@ -681,13 +609,6 @@ class _HomeShellState extends State<HomeShell> {
                     color: AppColors.bg,
                     child: AdWidget(ad: _banner!),
                   ),
-                )
-              else if (_yandexBanner != null)
-                // Yandex's AdWidget sizes itself once the native view reports
-                // its measured dimensions, so it is mounted unconstrained.
-                ColoredBox(
-                  color: AppColors.bg,
-                  child: yandex.AdWidget(bannerAd: _yandexBanner!),
                 ),
               // Floating glass pill — never an edge-to-edge Material bar.
               _GlassNavBar(
