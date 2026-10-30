@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:ghosst/services/backend.dart';
+import 'package:ghosst/services/models.dart';
 
 // The Worker writes the product type ('app') into a download claim's keyText
 // and leaves the URL out of the row, so `isDownload` cannot rely on the URL

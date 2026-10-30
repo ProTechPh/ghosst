@@ -1,391 +1,174 @@
-# SETUP — Ghosst Keys (Flutter + Appwrite + AdMob SSV)
+# SETUP — Ghosst (Flutter + Cloudflare Worker + AdMob SSV)
 
-Backend on Appwrite project `6ac4baef0010879da982` (`https://sgp.cloud.appwrite.io/v1`).
+The app has **one backend**: the `ghosst-api` Worker in `cf-ghosst/` (Cloudflare
+Workers + D1). There is no Appwrite, no Firebase, no server to keep awake.
+`cf-ghosst/README.md` is the Worker's own doc (routes, local dev, secrets);
+this file is the app-side setup.
 
-**Flow:** admin stocks keys → users watch rewarded ads → Google calls our
-`reward-ssv` function (signed callback) → coins credited → user spends coins →
-`claim` function hands out the oldest available key (or, for **app/file
-products**, the MediaFire download link).
-
-**App store:** products can be `type = key` (license key), `apk` (installable
-APK) or `file` (generic file). APK/file products are bought with the same coins
-and deliver a MediaFire link instead of a key — see §2.1.
-
-The app uses exactly one Appwrite function: **`claim`**. It handles product
-claims, AdMob SSV rewards, and authenticated permanent account deletion. The
-old **`reward-ssv`** folder is kept for source reference only; do not deploy it.
-
----
-
-## 1. Project / platform settings
-
-1. Appwrite Console → **Settings → Platforms → Add platform → Flutter app**:
-   - Name: `ghosst-play`, Package name: `com.astrixtech.ghosst`.
-   - Add a second platform for sideload releases: Name `ghosst-direct`,
-     package name `com.astrixtech.ghosst.direct`.
-2. Platform scopes — make sure these are enabled (leave defaults if unsure):
-   `account.read`, `account.write`, `databases.read`, `databases.write`,
-   `functions.read`, `functions.write`.
-3. There are two Android flavors. Only `direct` declares
-   `REQUEST_INSTALL_PACKAGES` and the package-archive `<queries>` entry and
-   can launch the system installer. The `play` flavor contains neither, but
-   still shows APK/file products: APKs are saved to public Downloads and users
-   install them manually from their file manager. Google Play owns updates for
-   Ghosst itself.
-
-## 2. Database
-
-**Databases → Create database** → ID: `ghosst`.
-
-### Collection: `profiles`  (document `$id` = Appwrite user id)
-
-| Attribute | Type | Required | Default | Notes |
-|---|---|---|---|---|
-| `coins` | integer | yes | 0 | min 0 |
-| `displayName` | string(128) | no | | |
-
-Permissions: **none at collection level.** Documents are created by our
-functions with `read("user:<uid>")`, so users can read only their own profile.
-
-### Collection: `products`
-
-| Attribute | Type | Required | Default | Index |
-|---|---|---|---|---|
-| `name` | string(128) | yes | | key index `name` |
-| `cost` | integer | yes | 50 | |
-| `active` | boolean | yes | true | key index `active` |
-| `description` | string(2000) | no | | shown on the product detail page |
-| `images` | string(4096) | no | | JSON array of storage file ids |
-| `youtubeUrl` | string(256) | no | | full YouTube watch/share URL |
-| `type` | string(8) | no | `key` | `key` \| `apk` \| `file` |
-| `version` | string(32) | no | | shown as a pill on app products |
-| `fileSize` | string(32) | no | | free-text, e.g. `7.2 MB` |
-| `durations` | string(4096) | no | | JSON array of `{label, cost}` duration options (key products) |
-
-Permissions: Read → **Users**; Create/Update/Delete → **Team: `admins`**.
-
-> **Create the three new columns before building.** The app only sends them
-> when they differ from the default (this matches how optional columns already
-> behave), but the claim function reads `product.type`, so the column must
-> exist or every claim still falls back to a key.
-
-> **Duration options** (added for key products with 1 Hour / 1 Day / 3 Days
-> style pricing): `products.durations` holds the admin-defined options,
-> `keys.duration` tags which pool a pasted key belongs to, and
-> `claims.duration` records what the buyer picked. All three columns must
-> exist **and the `claim` function must be redeployed** before duration
-> claims work. Flat-price products (empty `durations`) behave exactly as
-> before.
-
-### Collection: `app_files`  (MediaFire links for app/file products)
-
-Created for **§2.1 — the app store**. One document per downloadable product.
-
-| Attribute | Type | Required | Default | Index |
-|---|---|---|---|---|
-| `productId` | string(36) | yes | | key index `productId` (unique per product) |
-| `url` | string(1024) | yes | | MediaFire page **or** direct download URL |
-| `quickkey` | string(64) | no | | MediaFire quickkey (Phase 2 API upload) |
-
-Permissions: Read → **Team: `admins` only**; Create/Update/Delete →
-**Team: `admins`**.
-
-> ⚠️ **Read must be `admins` only.** This link is what the user is paying for —
-> if regular users could list this collection they could grab it without coins.
-> Users receive the URL only from the `claim` function after a successful
-> purchase (written into their `claims` doc as `downloadUrl`).
-
-### Storage bucket: `product-images`
-
-**Storage → Create bucket** → ID: `product-images`.
-
-| Setting | Value |
+| Piece | Where |
 |---|---|
-| File security | Off (bucket-level permissions) |
-| Read | **Any** (previews must load for signed-out/regular users) |
-| Create / Update / Delete | **Team: `admins`** |
-| Allowed extensions | `jpg`, `jpeg`, `png`, `webp`, `gif` |
-| Maximum file size | 5 MB |
+| Live API | `https://ghosst-api.ghosst.workers.dev/v1` |
+| Worker source | `cf-ghosst/src/` (TypeScript, `wrangler.toml`) |
+| Database | D1 `ghosst` = `c51682ac-01b9-4799-8638-cf0de063895a` (APAC) |
+| Schema | `cf-ghosst/migrations/0001_init.sql` |
+| Cloudflare account | `951f13d0a78bf4d0a6b2594b936c6f45` |
+| Flutter client | `lib/api/` (Dio) + `lib/services/worker_backend.dart` |
+| Images | Cloudinary (unsigned upload preset `ghosst`) |
 
-The admin screen uploads product images here; the app builds public preview
-URLs (`.../files/<id>/preview?project=...&width=...`). `Read = Any` is
-required — with anything narrower, store images will not load.
+## 1. Data model (D1)
 
-### Collection: `keys`  (license keys)
+`users` (email, password hash, coins, is_admin), `sessions` (refresh tokens,
+only the SHA-256 is stored), `products`, `product_images`, `product_durations`,
+`product_files` (the MediaFire link for apk/file products), `keys`
+(`UNIQUE(product_id, key_value)`), `claims` (one row per purchase;
+`ux_claims_user_product` makes app/file products single-purchase),
+`ad_rewards` (SSV dedupe, PK = AdMob `transaction_id`), `idempotency`
+(PK `(user_id, key)`).
 
-| Attribute | Type | Required | Default | Index |
-|---|---|---|---|---|
-| `productId` | string(36) | yes | | key index `productId` |
-| `key` | string(512) | yes | | |
-| `status` | string(16) | yes | `available` | key index `status` |
-| `claimedBy` | string(36) | no | | |
-| `claimedAt` | datetime | no | | |
-| `duration` | string(64) | no | | duration pool label (key products with options) |
-
-Composite key index `product_status` on (`productId`, `status`) — required for
-the claim query.
-
-Permissions: Read → **Team: `admins` only**; Create/Update/Delete →
-**Team: `admins`**. Regular users must never be able to list keys.
-
-### Collection: `claims`
-
-| Attribute | Type | Required | Default | Index |
-|---|---|---|---|---|
-| `userId` | string(36) | yes | | key index `userId` |
-| `productId` | string(36) | yes | | |
-| `productName` | string(128) | no | | |
-| `keyId` | string(36) | yes | | |
-| `keyText` | string(512) | yes | | |
-| `cost` | integer | yes | 0 | |
-| `createdAt` | datetime | yes | | |
-| `downloadUrl` | string(1024) | no | | set for **app/file** purchases only |
-| `duration` | string(64) | no | | duration label the buyer picked (key products) |
-
-Permissions: **none at collection level** — the function writes each document
-with `read("user:<uid>")`, so users see only their own claims.
-
-> `keyText` doubles as the product type for app purchases (`apk` / `file`) and
-> `keyId` falls back to the product id — the client uses a non-empty
-> `downloadUrl` to tell an app purchase from a license key.
-
-### Collection: `ad_rewards`  (SSV dedupe ledger)
-
-| Attribute | Type | Required |
-|---|---|---|
-| `userId` | string(36) | yes |
-| `reward` | integer | yes |
-| `nonce` | string(128) | no |
-| `adUnit` | string(128) | no |
-| `eventTime` | string(64) | no |
-| `createdAt` | datetime | yes |
-
-Permissions: **none** (function only). Document id = the AdMob `nonce` —
-replayed callbacks hit id-exists (409) and are ignored.
-
-> The collection doubles as the **global mutation lock**: before touching
-> any balance the function inserts a document with the fixed id `crit`
-> (acquire) and deletes it afterwards (release); a crashed execution is
-> taken over after 30s. Don't create documents with that id manually.
-
-## 3. Team
-
-**Auth → Teams → Create team** → ID/name: `admins`, then add your own user as
-member. That's what unlocks the Admin tab and key/product write permissions.
-
-## 4. Functions
-
-### Claims, ad rewards, and account deletion
-
-> Everything is merged into ONE function with ID **`claim`**
-> (`functions/claim/`, package `claim.tar.gz`). It routes internally:
-> `?signature=...` → AdMob SSV,
-> `{productId}` → license claim **or app/file claim** (reads `product.type`;
-> for `apk`/`file` it looks up `app_files`, deducts coins and returns
-> `{ok, downloadUrl, type, cost}`),
-> `{action: "deleteAccount", confirm: "DELETE"}` → authenticated permanent
-> deletion, and `?yt=...` → YouTube embed HTML. Deploy just
-> `claim` with a **domain (HTTP)**, env vars described below,
-> scopes `documents.read`, `documents.write`, `users.read`, and `users.write`;
-> Execute access = Any. The deletion route still requires the caller's valid
-> user JWT. AdMob
-> callback URL = **`https://claim.sgp.appwrite.run/`** (bare — verify the URL
-> *without* query parameters; AdMob's Verify button fails on `?...` URLs).
-> The old two-function layout below (`functions/reward-ssv/`) is kept for
-> reference only.
-
-It is dependency-free Node.js (it calls the Appwrite REST API with the
-ephemeral key, so no `node_modules`).
-
-Package them locally (**`.tar.gz`**, works on Windows 10+ `tar`):
+Apply it with:
 
 ```powershell
-tar -czf claim.tar.gz -C functions/claim .
+cd cf-ghosst
+npx wrangler d1 execute ghosst --remote --file=migrations/0001_init.sql
 ```
 
-> Zip also works (`Compress-Archive -Path functions\claim\* -DestinationPath claim.zip -Force`),
-> but `.tar.gz` is the Appwrite CLI convention — upload either as the deployment archive.
+## 2. Admin
 
-Create only **Functions → `claim`**, then in **Settings**:
+There is no team/console UI. An account becomes admin with one statement:
 
-| Setting | `claim` |
-|---|---|
-| Runtime | Node.js (latest) |
-| Entrypoint | `index.js` |
-| Trigger | **SDK + domain (HTTP)** |
-| Execute access | **Any** (AdMob cannot authenticate; protected app routes validate JWT) |
-| Timeout | 30s default |
-| Scopes (ephemeral key) | `documents.read`, `documents.write`, `users.read`, `users.write` |
-| Env vars | `COINS_PER_REWARD=10` |
+```powershell
+"UPDATE users SET is_admin = 1 WHERE email = 'you@example.com';" | Set-Content -Encoding utf8 $env:TEMP\admin.sql
+cd cf-ghosst
+npx wrangler d1 execute ghosst --remote --file=$env:TEMP\admin.sql
+```
 
-Upload the zip under **Deployments → Create deployment** (build command:
-default `npm install` is fine).
+Sign out and back in afterwards — the app caches `isAdmin` for the session.
+The **Admin** tab appears for admins only.
 
-**`claim` domain:** open the function → **Domains** tab → copy the
-generated URL (e.g. `https://claim.sgp.appwrite.run`). Use it **bare** as
-the AdMob callback URL — AdMob's *Verify URL* button fails with an
-"internal error" on URLs that contain `?...`; the bare URL verifies, and
-the function still answers real SSV callbacks (AdMob appends the params)
-with HTTP 200 `ok`.
+Coins are server-side only. To hand yourself some for testing:
 
-## 5. AdMob
+```sql
+UPDATE users SET coins = 100 WHERE email = 'you@example.com';
+```
 
-The app wires **all six AdMob formats** — every unit ID lives in
-`lib/services/ad_service.dart` (class `AdUnits`):
+## 3. AdMob
 
-| Format | Purpose | Where it shows | ID |
-|---|---|---|---|
-| Rewarded | coins (SSV) | Earn tab — "Watch ad & earn coins" | `AdUnits.rewarded` (**real**) |
-| Rewarded interstitial | coins (SSV) | Earn tab — "Instant ad & earn coins" | `AdUnits.rewardedInterstitial` (**real**) |
-| Interstitial | profit only | every other tab switch, ≥45 s cooldown | `AdUnits.interstitial` (**real**) |
-| App open | profit only | once, right after the splash | `AdUnits.appOpen` (**real**) |
-| Banner | profit only | strip above the bottom nav (all tabs) | `AdUnits.banner` (**real**) |
-| Native (medium) | profit only | "Sponsored" card at the end of the Store list | `AdUnits.native` (**real**) |
+Every unit ID lives in `lib/services/ad_service.dart` (`class AdUnits`).
+
+| Format | Purpose | Where it shows |
+|---|---|---|
+| Rewarded | coins (SSV) | Earn tab — "Watch ad & earn coins" |
+| Rewarded interstitial | coins (SSV) | Earn tab — "Instant ad & earn coins" |
+| Interstitial | revenue only | every other tab switch, ≥45 s cooldown |
+| App open | revenue only | once, right after the splash |
+| Banner | revenue only | strip above the bottom nav |
+| Native (medium) | revenue only | "Sponsored" card at the end of the Store |
 
 App ID (already in the manifest): `ca-app-pub-7791552060229072~1855578469`.
 
-1. **Rewarded (coins):** set the reward item (e.g. `Coins`) and **amount =
-   coins per ad** (e.g. `10`) — this value comes back as `reward_amount` in
-   the signed callback.
-2. Edit the **Rewarded** unit → **Server-side verification** → enable, paste
-   the **bare** callback URL (`https://claim.sgp.appwrite.run/`), click
-   **Verify URL**, then **Use verified URL** → Save.
-3. **Rewarded interstitial** is created with the same SSV treatment —
-   `AdUnits.rewardedInterstitial` is wired with its real ID. The four passive
-   units (Banner / Interstitial / App open / Native) need no SSV.
-4. **Unity Ads mediation fallback:** in AdMob → Mediation, create a mediation
-   group for Android rewarded inventory, target both Ghosst rewarded ad units,
-   then add Unity Ads as an ad source with the Unity Game ID and placement ID.
-   Complete Unity's bidding/waterfall partnership setup and mapping. Merely
-   adding `gma_mediation_unity` to the app does not enable Unity inventory in
-   AdMob. Confirm startup logs contain `Unity Ads Adapter: ready`; load-error
-   waterfall logs should list a Unity adapter response.
-5. The passive formats (banner, interstitial, app open, native) need **no
-   SSV** — they earn you revenue only and never touch the coin balance.
-6. **Ad-blocker gate:** ads pay for the app, so a device that filters them
-   is locked out. `lib/services/adblock_detector.dart` probes three real
-   AdMob hosts against the Appwrite endpoint as control — 2 of 3 blocked
-   while the control answers = gate (`lib/screens/adblock_screen.dart`,
-   third gate in `main.dart`, re-checked on app resume). Fails open when
-   offline or inconclusive; Private DNS (`getPrivateDns` on the security
-   channel) is shown as context only, never a standalone trigger.
+1. **Rewarded units** (both): Ad unit → **Edit** → **Server-side
+   verification** → set the bare URL
+   `https://ghosst-api.ghosst.workers.dev/v1/ads/ssv` → **Verify URL** →
+   **Save**. Reward amount = coins per ad (currently `10`); it comes back as
+   `reward_amount` in the signed callback.
+2. **Coins never arrive?** The Worker logs every SSV attempt. Watch it with
+   `cd cf-ghosst && npx wrangler tail ghosst-api`. No request at all ⇒ the
+   callback URL is wrong in AdMob; a logged mismatch ⇒ the alert carries the
+   `requestId`.
+3. **Unity Ads mediation fallback:** AdMob → Mediation → a rewarded group
+   targeting both rewarded units, then Unity Ads as an ad source. Merely
+   shipping `gma_mediation_unity` does not enable Unity inventory; startup
+   logs must show `Unity Ads Adapter: ready`.
+4. **Ad-blocker gate:** `lib/services/adblock_detector.dart` probes AdMob
+   hosts with `/v1/products` on the Worker as the control. 2 of 3 ad hosts
+   blocked while the control answers = gate (`lib/screens/adblock_screen.dart`,
+   third gate in `main.dart`, re-checked on resume). Fails open when offline or
+   inconclusive; Private DNS is shown as context, never a standalone trigger.
 
-## 6. Run & test
+## 4. Run & test
 
 ```powershell
 flutter pub get
+flutter analyze                 # the only lint gate
+flutter test                    # no network needed
 flutter run --flavor play
-# or for the sideload-only feature set:
+# sideload-only feature set:
 flutter run --flavor direct
-# Closed-beta/QA mode: test ads, manual APK downloads:
+# QA ads:
 flutter run --release --flavor play --dart-define=USE_TEST_ADS=true
-# Production Play: live ads, manual APK downloads:
 flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=false
 flutter build apk --release --flavor direct
 ```
 
-1. Sign up → **Admin** tab appears only for the `admins` team member.
-2. Admin: create a product (e.g. "Pro key", cost 20), paste keys (one per line)
-   → **Add keys**.
-3. For a fresh account there are no coins yet — give yourself coins in the
-   console: `profiles` → your user-id document → `coins = 100`.
-4. Earn for real: **Watch ad to earn coins** → after the ad closes the app
-   polls your profile until Google's SSV callback lands (usually seconds;
-   can take up to a minute — coins still arrive after a timeout message).
-5. Store → **Claim** → key shown + copied → **My Keys**.
-6. **Direct-build app store test:** Admin → New product → type **APK** (or **File**) →
-   paste a MediaFire link (page link like
-   `https://www.mediafire.com/file/<key>/<name>/file` **or** a direct
-   `https://downloadNN.mediafire.com/...` URL — both work) → **Add product**.
-   Store → **Apps** tab → Buy & download → the download screen resolves the
-   link, shows progress, then **Install** (APK) / **Open file** (file).
+The API base URL can be pointed elsewhere with
+`--dart-define=API_BASE_URL=http://127.0.0.1:8788/v1` (see
+`lib/api/api_config.dart`; `npx wrangler dev` in `cf-ghosst/`).
 
-### 6.1 App store / MediaFire notes
+1. Sign up → **Admin** appears for an admin account.
+2. Admin: **New product** → name, cost, image (Cloudinary picker or URL) →
+   **Add product**. Key products: paste keys, one per line → **Add keys**.
+   APK/File products: paste a MediaFire page or direct URL.
+3. Earn: **Watch ad & earn coins** → the app polls your balance until the SSV
+   callback lands (usually seconds, up to a minute; coins still arrive after
+   the timeout message).
+4. Store → **Claim** → key shown + copied → **Purchases**.
 
-- **Admin paste flow (current):** upload the file to MediaFire yourself
-  (web or app), copy the share link, paste it in the Admin product form. The
-  app resolves page links → direct link at download time (two-step fetch, no
-  JS needed).
-- **No MediaFire account required** to *download*; hosting still needs an
-  uploader. Free MediaFire accounts are capped at ~50 GB/day of direct
-  downloads, and direct links can rotate — page links are safer to store.
-- **Phase 2 — API upload (not built yet):** to upload from inside the app,
-  register an app id at mediafire.com → *My Account → Developers*, then add a
-  new function (or route in `claim`) that calls
-  `user/get_session_key` (email+password+app_id → session_token) →
-  `file/get_upload_config` → POST upload → `upload/poll_upload` → quickkey →
-  `file/get_links?link_type=direct_download`. Keep credentials **only** in
-  function env vars (`MF_EMAIL`, `MF_PASSWORD`, `MF_APP_ID`) — never in the
-  Flutter client. Store the resulting `quickkey` in `app_files`.
+### 4.1 MediaFire notes
 
-## 7. Release checklist
+- Upload the file to MediaFire yourself (web or app), copy the share link,
+  paste it in the Admin product form. The app resolves page links → direct
+  link at download time (no JS needed).
+- Page links are safer to store than `downloadNN.mediafire.com` direct links —
+  the latter rotate and expire.
+- No MediaFire account is needed to *download*; hosting needs an uploader.
+  Free accounts are capped at ~50 GB/day of direct downloads.
+
+## 5. Release checklist
 
 - [ ] Real AdMob app ID in the manifest, real unit IDs for **all six formats**
-      in `lib/services/ad_service.dart` (`AdUnits`), and SSV enabled on **both
-      rewarded units** with the **bare** production callback URL.
-- [ ] `keys` collection readable **only** by `admins` team.
-- [ ] `app_files` collection readable **only** by `admins` team.
-- [ ] `products` has the `type` / `version` / `fileSize` columns and `claims`
-      has `downloadUrl`.
-- [ ] `claim` function redeployed (it must contain the app-claim route) and
-      has `documents.read`, `documents.write`, `users.read`, and `users.write`
-      scopes. Verify both a product claim and Profile → Delete account.
+      in `AdUnits`, and SSV enabled on **both rewarded units** pointing at
+      `https://ghosst-api.ghosst.workers.dev/v1/ads/ssv`.
+- [ ] Worker deployed (`cd cf-ghosst && npx wrangler deploy`) and the schema
+      applied to the production D1.
+- [ ] `JWT_SECRET` and (if R2 is ever enabled) the R2 keys set with
+      `wrangler secret put` — never in `wrangler.toml`.
+- [ ] `CLOUDINARY_API_SECRET` set, so deleting a product also deletes its
+      images.
 - [ ] Each published APK/file product has a working MediaFire link.
 - [ ] Play upload uses the `N` from CI: every push to `main` auto-bumps
-       `version: x.y.z+N` in `pubspec.yaml` and publishes release `vX.Y.Z+N`.
-       Bump `x.y.z` by hand when the release needs a new feature version;
-       Play Store is the only update channel and `N` must always increase.
-- [ ] Use the correct GitHub Release asset: `live-ads.aab` for production Play
-      (production ads plus the Apps/APK shelf), `closed-beta-test-ads.aab` for
-      temporary closed testing (test ads plus the Apps shelf),
-      `release-live-ads.apk` for production sideload testing,
-      `release-test-ads.apk` for release-mode QA, and `debug-test-ads.apk` for
-      development. Upload only one AAB for each version code. Never promote a
-      `test-ads` bundle to Production or distribute either test APK publicly.
-- [ ] Product costs / reward amount reviewed.
-- [ ] Upload the release's deobfuscation file to Play Console so crashes are
-      readable: download `mapping.txt.gz` from the matching GitHub release
-      `vX.Y.Z+N`, `gunzip` it, then **Play Console → your app → Testing →
-      Internal testing → the release → App bundle explorer → version code →
-      Upload deobfuscation file** (`mapping.txt`). R8 is on for release
-      builds (`android/app/build.gradle.kts`), so Play's raw stack traces are
-      obfuscated without it. Keep the mapping for every shipped version code —
-      it must match the exact bundle.
+      `version: x.y.z+N` in `pubspec.yaml` and publishes `vX.Y.Z+N`. Bump
+      `x.y.z` by hand only when the feature version changes.
+- [ ] Use the right GitHub Release asset: `live-ads.aab` for production Play,
+      `closed-beta-test-ads.aab` for closed testing, `release-live-ads.apk` /
+      `release-test-ads.apk` for sideload QA, `debug-test-ads.apk` for
+      development. Never promote a `test-ads` bundle to Production.
+- [ ] Upload `mapping.txt` from the matching release's `mapping.txt.gz` to Play
+      (App bundle explorer → version code → Upload deobfuscation file). R8 is
+      on for release builds.
 
-## Troubleshooting
+## 6. Troubleshooting
 
 | Symptom | Likely cause |
 |---|---|
-| Claim: `Function not configured (missing scopes)` | Function Scopes missing `databases.read`/`databases.write` |
-| Claim: `Not signed in` inside function | User session expired, or execute access/scopes wrong |
-| Claim: `Missing index` | Collection index (esp. `product_status`) not created |
-| Admin tab missing | User not in team `admins` |
-| Coins never arrive after a real ad | Check `reward-ssv` **Executions** log: if no execution at all → callback URL wrong; if `bad signature`/`stale` → clock/cert issue; if `missing user_id` → ad loaded without SSV options |
-| Rewarded ad says no inventory | First run a debug build (automatic Google sample ads) or release QA with `USE_TEST_ADS=true`. If test ads load, the SDK is healthy: activate the AdMob mediation group, map both rewarded units to Unity, verify the Unity account/placement is live, and inspect the per-adapter waterfall logs. New production units can also take time to begin serving. |
-| `Permission denied` listing keys as admin | Team membership/permissions on `keys` collection |
-| Store shows no products | Create one in Admin tab (or console), `active = true` |
-| Buy app → `Download not configured` | No `app_files` doc for that product (or blank `url`) — re-save the link in the Admin edit dialog |
-| Buy app → `Collection not found` | `app_files` collection / `products.type` column not created yet, or `claim` not redeployed |
-| Download stuck / `Could not resolve` | MediaFire link invalid or page changed — paste a fresh share link; direct `downloadNN.mediafire.com` links usually rotate and expire |
-| APK won't install | `REQUEST_INSTALL_PACKAGES` missing from the manifest, or "install unknown apps" disabled for Ghosst in Android settings |
-| Release build: `Missing classes detected while running R8` | Flutter references Play Core split-install classes it doesn't ship — copy the `-dontwarn` lines from `build/app/outputs/mapping/<variant>/missing_rules.txt` into `android/app/proguard-rules.pro` |
-| Release build: `Gradle build daemon disappeared unexpectedly` / `hs_err_pid*.log` says out of RAM | `org.gradle.jvmargs` in `android/gradle.properties` too big for the machine (R8 needs real headroom) — lower `-Xmx` (4G works on 12 GB Windows and 7 GB CI runners) |
+| Coins never arrive after a real ad | No SSV request in `wrangler tail` ⇒ callback URL wrong in AdMob; a logged signature/key error ⇒ see its `requestId` |
+| `401` right after opening the app | Refresh token expired/revoked — sign in again |
+| Admin tab missing | `users.is_admin = 0` for that account, or the app still holds the cached session (sign out/in) |
+| Store shows no products | Create one in Admin, `active = 1` |
+| Buy app → `Download not configured` | No `product_files` row for that product — re-save the link in the Admin edit dialog |
+| Download stuck / `Could not resolve` | MediaFire link invalid or page changed — paste a fresh share link |
+| APK won't install | `REQUEST_INSTALL_PACKAGES` missing from the manifest (play flavor) or "install unknown apps" disabled for Ghosst |
+| Release: `Missing classes detected while running R8` | Copy the `-dontwarn` lines from `build/app/outputs/mapping/<variant>/missing_rules.txt` into `android/app/proguard-rules.pro` |
+| Release: `Gradle build daemon disappeared` | `org.gradle.jvmargs` too big for the machine — 4G works on 12 GB Windows and 7 GB CI runners |
+| `429` / `quota exceeded` banner | Daily Free-plan limit (D1 writes 100k, Worker requests 100k). Wait for the UTC reset; the app retries on its own |
 
-## Architecture notes / limits
+## 7. Trust boundaries
 
-- Coins are written **only** by `reward-ssv`; keys are assigned **only** by
-  `claim`. A modded client can't mint either. Remaining trust boundary is
-  AdMob's own callback authenticity (RS256 signature from Google). Same for
-  downloads: MediaFire links live in `app_files` (admin-only) and are handed
-  out **only** by `claim` after the coin deduction — a modded client can't
-  read them.
-- Coin deduction is read-modify-write inside one function execution — two
-  truly simultaneous requests used to race (both passing the balance check
-  from the same snapshot = two keys for one payment, or a reward
-  overwriting a just-spent balance). **Fixed:** every `coins`/stock
-  mutation now runs behind a global critical-section lock (the `crit`
-  document in `ad_rewards` — acquire = insert, release = delete, 30s stale
-  takeover). A modded / memory-editing client can only fire requests
-  faster; serialized, that gains it nothing.
-- AdMob SSV can arrive seconds-to-minutes after the ad closes; the app waits
-  ~45s and then tells the user the coins will land automatically.
+- Coins move **only** in the Worker: acquired via a signed AdMob SSV callback
+  (ECDSA P-256 over the raw query string), spent via a guarded
+  `UPDATE users SET coins = coins - ? WHERE coins >= ? RETURNING coins`.
+- Keys and MediaFire links are never readable by the client. `claims` and
+  `downloads/:id` hand out a link only to the user who owns that claim.
+- Untrusted input is validated at the edge: JWT signature, 1 MB body cap,
+  presign restricted to admins with a server-generated key prefix.
+- A modded client can only send requests faster; idempotency + the guarded
+  UPDATE make that useless.

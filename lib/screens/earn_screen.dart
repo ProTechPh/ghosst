@@ -198,7 +198,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
       await _waitForVerificationPoll();
       if (!mounted) return;
 
-      // Appwrite requests can be interrupted when an ad opens Play Store.
+      // The request can be interrupted when an ad opens the Play Store.
       // Bound every poll so one suspended socket can never strand the UI.
       final now = await Backend.coins()
           .timeout(const Duration(seconds: 6), onTimeout: () => before)

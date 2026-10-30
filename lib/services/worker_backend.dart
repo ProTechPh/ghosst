@@ -3,21 +3,12 @@ import 'dart:convert';
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
 import 'api_backend.dart';
-import 'backend.dart';
+import 'models.dart';
 import 'session_store.dart';
 
-// The screens talk to `Backend`. Swapping this file's import for
-// `services/backend.dart` puts them back on Appwrite.
-export 'backend.dart'
-    show
-        AdReward,
-        Claim,
-        Product,
-        ProductDuration,
-        ProductType,
-        StockEntry,
-        StockWriteResult,
-        productTypeOf;
+// The screens import this file and keep using `Backend` + the models below,
+// which are re-exported so a screen needs only one import.
+export 'models.dart';
 
 /// The signed-in account, as much of it as the UI shows.
 class AppUser {
@@ -34,7 +25,7 @@ class AppUser {
   final String createdAt;
 }
 
-/// Same surface as the Appwrite `Backend`, served by the `ghosst-api` Worker.
+/// Same surface the screens already used, served by the `ghosst-api` Worker.
 class Backend {
   Backend._();
 

@@ -103,8 +103,8 @@ class DownloadTicket {
   final int size;
 }
 
-/// Thin, typed wrapper over the Worker. Deliberately separate from
-/// `Backend` so the Appwrite path keeps working until the cutover.
+/// Thin, typed wrapper over the Worker. Kept separate from `Backend`, which
+/// adds the model mapping and the session/UI-facing statics.
 class ApiBackend {
   ApiBackend(this._api);
 

@@ -1,6 +1,6 @@
 # cf-ghosst
 
-Cloudflare Workers API for Ghosst: Workers + D1 + R2, replacing Appwrite.
+Ghosst's API: Cloudflare Workers + D1 (+ R2 when enabled).
 The Flutter client lives in `../lib/api/` and `../lib/services/api_backend.dart`.
 
 ## Current deployment

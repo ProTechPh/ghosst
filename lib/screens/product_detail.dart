@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
-import '../appwrite_client.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
 import 'claim_reveal.dart';
@@ -59,7 +58,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   /// YouTube's own no-cookie origin — the only shape the embedded player
   /// accepts (a `loadHtmlString` data document or a faked baseUrl is rejected
-  /// with Error 153 / 152-4). Appwrite used to proxy this wrapper; it is gone.
+  /// with Error 153 / 152-4).
   static const _videoBase = 'https://www.youtube-nocookie.com/embed';
 
   @override
@@ -601,7 +600,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             onPageChanged: (i) => setState(() => _pageIdx = i),
             itemBuilder: (context, i) => Image.network(
               Backend.imageUrl(ids[i], width: 900),
-              headers: const {'X-Appwrite-Project': appwriteProjectId},
               fit: BoxFit.cover,
               width: double.infinity,
               loadingBuilder: (context, child, progress) => progress == null

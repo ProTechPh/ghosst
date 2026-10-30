@@ -4,7 +4,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../appwrite_client.dart';
 import '../premium.dart';
 import '../services/cloudinary.dart';
 import '../services/worker_backend.dart';
@@ -504,9 +503,6 @@ class _AdminScreenState extends State<AdminScreen> {
                               thumb(
                                 Image.network(
                                   Backend.imageUrl(id, width: 200),
-                                  headers: const {
-                                    'X-Appwrite-Project': appwriteProjectId,
-                                  },
                                   fit: BoxFit.cover,
                                   width: 66,
                                   height: 66,

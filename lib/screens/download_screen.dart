@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../appwrite_client.dart';
 import '../premium.dart';
 import '../services/apk_download.dart';
 import '../services/distribution.dart';
@@ -353,7 +352,6 @@ class _DownloadScreenState extends State<DownloadScreen> {
       borderRadius: BorderRadius.circular(15),
       child: Image.network(
         url,
-        headers: const {'X-Appwrite-Project': appwriteProjectId},
         width: 52,
         height: 52,
         fit: BoxFit.cover,
