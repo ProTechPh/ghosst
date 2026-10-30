@@ -10,6 +10,7 @@ import '../services/ad_service.dart';
 import '../services/worker_backend.dart';
 import '../services/consent_service.dart';
 import '../services/distribution.dart';
+import '../services/play_store.dart';
 import '../theme.dart';
 import 'my_apps_screen.dart';
 import 'wallet_screen.dart';
@@ -113,6 +114,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _signOut() async {
     Navigator.of(context).pop();
     widget.onSignOut();
+  }
+
+  /// Play shows its own full-screen flow when there is an update; otherwise
+  /// say so instead of leaving the tap with no feedback.
+  Future<void> _checkForUpdate() async {
+    final started = await PlayStore.checkForUpdate();
+    if (!mounted || started) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          Distribution.isPlay
+              ? "You're on the latest version."
+              : 'Updates come from the Play Store build.',
+        ),
+      ),
+    );
   }
 
   Future<void> _privacyChoices() async {
@@ -557,6 +574,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           color: AppColors.cyan,
                           label: 'Privacy choices',
                           onTap: _privacyChoices,
+                        ),
+                        Divider(
+                          height: 1,
+                          color: Colors.white.withValues(alpha: 0.06),
+                        ),
+                        _menuRow(
+                          icon: Icons.star_outline_rounded,
+                          color: AppColors.gold,
+                          label: 'Rate us on Play Store',
+                          onTap: PlayStore.rate,
+                        ),
+                        Divider(
+                          height: 1,
+                          color: Colors.white.withValues(alpha: 0.06),
+                        ),
+                        _menuRow(
+                          icon: Icons.system_update_alt_rounded,
+                          color: AppColors.cyan,
+                          label: 'Check for updates',
+                          onTap: _checkForUpdate,
                         ),
                         Divider(
                           height: 1,
