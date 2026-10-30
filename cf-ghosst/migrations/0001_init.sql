@@ -2,7 +2,7 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE users (
   id            TEXT PRIMARY KEY,
-  email         TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  email         TEXT NOT NULL COLLATE NOCASE,
   password_hash TEXT NOT NULL,
   display_name  TEXT NOT NULL DEFAULT '',
   coins         INTEGER NOT NULL DEFAULT 0 CHECK (coins >= 0),
@@ -10,6 +10,9 @@ CREATE TABLE users (
   created_at    TEXT NOT NULL,
   deleted_at    TEXT
 );
+-- Partial index, not UNIQUE on the column: a deleted account must free its
+-- email so the same person can register again.
+CREATE UNIQUE INDEX ux_users_email ON users(email) WHERE deleted_at IS NULL;
 
 CREATE TABLE sessions (
   id           TEXT PRIMARY KEY,
@@ -105,9 +108,10 @@ CREATE TABLE ad_rewards (
 CREATE INDEX idx_ad_rewards_user ON ad_rewards(user_id, created_at DESC);
 
 CREATE TABLE idempotency (
-  key        TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL,
-  response   TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  key        TEXT NOT NULL,
+  response   TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, key)
 );
 CREATE INDEX idx_idempotency_created ON idempotency(created_at);

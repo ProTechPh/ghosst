@@ -171,7 +171,7 @@ class ApiBackend {
     );
   }
 
-  Future<void> deleteAccount() => _api.post('/account').then((_) {});
+  Future<void> deleteAccount() => _api.delete('/account', data: {'confirm': 'DELETE'});
 
   static String _randomKey() {
     final random = math.Random.secure();

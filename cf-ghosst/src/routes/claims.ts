@@ -1,6 +1,6 @@
 import { ApiError, json, readJson } from "../lib/http";
 import { presignGet } from "../lib/r2";
-import { replay, store } from "../lib/idempotency";
+import { complete, release, reserve } from "../lib/idempotency";
 import type { Ctx } from "../index";
 
 interface ProductRef {
@@ -32,23 +32,36 @@ export async function claim(ctx: Ctx): Promise<Response> {
   }
   if (idemKey.length > 128) throw new ApiError(400, "bad_idempotency_key", "Idempotency key too long");
 
-  const previous = await replay(ctx.env, uid, idemKey);
-  if (previous) return previous;
+  const reservation = await reserve(ctx.env, uid, idemKey);
+  if (reservation.state === "replay") {
+    return new Response(reservation.response, {
+      headers: { "content-type": "application/json; charset=utf-8" },
+    });
+  }
+  if (reservation.state === "in_flight") {
+    throw new ApiError(409, "request_in_progress", "Same request is still running — retry", 2);
+  }
 
-  const product = await ctx.env.DB.prepare(
-    `SELECT id, name, cost, type FROM products WHERE id = ?1 AND active = 1`,
-  )
-    .bind(body.productId)
-    .first<ProductRef>();
-  if (!product) throw new ApiError(404, "product_not_found", "Product not found");
+  try {
+    const product = await ctx.env.DB.prepare(
+      `SELECT id, name, cost, type FROM products WHERE id = ?1 AND active = 1`,
+    )
+      .bind(body.productId)
+      .first<ProductRef>();
+    if (!product) throw new ApiError(404, "product_not_found", "Product not found");
 
-  const result =
-    product.type === "key"
-      ? await claimLicense(ctx, uid, product, (body.duration ?? "").trim())
-      : await claimDownload(ctx, uid, product);
+    const result =
+      product.type === "key"
+        ? await claimLicense(ctx, uid, product, (body.duration ?? "").trim())
+        : await claimDownload(ctx, uid, product);
 
-  await store(ctx.env, uid, idemKey, result);
-  return result;
+    await complete(ctx.env, uid, idemKey, result);
+    return result;
+  } catch (err) {
+    // Free the reservation so the client's own retry is not blocked by it.
+    await release(ctx.env, uid, idemKey).catch(() => {});
+    throw err;
+  }
 }
 
 async function claimLicense(
@@ -81,49 +94,59 @@ async function claimLicense(
 
   // 2. Oldest available key, honouring the duration pool.
   const now = new Date().toISOString();
-  const picked = await ctx.env.DB.prepare(
-    `UPDATE keys SET status = 'claimed', claimed_by = ?3, claimed_at = ?4
-      WHERE id = (
-        SELECT id FROM keys
-         WHERE product_id = ?1 AND status = 'available' AND (?2 = '' OR duration = ?2)
-         ORDER BY created_at LIMIT 1
-      )
-      AND status = 'available'
-      RETURNING id, key_value`,
-  )
-    .bind(product.id, durationLabel, uid, now)
-    .first<{ id: string; key_value: string }>();
-
-  if (!picked) {
-    await ctx.env.DB.prepare(`UPDATE users SET coins = coins + ?1 WHERE id = ?2`)
-      .bind(cost, uid)
-      .run();
-    throw new ApiError(
-      409,
-      "out_of_stock",
-      durationLabel ? `Out of stock for ${durationLabel}` : "Out of stock",
-    );
-  }
-
-  // 3. Record it.
-  await ctx.env.DB.prepare(
-    `INSERT INTO claims (id, user_id, product_id, product_name, key_id, key_text, cost, duration, created_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
-  )
-    .bind(
-      crypto.randomUUID(),
-      uid,
-      product.id,
-      product.name,
-      picked.id,
-      picked.key_value,
-      cost,
-      durationLabel,
-      now,
+  try {
+    const picked = await ctx.env.DB.prepare(
+      `UPDATE keys SET status = 'claimed', claimed_by = ?3, claimed_at = ?4
+        WHERE id = (
+          SELECT id FROM keys
+           WHERE product_id = ?1 AND status = 'available' AND (?2 = '' OR duration = ?2)
+           ORDER BY created_at LIMIT 1
+        )
+        AND status = 'available'
+        RETURNING id, key_value`,
     )
-    .run();
+      .bind(product.id, durationLabel, uid, now)
+      .first<{ id: string; key_value: string }>();
 
-  return json({ ok: true, key: picked.key_value, cost, coins: charged.coins });
+    if (!picked) {
+      throw new ApiError(
+        409,
+        "out_of_stock",
+        durationLabel ? `Out of stock for ${durationLabel}` : "Out of stock",
+      );
+    }
+
+    // 3. Record it.
+    await ctx.env.DB.prepare(
+      `INSERT INTO claims (id, user_id, product_id, product_name, key_id, key_text, cost, duration, created_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+    )
+      .bind(
+        crypto.randomUUID(),
+        uid,
+        product.id,
+        product.name,
+        picked.id,
+        picked.key_value,
+        cost,
+        durationLabel,
+        now,
+      )
+      .run();
+
+    return json({ ok: true, key: picked.key_value, cost, coins: charged.coins });
+  } catch (err) {
+    // Compensate: refund and hand the key back. Keyed on (claimed_by, claimed_at)
+    // so a key taken by someone else is never released.
+    await ctx.env.DB.batch([
+      ctx.env.DB.prepare(`UPDATE users SET coins = coins + ?1 WHERE id = ?2`).bind(cost, uid),
+      ctx.env.DB.prepare(
+        `UPDATE keys SET status = 'available', claimed_by = NULL, claimed_at = NULL
+          WHERE product_id = ?1 AND claimed_by = ?2 AND claimed_at = ?3`,
+      ).bind(product.id, uid, now),
+    ]).catch(() => {});
+    throw err;
+  }
 }
 
 async function claimDownload(ctx: Ctx, uid: string, product: ProductRef): Promise<Response> {
@@ -167,24 +190,34 @@ async function claimDownload(ctx: Ctx, uid: string, product: ProductRef): Promis
   if (!charged) throw await insufficient(product.cost, uid, ctx);
 
   const now = new Date().toISOString();
-  const inserted = await ctx.env.DB.prepare(
-    `INSERT INTO claims (id, user_id, product_id, product_name, key_id, key_text, cost, object_key, created_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, 'app', ?6, ?7, ?8)
-     ON CONFLICT DO NOTHING`,
-  )
-    .bind(
-      crypto.randomUUID(),
-      uid,
-      product.id,
-      product.name,
-      file.object_key,
-      product.cost,
-      file.object_key,
-      now,
+  let won = false;
+  try {
+    const inserted = await ctx.env.DB.prepare(
+      `INSERT INTO claims (id, user_id, product_id, product_name, key_id, key_text, cost, object_key, created_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, 'app', ?6, ?7, ?8)
+       ON CONFLICT DO NOTHING`,
     )
-    .run();
+      .bind(
+        crypto.randomUUID(),
+        uid,
+        product.id,
+        product.name,
+        file.object_key,
+        product.cost,
+        file.object_key,
+        now,
+      )
+      .run();
+    won = (inserted.meta.changes ?? 0) > 0;
+  } catch (err) {
+    // Charged but not recorded — give the coins back before surfacing the error.
+    await ctx.env.DB.prepare(`UPDATE users SET coins = coins + ?1 WHERE id = ?2`)
+      .bind(product.cost, uid)
+      .run()
+      .catch(() => {});
+    throw err;
+  }
 
-  const won = (inserted.meta.changes ?? 0) > 0;
   if (!won) {
     // Lost a race against another instance — refund and serve the existing claim.
     await ctx.env.DB.prepare(`UPDATE users SET coins = coins + ?1 WHERE id = ?2`)

@@ -38,7 +38,9 @@ export async function register(ctx: Ctx): Promise<Response> {
     throw new ApiError(400, "weak_password", "Password must be at least 8 characters");
   }
 
-  const taken = await ctx.env.DB.prepare(`SELECT id FROM users WHERE email = ?1`)
+  const taken = await ctx.env.DB.prepare(
+    `SELECT id FROM users WHERE email = ?1 AND deleted_at IS NULL`,
+  )
     .bind(email)
     .first<{ id: string }>();
   if (taken) throw new ApiError(409, "email_taken", "That email is already registered");
@@ -105,10 +107,17 @@ export async function refresh(ctx: Ctx): Promise<Response> {
   if (!row) throw new ApiError(401, "unauthorized", "Unknown refresh token");
 
   if (row.revoked_at) {
-    // Reuse of a rotated token means it leaked: kill the whole family.
-    await ctx.env.DB.prepare(`UPDATE sessions SET revoked_at = ?1 WHERE family = ?2 AND revoked_at IS NULL`)
-      .bind(new Date().toISOString(), row.family)
-      .run();
+    // A replay inside the grace window is usually the client retrying after a
+    // dropped response, not a stolen token: refuse it without nuking every
+    // session the user has. Outside the window, assume the token leaked.
+    const revokedMsAgo = Date.now() - Date.parse(row.revoked_at);
+    if (!(revokedMsAgo >= 0 && revokedMsAgo <= 60_000)) {
+      await ctx.env.DB.prepare(
+        `UPDATE sessions SET revoked_at = ?1 WHERE family = ?2 AND revoked_at IS NULL`,
+      )
+        .bind(new Date().toISOString(), row.family)
+        .run();
+    }
     throw new ApiError(401, "unauthorized", "Session revoked — sign in again");
   }
 

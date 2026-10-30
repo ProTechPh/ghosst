@@ -27,6 +27,15 @@ class ApiClient {
 
     _dio.interceptors.add(_AuthInterceptor(
       dio: _dio,
+      // Separate bare client: refreshing through _dio would queue the refresh
+      // error behind the very onError handler that is awaiting it.
+      refreshDio: Dio(
+        BaseOptions(
+          baseUrl: ApiConfig.baseUrl,
+          connectTimeout: ApiConfig.connectTimeout,
+          receiveTimeout: ApiConfig.receiveTimeout,
+        ),
+      ),
       session: _session,
       onSignedOut: () => onSignedOut?.call(),
     ));
@@ -68,8 +77,8 @@ class ApiClient {
         return _asMap(res.data);
       });
 
-  Future<void> delete(String path) => _run(() async {
-        await _dio.delete<dynamic>(path);
+  Future<void> delete(String path, {Object? data}) => _run(() async {
+        await _dio.delete<dynamic>(path, data: data);
       });
 
   /// Exposed for call sites that need cancel tokens or upload progress.
@@ -100,13 +109,16 @@ class ApiClient {
 class _AuthInterceptor extends QueuedInterceptor {
   _AuthInterceptor({
     required Dio dio,
+    required Dio refreshDio,
     required SessionStore session,
     required void Function() onSignedOut,
   })  : _dio = dio,
+        _refreshDio = refreshDio,
         _session = session,
         _onSignedOut = onSignedOut;
 
   final Dio _dio;
+  final Dio _refreshDio;
   final SessionStore _session;
   final void Function() _onSignedOut;
   Future<bool>? _refreshInFlight;
@@ -161,10 +173,9 @@ class _AuthInterceptor extends QueuedInterceptor {
     final refresh = await _session.refreshToken();
     if (refresh == null || refresh.isEmpty) return false;
 
-    final res = await _dio.post<dynamic>(
+    final res = await _refreshDio.post<dynamic>(
       '/auth/refresh',
       data: {'refreshToken': refresh},
-      options: Options(extra: const {'skipAuth': true, 'noRetry': true}),
     );
 
     final body = res.data is Map<String, dynamic> ? res.data as Map<String, dynamic> : null;
