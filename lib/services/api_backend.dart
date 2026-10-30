@@ -156,8 +156,11 @@ class ApiBackend {
       return res;
     } on ApiException catch (e) {
       // Keep the key for retryable failures so the retry is free; drop it for
-      // terminal ones so the user's next attempt is a fresh decision.
-      if (!e.retryable) _claimKeys.remove(cacheKey);
+      // terminal ones so the user's next attempt is a fresh decision. A 409
+      // "in progress" means the first request may still be charging — keep it.
+      if (!e.retryable && e.code != 'request_in_progress') {
+        _claimKeys.remove(cacheKey);
+      }
       rethrow;
     }
   }

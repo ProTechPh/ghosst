@@ -21,11 +21,17 @@ export 'backend.dart'
 
 /// The signed-in account, as much of it as the UI shows.
 class AppUser {
-  const AppUser({required this.id, required this.email, required this.name});
+  const AppUser({
+    required this.id,
+    required this.email,
+    required this.name,
+    this.createdAt = '',
+  });
 
   final String id;
   final String email;
   final String name;
+  final String createdAt;
 }
 
 /// Same surface as the Appwrite `Backend`, served by the `ghosst-api` Worker.
@@ -96,6 +102,7 @@ class Backend {
       id: u['id'] as String,
       email: u['email'] as String? ?? '',
       name: u['displayName'] as String? ?? '',
+      createdAt: u['createdAt'] as String? ?? '',
     );
   }
 
@@ -116,10 +123,20 @@ class Backend {
     if (await _session.accessToken() == null) return 0;
     try {
       return (await _api.get('/wallet'))['coins'] as int? ?? 0;
-    } on ApiException {
+    } on ApiException catch (e) {
+      // A blip must not read as "0 coins" — that flips the UI to "not enough".
+      if (_transient(e)) rethrow;
       return 0;
     }
   }
+
+  /// Failures where the screen should keep showing what it had.
+  static bool _transient(ApiException e) =>
+      e.kind == ApiErrorKind.network ||
+      e.kind == ApiErrorKind.timeout ||
+      e.kind == ApiErrorKind.server ||
+      e.kind == ApiErrorKind.rateLimited ||
+      e.kind == ApiErrorKind.quotaExceeded;
 
   // ---- store ----
 
@@ -187,25 +204,23 @@ class Backend {
 
   static Future<List<Claim>> myClaims() async {
     if (await _session.accessToken() == null) return [];
-    try {
-      final raw = await _apiBackend.myClaims();
-      final out = <Claim>[];
-      for (final c in raw) {
-        // The claim row never carries the link; ask for a fresh one instead.
-        var url = '';
-        if (c.isDownload) {
-          try {
-            url = (await _apiBackend.downloadTicket(c.productId)).url;
-          } on ApiException {
-            url = '';
-          }
+    // Failing the whole call beats returning [] — callers show an error with
+    // Retry instead of "you own nothing".
+    final raw = await _apiBackend.myClaims();
+    final out = <Claim>[];
+    for (final c in raw) {
+      // The claim row never carries the link; ask for a fresh one instead.
+      var url = '';
+      if (c.isDownload) {
+        try {
+          url = (await _apiBackend.downloadTicket(c.productId)).url;
+        } on ApiException {
+          url = '';
         }
-        out.add(_claim(c, url));
       }
-      return out;
-    } on ApiException {
-      return [];
+      out.add(_claim(c, url));
     }
+    return out;
   }
 
   static Future<List<AdReward>> myAdRewards() async {
@@ -384,13 +399,11 @@ class Backend {
 
   // ---- download link (admin) ----
 
+  /// The stored link, for the admin form. Throws when it can't be read — an
+  /// empty string would silently wipe a paid download on the next save.
   static Future<String> appFileFor(String productId) async {
-    try {
-      final p = (await _api.get('/products/$productId'))['product'] as Map<String, dynamic>;
-      return p['fileUrl'] as String? ?? '';
-    } on ApiException {
-      return '';
-    }
+    final p = (await _api.get('/products/$productId'))['product'] as Map<String, dynamic>;
+    return p['fileUrl'] as String? ?? '';
   }
 
   static Future<void> upsertAppFile(String productId, String url) async {
@@ -418,15 +431,11 @@ class Backend {
     try {
       total = await countKeys(productId, usedOnly: usedOnly);
     } catch (_) {}
-    // The Worker route clears the whole stock; used-only deletes row by row.
-    if (usedOnly) {
-      final rows = await _adminKeys(productId: productId, status: 'claimed');
-      for (final k in rows) {
-        await deleteKey(k.keyId);
-      }
-    } else {
-      await _api.delete('/admin/products/$productId/keys');
-    }
+    onProgress?.call(0, total);
+    await _api.delete(
+      '/admin/products/$productId/keys',
+      query: {if (usedOnly) 'status': 'claimed'},
+    );
     onProgress?.call(total, total);
     return 0;
   }

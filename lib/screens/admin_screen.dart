@@ -213,9 +213,12 @@ class _AdminScreenState extends State<AdminScreen> {
         ],
       ),
     );
-    ctl.dispose();
+    // showDialog's future resolves before the exit animation, so the field is
+    // still mounted when it completes — dispose after the frame instead.
+    WidgetsBinding.instance.addPostFrameCallback((_) => ctl.dispose());
     if (url == null || url.isEmpty) return null;
-    if (!url.startsWith('http')) {
+    final uri = Uri.tryParse(url);
+    if (uri == null || !(uri.isScheme('http') || uri.isScheme('https')) || uri.host.isEmpty) {
       if (mounted) {
         setState(() => message = 'Dapat magsimula sa http(s) ang image URL.');
       }
@@ -301,7 +304,13 @@ class _AdminScreenState extends State<AdminScreen> {
     var type = p.type;
     // MediaFire links are admin-only — fetch the current one before the
     // dialog opens so saving doesn't silently wipe it.
-    editLink.text = await Backend.appFileFor(p.id);
+    var linkLoaded = true;
+    try {
+      editLink.text = await Backend.appFileFor(p.id);
+    } catch (_) {
+      // Couldn't read it. Never sync blind: the save below must not clear it.
+      linkLoaded = false;
+    }
     if (!mounted) return;
     var remoteIds = <String>[...p.imageIds];
     var localPaths = <String>[];
@@ -348,7 +357,7 @@ class _AdminScreenState extends State<AdminScreen> {
                 );
                 // Keep the MediaFire link in sync for app-store products.
                 final link = editLink.text.trim();
-                if (type != 'key') {
+                if (type != 'key' && linkLoaded) {
                   if (link.isNotEmpty) {
                     await Backend.upsertAppFile(p.id, link);
                   } else {
@@ -1473,27 +1482,13 @@ class _AdminScreenState extends State<AdminScreen> {
       message = '';
     });
     try {
-      // Product doc first — if this throws, nothing else was touched.
+      // The route cascades keys, images and the download link itself.
       await Backend.deleteProduct(p.id);
 
-      // Cascade, tracked so leftovers get reported instead of hidden.
-      final issues = <String>[];
-      final keyFails = await Backend.deleteKeysForProduct(p.id);
-      if (keyFails > 0) issues.add('$keyFails key(s)');
-      try {
-        await Backend.deleteAppFile(p.id);
-      } catch (_) {
-        issues.add('the MediaFire link');
-      }
       // Reload from the database — the list must reflect what's stored.
       await _load();
       if (!mounted) return;
-      setState(() {
-        message = issues.isEmpty
-            ? 'Deleted "${p.name}".'
-            : 'Deleted "${p.name}" — but ${issues.join(', ')} '
-                  'could not be removed. Retry, or check the console.';
-      });
+      setState(() => message = 'Deleted "${p.name}".');
     } catch (e) {
       if (mounted) setState(() => message = 'Delete failed: $e');
     } finally {

@@ -174,7 +174,13 @@ class Claim {
   /// Duration option the buyer picked (key products with durations only).
   final String duration;
 
-  bool get isDownload => downloadUrl.isNotEmpty;
+  /// Download claims never carry a link in `keyText`; the Worker stores the
+  /// product type there instead. The URL can be missing when its ticket fails.
+  bool get isDownload =>
+      downloadUrl.isNotEmpty ||
+      keyText == 'app' ||
+      keyText == 'apk' ||
+      keyText == 'file';
 
   factory Claim.fromDoc(Document d) => Claim(
     id: d.$id,

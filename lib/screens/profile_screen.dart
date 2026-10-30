@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:appwrite/models.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -37,7 +36,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  User? _user;
+  AppUser? _user;
   int _coins = 0;
   List<Claim> _claims = [];
   bool _loading = true;
@@ -56,7 +55,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ]);
     if (!mounted) return;
     setState(() {
-      _user = results[0] as User?;
+      _user = results[0] as AppUser?;
       _coins = results[1] as int;
       _claims = results[2] as List<Claim>;
       _loading = false;
@@ -81,7 +80,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   String get _since {
-    final created = _user?.$createdAt ?? '';
+    final created = _user?.createdAt ?? '';
     return created.length >= 10 ? created.substring(0, 10) : '';
   }
 

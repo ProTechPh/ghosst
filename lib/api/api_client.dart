@@ -77,8 +77,9 @@ class ApiClient {
         return _asMap(res.data);
       });
 
-  Future<void> delete(String path, {Object? data}) => _run(() async {
-        await _dio.delete<dynamic>(path, data: data);
+  Future<void> delete(String path, {Object? data, Map<String, dynamic>? query}) =>
+      _run(() async {
+        await _dio.delete<dynamic>(path, data: data, queryParameters: query);
       });
 
   /// Exposed for call sites that need cancel tokens or upload progress.

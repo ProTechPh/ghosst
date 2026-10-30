@@ -108,13 +108,14 @@ export async function remove(ctx: Ctx): Promise<Response> {
   return json({ ok: true });
 }
 
-/** DELETE /v1/admin/products/:id/keys — clears the remaining stock of a product. */
+/** DELETE /v1/admin/products/:id/keys?status=claimed - clears the stock. */
 export async function clearForProduct(ctx: Ctx): Promise<Response> {
   requireAdmin(ctx);
+  const status = ctx.url.searchParams.get("status") ?? "";
   const res = await ctx.env.DB.prepare(
-    `DELETE FROM keys WHERE product_id = ?1 AND status = 'available'`,
+    `DELETE FROM keys WHERE product_id = ?1 AND (?2 = '' OR status = ?2)`,
   )
-    .bind(ctx.params.id)
+    .bind(ctx.params.id, status)
     .run();
   return json({ ok: true, deleted: res.meta.changes ?? 0 });
 }
