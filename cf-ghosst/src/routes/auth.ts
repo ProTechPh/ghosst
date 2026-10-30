@@ -9,7 +9,9 @@ import {
 } from "../lib/auth";
 import type { Ctx } from "../index";
 
-const ACCESS_TTL = 900; // 15 min
+// 1 h: every refresh costs 2 row writes, and on the Free plan the daily budget
+// for those is 100k — a 15 min token spent it on idle users, not on claims.
+const ACCESS_TTL = 3600;
 const REFRESH_TTL_MS = 60 * 24 * 60 * 60 * 1000; // 60 days
 
 interface Credentials {
