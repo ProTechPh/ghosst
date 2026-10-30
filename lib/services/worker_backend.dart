@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
 import 'api_backend.dart';
 import 'backend.dart';
+import 'r2_upload_service.dart';
 import 'session_store.dart';
 
 // The screens talk to `Backend`. Swapping this file's import for
@@ -408,14 +410,31 @@ class Backend {
   /// URL, or a key the CDN will complete.
   static String imageUrl(String fileId, {int width = 900}) => fileId;
 
+  /// Direct Flutter → R2 upload; only the signed URL comes from the Worker.
+  /// Returns the public URL, which `product_images` keeps verbatim.
   static Future<String> uploadImage(String path) async {
-    throw const ApiException(
-      kind: ApiErrorKind.conflict,
-      message: 'Hindi pa naka-setup ang image storage. I-paste na lang ang image URL.',
+    final file = File(path);
+    final name = path.split(RegExp(r'[/\\]')).last;
+    final result = await R2UploadService(_api).upload(
+      file: file,
+      scope: 'product-image',
+      contentType: _imageType(name),
+      filename: name,
     );
+    return result.publicUrl.startsWith('http') ? result.publicUrl : result.objectKey;
   }
 
+  // shortcut: the stored value is the public URL, not the R2 key, so a delete
+  // cannot reach the object. Stray images only cost storage; revisit when the
+  // admin screen keeps keys instead of URLs.
   static Future<void> deleteImage(String fileId) async {}
+
+  static String _imageType(String name) => switch (name.split('.').last.toLowerCase()) {
+        'png' => 'image/png',
+        'webp' => 'image/webp',
+        'gif' => 'image/gif',
+        _ => 'image/jpeg',
+      };
 
   static Future<void> deleteKey(String keyId) => _api.delete('/admin/keys/$keyId');
 

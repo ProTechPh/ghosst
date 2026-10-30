@@ -85,7 +85,11 @@ export async function complete(ctx: Ctx): Promise<Response> {
   const kind = body.kind === "file" ? "file" : "image";
 
   if (!objectKey.startsWith("product-")) throw new ApiError(400, "bad_key", "Object key rejected");
-  if (!productId) throw new ApiError(400, "invalid_product", "productId is required");
+  // The admin form uploads before the product exists: a bare image is just an
+  // object the product references by URL later. A file needs its product row.
+  if (!productId && kind === "file") {
+    throw new ApiError(400, "invalid_product", "productId is required");
+  }
 
   const meta = await verifyObject(ctx.env, objectKey);
   if (!meta) throw new ApiError(409, "upload_missing", "Upload did not reach storage — retry");
@@ -100,7 +104,9 @@ export async function complete(ctx: Ctx): Promise<Response> {
   }
 
   const now = new Date().toISOString();
-  if (kind === "image") {
+  if (!productId) {
+    // Orphan upload: the product is created right after and stores the URL.
+  } else if (kind === "image") {
     await ctx.env.DB.prepare(
       `INSERT INTO product_images (id, product_id, object_key, position, created_at)
        VALUES (?1, ?2, ?3,
