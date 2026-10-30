@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:appwrite/appwrite.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -145,7 +144,7 @@ class _ClaimFlowState extends State<_ClaimFlow> {
       await HapticFeedback.mediumImpact();
       setState(() => _phase = _Phase.success);
     } catch (e) {
-      final msg = e is AppwriteException ? (e.message ?? 'Claim failed') : '$e';
+      final msg = '$e';
       final remaining = 900 - watch.elapsedMilliseconds;
       if (remaining > 0) {
         await Future<void>.delayed(Duration(milliseconds: remaining));

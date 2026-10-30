@@ -235,7 +235,7 @@ void main() {
     expect(find.text('Minimum 8 characters'), findsNothing); // hint swapped out
   });
 
-  testWidgets('sign-in rejects a password below the Appwrite minimum', (
+  testWidgets('sign-in rejects a password below the 8-character minimum', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -261,7 +261,7 @@ void main() {
   });
 
   test('auth errors are rewritten into friendly copy', () {
-    // The exact raw message Appwrite returns for out-of-range passwords.
+    // The raw message the Worker returns for out-of-range passwords.
     expect(
       friendlyAuthError(
         'invalid password param must be between 8 and 256 char',

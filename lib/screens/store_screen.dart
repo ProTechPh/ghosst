@@ -4,7 +4,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-import '../appwrite_client.dart';
 import '../premium.dart';
 import '../services/ad_service.dart';
 import '../services/worker_backend.dart';
@@ -599,7 +598,6 @@ class _StoreScreenState extends State<StoreScreen>
         borderRadius: BorderRadius.circular(16),
         child: Image.network(
           Backend.imageUrl(p.imageIds.first, width: 200),
-          headers: const {'X-Appwrite-Project': appwriteProjectId},
           width: size,
           height: size,
           fit: BoxFit.cover,

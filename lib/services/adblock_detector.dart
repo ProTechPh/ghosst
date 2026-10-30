@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
-import '../appwrite_client.dart';
+import '../api/api_config.dart';
 import 'security.dart';
 
 /// Verdict of the ad-blocker check.
@@ -87,7 +87,7 @@ class AdblockDetector {
 
   /// The pure verdict logic, extracted so tests can inject fake probes.
   ///
-  /// 1. Control chain: the Appwrite backend must resolve *and* answer HTTP.
+  /// 1. Control chain: the Worker must resolve *and* answer HTTP.
   ///    Either failing means the device has no usable network → offline.
   /// 2. Ad chains run in parallel; each failing host records a flag
   ///    (`dns:` when resolution/sinkhole failed, `http:` when the connection
@@ -102,14 +102,10 @@ class AdblockDetector {
     required UrlProber probe,
     Future<String?> Function()? privateDns,
   }) async {
-    final controlHost = Uri.parse(appwriteEndpoint).host;
+    final controlUrl = Uri.parse('${ApiConfig.baseUrl}/products');
+    final controlHost = controlUrl.host;
     final results = await Future.wait<_Chain>([
-      _probeHost(
-        resolve,
-        probe,
-        controlHost,
-        Uri.parse('$appwriteEndpoint/health'),
-      ),
+      _probeHost(resolve, probe, controlHost, controlUrl),
       for (final host in adHosts)
         _probeHost(resolve, probe, host, Uri.parse('https://$host/')),
     ]);

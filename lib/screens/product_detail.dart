@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
-import '../appwrite_client.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
 import 'claim_reveal.dart';
@@ -57,12 +56,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   /// Parsed video id (kept for the "Watch on YouTube" fallback).
   late final String? _ytId = _youtubeId(widget.product.youtubeUrl);
 
-  /// Appwrite function domain — serves the embed wrapper at `?yt=<id>`.
-  /// Loading the wrapper from this REAL third-party origin (instead of a
-  /// `loadHtmlString` data document or a faked youtube.com baseUrl) is what
-  /// YouTube's embedded player accepts; the other shapes are rejected with
-  /// Error 153 / 152-4.
-  static const _videoBase = 'https://claim.sgp.appwrite.run';
+  /// YouTube's own no-cookie origin — the only shape the embedded player
+  /// accepts (a `loadHtmlString` data document or a faked baseUrl is rejected
+  /// with Error 153 / 152-4).
+  static const _videoBase = 'https://www.youtube-nocookie.com/embed';
 
   @override
   void initState() {
@@ -75,7 +72,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
         // Reduced Chrome UA without WebView markers ("; wv", "Version/4.0").
         ..setUserAgent(_chromeMobileUa)
-        ..loadRequest(Uri.parse('$_videoBase/?yt=$id'));
+        ..loadRequest(Uri.parse('$_videoBase/$id'));
     }
   }
 
@@ -603,7 +600,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             onPageChanged: (i) => setState(() => _pageIdx = i),
             itemBuilder: (context, i) => Image.network(
               Backend.imageUrl(ids[i], width: 900),
-              headers: const {'X-Appwrite-Project': appwriteProjectId},
               fit: BoxFit.cover,
               width: double.infinity,
               loadingBuilder: (context, child, progress) => progress == null

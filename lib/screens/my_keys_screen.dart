@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../appwrite_client.dart';
 import '../services/worker_backend.dart';
 import '../services/distribution.dart';
 import '../theme.dart';
@@ -213,7 +212,6 @@ class _MyKeysScreenState extends State<MyKeysScreen> {
         }
         return Image.network(
           url,
-          headers: const {'X-Appwrite-Project': appwriteProjectId},
           fit: BoxFit.cover,
           errorBuilder: (ctx, e, st) => c.isDownload
               ? fallback

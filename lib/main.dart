@@ -21,6 +21,7 @@ import 'services/adblock_detector.dart';
 import 'services/worker_backend.dart';
 import 'services/consent_service.dart';
 import 'services/distribution.dart';
+import 'services/play_store.dart';
 import 'services/security.dart';
 import 'sign_in.dart';
 import 'sign_up.dart';
@@ -266,6 +267,8 @@ class _HomeState extends State<Home> {
       if (mounted) setState(() => signedIn = false);
     };
     _load();
+    // Play only answers for its own installs; silent everywhere else.
+    PlayStore.checkForUpdate();
   }
 
   Future<void> _load() async {

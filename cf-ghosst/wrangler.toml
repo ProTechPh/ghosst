@@ -23,7 +23,7 @@ database_id = "c51682ac-01b9-4799-8638-cf0de063895a"
 enabled = true
 
 [vars]
-# Image URLs are stored fully qualified (Appwrite CDN today), so this stays empty.
+# Image URLs are stored fully qualified (Cloudinary today), so this stays empty.
 PUBLIC_CDN = ""
 ALLOWED_ORIGINS = "https://ghosst.app,https://app.ghosst.app"
 # Cloudinary cleanup on product delete / image removal. The API key is public.

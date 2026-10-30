@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:ghosst/appwrite_client.dart';
+import 'package:ghosst/api/api_config.dart';
 import 'package:ghosst/premium.dart';
 import 'package:ghosst/screens/adblock_screen.dart';
 import 'package:ghosst/services/adblock_detector.dart';
@@ -10,7 +10,7 @@ import 'package:ghosst/theme.dart';
 
 /// The control host runCheck probes (derived from the endpoint just like
 /// production code does).
-final String controlHost = Uri.parse(appwriteEndpoint).host;
+final String controlHost = Uri.parse(ApiConfig.baseUrl).host;
 
 final InternetAddress _realIp = InternetAddress('93.184.216.34');
 final InternetAddress _sinkhole = InternetAddress('0.0.0.0');

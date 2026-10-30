@@ -10,8 +10,8 @@ String? validateEmail(String value) {
 }
 
 /// Error message when [value] is not an acceptable password, otherwise null.
-/// Set [enforceLength] for registration (Appwrite's default minimum is 8).
-/// The 256-char cap always applies — Appwrite rejects longer values too.
+/// Set [enforceLength] for registration (the Worker's minimum is 8).
+/// The 256-char cap always applies — the server rejects longer values too.
 String? validatePassword(String value, {bool enforceLength = false}) {
   if (value.isEmpty) return 'Password is required';
   if (value.length > 256) return 'Password must be 256 characters or fewer';

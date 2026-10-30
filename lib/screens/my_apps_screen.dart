@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../appwrite_client.dart';
 import '../premium.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
@@ -135,7 +134,6 @@ class _MyAppsScreenState extends State<MyAppsScreen> {
         width: 44,
         height: 44,
         fit: BoxFit.cover,
-        headers: const {'X-Appwrite-Project': appwriteProjectId},
         errorBuilder: (c, e, s) => fallback,
       ),
     );
