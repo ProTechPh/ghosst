@@ -11,4 +11,9 @@ interface Env {
   R2_BUCKET?: string;
   R2_ACCESS_KEY_ID?: string;
   R2_SECRET_ACCESS_KEY?: string;
+  // Cloudinary: the app uploads with an unsigned preset; only the Worker holds
+  // the secret needed to delete an asset.
+  CLOUDINARY_CLOUD_NAME?: string;
+  CLOUDINARY_API_KEY?: string;
+  CLOUDINARY_API_SECRET?: string;
 }

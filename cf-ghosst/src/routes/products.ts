@@ -1,5 +1,6 @@
 import { ApiError, json, readJson } from "../lib/http";
 import { requireAdmin } from "../lib/auth";
+import { destroyImage } from "../lib/cloudinary";
 import type { Ctx } from "../index";
 
 interface ProductRow {
@@ -172,6 +173,14 @@ export async function update(ctx: Ctx): Promise<Response> {
     .first<{ id: string }>();
   if (!existing) throw new ApiError(404, "product_not_found", "Product not found");
 
+  const before = body.imageKeys
+    ? ((await ctx.env.DB.prepare(
+        `SELECT object_key FROM product_images WHERE product_id = ?1`,
+      )
+        .bind(id)
+        .all<{ object_key: string }>()).results ?? [])
+    : [];
+
   await ctx.env.DB.prepare(
     `UPDATE products SET
        name = COALESCE(?2, name),
@@ -200,6 +209,14 @@ export async function update(ctx: Ctx): Promise<Response> {
     .run();
 
   await applyRelations(ctx.env, id, body);
+
+  if (body.imageKeys) {
+    const kept = new Set(body.imageKeys);
+    await discardImages(
+      ctx.env,
+      before.map((i) => i.object_key).filter((k) => !kept.has(k)),
+    );
+  }
 
   // The stored download link travels with the product for the admin form.
   if (body.fileUrl !== undefined) {
@@ -247,9 +264,20 @@ export async function remove(ctx: Ctx): Promise<Response> {
     ...(images.results ?? []).map((i) => i.object_key),
     ...(files?.object_key ? [files.object_key] : []),
   ];
-  await Promise.allSettled(keys.map((key) => ctx.env.BUCKET?.delete(key)));
+  const cleaned = await discardImages(ctx.env, keys);
 
-  return json({ ok: true });
+  return json({ ok: true, filesDeleted: cleaned });
+}
+
+/**
+ * Best effort: a dangling object costs storage, not correctness. Absolute URLs are
+ * Cloudinary/MediaFire; `destroyImage` ignores everything that is not our cloud.
+ */
+async function discardImages(env: Env, keys: string[]): Promise<number> {
+  const results = await Promise.allSettled(
+    keys.map((key) => (/^https?:\/\//i.test(key) ? destroyImage(env, key) : env.BUCKET?.delete(key))),
+  );
+  return results.filter((r) => r.status === "fulfilled" && r.value === true).length;
 }
 
 /** Replaces images/durations wholesale — the admin UI always sends full lists. */

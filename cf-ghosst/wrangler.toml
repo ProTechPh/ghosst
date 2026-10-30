@@ -26,9 +26,13 @@ enabled = true
 # Image URLs are stored fully qualified (Appwrite CDN today), so this stays empty.
 PUBLIC_CDN = ""
 ALLOWED_ORIGINS = "https://ghosst.app,https://app.ghosst.app"
+# Cloudinary cleanup on product delete / image removal. The API key is public.
+CLOUDINARY_CLOUD_NAME = "zp6uwlrj"
+CLOUDINARY_API_KEY = "522415922899558"
 
 # Secrets (never put these in [vars]):
 #   wrangler secret put JWT_SECRET
 #   wrangler secret put COINS_PER_REWARD
+#   wrangler secret put CLOUDINARY_API_SECRET   (enables image deletion)
 #   wrangler secret put R2_ACCESS_KEY_ID        (only with R2)
 #   wrangler secret put R2_SECRET_ACCESS_KEY    (only with R2)
