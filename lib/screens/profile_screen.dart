@@ -161,7 +161,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _deleteAccount() async {
-    final controller = TextEditingController();
     var confirmed = false;
     final approved = await showDialog<bool>(
       context: context,
@@ -181,7 +180,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const Text('Type DELETE to confirm.'),
               const SizedBox(height: 8),
               TextField(
-                controller: controller,
                 autofocus: true,
                 textCapitalization: TextCapitalization.characters,
                 onChanged: (value) =>
@@ -205,7 +203,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
-    controller.dispose();
     if (approved != true || !mounted) return;
 
     showDialog<void>(
