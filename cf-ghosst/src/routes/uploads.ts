@@ -1,6 +1,6 @@
 import { ApiError, json, readJson } from "../lib/http";
 import { requireAdmin } from "../lib/auth";
-import { presignPut, verifyObject } from "../lib/r2";
+import { presignPut, storageReady, verifyObject } from "../lib/r2";
 import type { Ctx } from "../index";
 
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -52,6 +52,10 @@ export async function presign(ctx: Ctx): Promise<Response> {
   const ext = rule.ext.exec(filename)![0].toLowerCase();
   const objectKey = `${scope}s/${body.productId || "orphan"}/${crypto.randomUUID()}${ext}`;
 
+  if (!storageReady(ctx.env)) {
+    throw new ApiError(503, "storage_not_configured", "Uploads are off — R2 is not set up yet");
+  }
+
   const ticket = await presignPut(ctx.env, objectKey, contentType, 300);
   return json({
     ok: true,
@@ -87,11 +91,11 @@ export async function complete(ctx: Ctx): Promise<Response> {
   if (!meta) throw new ApiError(409, "upload_missing", "Upload did not reach storage — retry");
 
   if (meta.size !== Number(body.expectedSize ?? -1)) {
-    await ctx.env.BUCKET.delete(objectKey);
+    await ctx.env.BUCKET?.delete(objectKey);
     throw new ApiError(409, "size_mismatch", "Uploaded size did not match — retry");
   }
   if (meta.contentType !== (body.expectedType ?? "")) {
-    await ctx.env.BUCKET.delete(objectKey);
+    await ctx.env.BUCKET?.delete(objectKey);
     throw new ApiError(415, "type_mismatch", "Uploaded content type did not match");
   }
 

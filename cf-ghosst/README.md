@@ -3,6 +3,23 @@
 Cloudflare Workers API for Ghosst: Workers + D1 + R2, replacing Appwrite.
 The Flutter client lives in `../lib/api/` and `../lib/services/api_backend.dart`.
 
+## Current deployment
+
+| | |
+|---|---|
+| URL | https://ghosst-api.ghosst.workers.dev |
+| D1 | `ghosst` — `c51682ac-01b9-4799-8638-cf0de063895a` (APAC) |
+| R2 | **off** — no payment method on the account yet |
+| Account | `951f13d0a78bf4d0a6b2594b936c6f45` |
+
+R2 off means `product_files.object_key` holds a **full link** (MediaFire) and
+`/v1/uploads/*` answers `503 storage_not_configured`. Images are absolute URLs,
+so `PUBLIC_CDN` stays empty. Turning R2 on is the commented block in
+`wrangler.toml` plus the two R2 secrets — no code change.
+
+Deploy: `npx wrangler deploy`. Remote schema:
+`npx wrangler d1 execute ghosst --remote --file=migrations/0001_init.sql`.
+
 ## Routes
 
 | Method | Path | Auth |

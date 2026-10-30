@@ -1,4 +1,5 @@
 import { AwsClient } from "aws4fetch";
+import { ApiError } from "./http";
 
 export interface PresignedTicket {
   url: string;
@@ -12,8 +13,8 @@ function s3(env: Env): AwsClient {
   // One signer per isolate — rebuilding it costs CPU on every request.
   if (!client) {
     client = new AwsClient({
-      accessKeyId: env.R2_ACCESS_KEY_ID,
-      secretAccessKey: env.R2_SECRET_ACCESS_KEY,
+      accessKeyId: env.R2_ACCESS_KEY_ID ?? "",
+      secretAccessKey: env.R2_SECRET_ACCESS_KEY ?? "",
       service: "s3",
       region: "auto",
     });
@@ -87,11 +88,38 @@ export async function presignGet(
   return { url: signed.url, headers: {}, expiresIn: ttl };
 }
 
+export function storageReady(env: Env): boolean {
+  return Boolean(
+    env.BUCKET && env.R2_ACCOUNT_ID && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY,
+  );
+}
+
+/**
+ * Turns a stored value into a downloadable URL. `product_files.object_key` is
+ * either an R2 key or a fully-qualified link (MediaFire), so downloads keep
+ * working with R2 switched off.
+ */
+export async function fileTicket(
+  env: Env,
+  key: string,
+  filename: string,
+  ttlSeconds = 300,
+): Promise<PresignedTicket> {
+  if (/^https?:\/\//i.test(key)) {
+    return { url: key, headers: {}, expiresIn: 0 };
+  }
+  if (!storageReady(env)) {
+    throw new ApiError(503, "storage_not_configured", "Storage is not set up yet");
+  }
+  return presignGet(env, key, { ttlSeconds, filename });
+}
+
 /**
  * Verifies through the R2 binding (no SigV4): presigned PUT cannot carry
  * content-length-range, so the real size/type check happens here.
  */
 export async function verifyObject(env: Env, key: string) {
+  if (!env.BUCKET) return null;
   const head = await env.BUCKET.head(key);
   if (!head) return null;
   return {

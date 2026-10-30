@@ -2,32 +2,33 @@ name = "ghosst-api"
 main = "src/index.ts"
 compatibility_date = "2025-09-01"
 compatibility_flags = ["nodejs_compat"]
-workers_dev = false
+workers_dev = true
 
-# Custom domain only: *.workers.dev is blocked in some PH ISPs and the AdMob
-# SSV callback must stay on a stable hostname.
-routes = [{ pattern = "api.ghosst.app", custom_domain = true }]
+# Custom domain later, once the zone is on this account:
+# routes = [{ pattern = "api.ghosst.app", custom_domain = true }]
 
 [[d1_databases]]
 binding = "DB"
 database_name = "ghosst"
-database_id = "REPLACE_WITH_D1_ID"
+database_id = "c51682ac-01b9-4799-8638-cf0de063895a"
 
-[[r2_buckets]]
-binding = "BUCKET"
-bucket_name = "ghosst-media"
+# R2 is off until the account has a payment method. Turning it back on is this
+# block plus the three R2 secrets; the upload/download routes return 503 until
+# then instead of failing to boot.
+# [[r2_buckets]]
+# binding = "BUCKET"
+# bucket_name = "ghosst-media"
 
 [observability]
 enabled = true
 
 [vars]
-R2_ACCOUNT_ID = "REPLACE_WITH_ACCOUNT_ID"
-R2_BUCKET = "ghosst-media"
-PUBLIC_CDN = "https://cdn.ghosst.app"
+# Image URLs are stored fully qualified (Appwrite CDN today), so this stays empty.
+PUBLIC_CDN = ""
 ALLOWED_ORIGINS = "https://ghosst.app,https://app.ghosst.app"
 
 # Secrets (never put these in [vars]):
 #   wrangler secret put JWT_SECRET
-#   wrangler secret put R2_ACCESS_KEY_ID
-#   wrangler secret put R2_SECRET_ACCESS_KEY
 #   wrangler secret put COINS_PER_REWARD
+#   wrangler secret put R2_ACCESS_KEY_ID        (only with R2)
+#   wrangler secret put R2_SECRET_ACCESS_KEY    (only with R2)

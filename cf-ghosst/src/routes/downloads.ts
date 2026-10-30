@@ -1,5 +1,5 @@
 import { ApiError, json } from "../lib/http";
-import { presignGet } from "../lib/r2";
+import { fileTicket } from "../lib/r2";
 import type { Ctx } from "../index";
 
 /**
@@ -29,10 +29,7 @@ export async function ticket(ctx: Ctx): Promise<Response> {
 
   if (!file) throw new ApiError(404, "download_unavailable", "Download not configured");
 
-  const t = await presignGet(ctx.env, file.object_key, {
-    ttlSeconds: 300,
-    filename: file.filename,
-  });
+  const t = await fileTicket(ctx.env, file.object_key, file.filename, 300);
 
   return json({
     ok: true,

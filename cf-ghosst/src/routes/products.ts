@@ -33,7 +33,10 @@ function toProduct(
     cost: row.cost,
     active: row.active === 1,
     description: row.description,
-    imageUrls: images.map((key) => `${cdn}/${key}`),
+    // Absolute URLs (R2 keys can also be MediaFire links) pass through as-is.
+    imageUrls: images.map((key) =>
+      /^https?:\/\//i.test(key) ? key : cdn ? `${cdn}/${key}` : key,
+    ),
     youtubeUrl: row.youtube_url,
     type: row.type,
     version: row.version,
@@ -212,7 +215,7 @@ export async function remove(ctx: Ctx): Promise<Response> {
     ...(images.results ?? []).map((i) => i.object_key),
     ...(files?.object_key ? [files.object_key] : []),
   ];
-  await Promise.allSettled(keys.map((key) => ctx.env.BUCKET.delete(key)));
+  await Promise.allSettled(keys.map((key) => ctx.env.BUCKET?.delete(key)));
 
   return json({ ok: true });
 }

@@ -1,5 +1,5 @@
 import { ApiError, json, readJson } from "../lib/http";
-import { presignGet } from "../lib/r2";
+import { fileTicket } from "../lib/r2";
 import { complete, release, reserve } from "../lib/idempotency";
 import type { Ctx } from "../index";
 
@@ -167,7 +167,7 @@ async function claimDownload(ctx: Ctx, uid: string, product: ProductRef): Promis
 
   if (prior) {
     if (!file) throw new ApiError(409, "download_unavailable", "Already purchased — link unavailable");
-    const t = await presignGet(ctx.env, file.object_key, { filename: file.filename });
+    const t = await fileTicket(ctx.env, file.object_key, file.filename);
     return json({
       ok: true,
       alreadyOwned: true,
@@ -225,7 +225,7 @@ async function claimDownload(ctx: Ctx, uid: string, product: ProductRef): Promis
       .run();
   }
 
-  const t = await presignGet(ctx.env, file.object_key, { filename: file.filename });
+  const t = await fileTicket(ctx.env, file.object_key, file.filename);
   return json({
     ok: true,
     alreadyOwned: !won,
