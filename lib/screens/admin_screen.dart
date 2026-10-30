@@ -1,10 +1,12 @@
 import 'dart:convert';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../appwrite_client.dart';
 import '../premium.dart';
+import '../services/cloudinary.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
 
@@ -187,44 +189,29 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
-  /// Images are links now: paste a public URL (R2, MediaFire, Imgur, …).
-  /// No bucket needed, and nothing is stored in D1 but the string.
+  /// Uploads the picked images to Cloudinary and returns their public URLs.
+  /// No bucket, no key: the preset is unsigned, so the app needs no secret.
   Future<List<String>?> _pickImages() async {
-    final ctl = TextEditingController();
-    final url = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Image URL'),
-        content: TextField(
-          controller: ctl,
-          autofocus: true,
-          keyboardType: TextInputType.url,
-          decoration: const InputDecoration(hintText: 'https://…/image.jpg'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, ctl.text.trim()),
-            child: const Text('Add'),
-          ),
-        ],
-      ),
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: true,
     );
-    // showDialog's future resolves before the exit animation, so the field is
-    // still mounted when it completes — dispose after the frame instead.
-    WidgetsBinding.instance.addPostFrameCallback((_) => ctl.dispose());
-    if (url == null || url.isEmpty) return null;
-    final uri = Uri.tryParse(url);
-    if (uri == null || !(uri.isScheme('http') || uri.isScheme('https')) || uri.host.isEmpty) {
-      if (mounted) {
-        setState(() => message = 'Dapat magsimula sa http(s) ang image URL.');
+    if (picked == null || picked.files.isEmpty) return null;
+
+    final urls = <String>[];
+    for (final f in picked.files) {
+      final path = f.path;
+      if (path == null) continue;
+      if (mounted) setState(() => message = 'Uploading ${f.name}…');
+      try {
+        urls.add(await CloudinaryUpload.upload(path));
+      } catch (e) {
+        if (mounted) setState(() => message = 'Upload failed: $e');
+        break;
       }
-      return null;
     }
-    return [url];
+    if (mounted) setState(() => message = '');
+    return urls.isEmpty ? null : urls;
   }
 
   Future<void> _addProduct() async {
