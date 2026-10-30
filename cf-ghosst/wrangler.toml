@@ -1,0 +1,33 @@
+name = "ghosst-api"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+
+# Custom domain only: *.workers.dev is blocked in some PH ISPs and the AdMob
+# SSV callback must stay on a stable hostname.
+routes = [{ pattern = "api.ghosst.app", custom_domain = true }]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ghosst"
+database_id = "REPLACE_WITH_D1_ID"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "ghosst-media"
+
+[observability]
+enabled = true
+
+[vars]
+R2_ACCOUNT_ID = "REPLACE_WITH_ACCOUNT_ID"
+R2_BUCKET = "ghosst-media"
+PUBLIC_CDN = "https://cdn.ghosst.app"
+ALLOWED_ORIGINS = "https://ghosst.app,https://app.ghosst.app"
+
+# Secrets (never put these in [vars]):
+#   wrangler secret put JWT_SECRET
+#   wrangler secret put R2_ACCESS_KEY_ID
+#   wrangler secret put R2_SECRET_ACCESS_KEY
+#   wrangler secret put COINS_PER_REWARD
