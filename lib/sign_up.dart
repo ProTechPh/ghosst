@@ -1,8 +1,8 @@
-import 'package:appwrite/appwrite.dart';
 import 'package:flutter/material.dart';
 
-import 'appwrite_client.dart';
+import 'api/api_exception.dart';
 import 'premium.dart';
+import 'services/worker_backend.dart';
 import 'theme.dart';
 import 'validation.dart';
 
@@ -54,24 +54,22 @@ class _SignUpState extends State<SignUp> {
       busy = true;
     });
     try {
-      final account = Account(client);
       final cleanEmail = email.text.trim();
-      await account.create(
-        userId: ID.unique(),
-        email: cleanEmail,
-        password: password.text,
-        name: name.text.trim().isEmpty ? null : name.text.trim(),
-      );
-      await account.createEmailPasswordSession(
-        email: cleanEmail,
-        password: password.text,
+      await Backend.signUp(
+        cleanEmail,
+        password.text,
+        name: name.text.trim(),
       );
       widget.onSignedUp();
-    } on AppwriteException catch (e) {
+    } on ApiException catch (e) {
       if (mounted) {
         setState(() {
-          error =
-              friendlyAuthError(e.message ?? '', fallback: 'Sign up failed');
+          error = switch (e.code) {
+            'email_taken' => 'May account na ang email na ito.',
+            'invalid_email' => 'Hindi valid ang email.',
+            'weak_password' => 'Masyadong maikli ang password.',
+            _ => e.userMessage,
+          };
         });
       }
     } catch (_) {

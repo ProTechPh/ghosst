@@ -1,8 +1,8 @@
-import 'package:appwrite/appwrite.dart';
 import 'package:flutter/material.dart';
 
-import 'appwrite_client.dart';
+import 'api/api_exception.dart';
 import 'premium.dart';
+import 'services/worker_backend.dart';
 import 'theme.dart';
 import 'validation.dart';
 
@@ -52,16 +52,14 @@ class _SignInState extends State<SignIn> {
       busy = true;
     });
     try {
-      await Account(client).createEmailPasswordSession(
-        email: email.text.trim(),
-        password: password.text,
-      );
+      await Backend.signIn(email.text.trim(), password.text);
       widget.onSignedIn();
-    } on AppwriteException catch (e) {
+    } on ApiException catch (e) {
       if (mounted) {
         setState(() {
-          error = friendlyAuthError(e.message ?? '',
-              fallback: 'Sign in failed');
+          error = e.code == 'invalid_credentials'
+              ? 'Maling email o password.'
+              : e.userMessage;
         });
       }
     } catch (_) {

@@ -7,7 +7,7 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import '../appwrite_client.dart';
 import '../premium.dart';
 import '../services/ad_service.dart';
-import '../services/backend.dart';
+import '../services/worker_backend.dart';
 import '../services/distribution.dart';
 import '../theme.dart';
 import 'product_detail.dart';

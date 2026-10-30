@@ -180,5 +180,5 @@ class ApiException implements Exception {
   }
 
   @override
-  String toString() => 'ApiException(${kind.name}, $status, $code: $message)';
+  String toString() => requestId.isEmpty ? userMessage : '$userMessage (ref $requestId)';
 }

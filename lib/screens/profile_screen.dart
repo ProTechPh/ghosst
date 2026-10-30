@@ -8,7 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../premium.dart';
 import '../services/ad_service.dart';
-import '../services/backend.dart';
+import '../services/worker_backend.dart';
 import '../services/consent_service.dart';
 import '../services/distribution.dart';
 import '../theme.dart';

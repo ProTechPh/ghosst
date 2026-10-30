@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../premium.dart';
-import '../services/backend.dart';
+import '../services/worker_backend.dart';
 import '../theme.dart';
 
 enum _Phase { processing, success, failure }

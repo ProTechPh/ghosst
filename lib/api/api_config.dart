@@ -5,7 +5,7 @@ class ApiConfig {
 
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://api.ghosst.app/v1',
+    defaultValue: 'https://ghosst-api.ghosst.workers.dev/v1',
   );
 
   static const Duration connectTimeout = Duration(seconds: 15);

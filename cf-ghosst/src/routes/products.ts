@@ -99,7 +99,17 @@ export async function get(ctx: Ctx): Promise<Response> {
   if (!row) throw new ApiError(404, "product_not_found", "Product not found");
 
   const [product] = await attach(ctx.env, [row]);
-  return json({ ok: true, product });
+
+  // The stored download link is admin-only: regular buyers get it from a claim.
+  const fileUrl = ctx.user?.isAdmin
+    ? ((await ctx.env.DB.prepare(
+        `SELECT object_key FROM product_files WHERE product_id = ?1`,
+      )
+        .bind(row.id)
+        .first<{ object_key: string }>())?.object_key ?? "")
+    : "";
+
+  return json({ ok: true, product: { ...product, fileUrl } });
 }
 
 interface ProductBody {
@@ -113,6 +123,7 @@ interface ProductBody {
   active?: boolean;
   imageKeys?: string[];
   durations?: Array<{ label: string; cost: number }>;
+  fileUrl?: string;
 }
 
 export async function create(ctx: Ctx): Promise<Response> {
@@ -189,6 +200,27 @@ export async function update(ctx: Ctx): Promise<Response> {
     .run();
 
   await applyRelations(ctx.env, id, body);
+
+  // The stored download link travels with the product for the admin form.
+  if (body.fileUrl !== undefined) {
+    const link = body.fileUrl.trim();
+    if (link) {
+      const filename = link.split("/").pop()?.split("?")[0] ?? "";
+      await ctx.env.DB.prepare(
+        `INSERT INTO product_files (product_id, object_key, filename, updated_at)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(product_id) DO UPDATE SET
+           object_key = excluded.object_key, updated_at = excluded.updated_at`,
+      )
+        .bind(id, link, filename || "download", new Date().toISOString())
+        .run();
+    } else {
+      await ctx.env.DB.prepare(`DELETE FROM product_files WHERE product_id = ?1`)
+        .bind(id)
+        .run();
+    }
+  }
+
   return get(ctx);
 }
 

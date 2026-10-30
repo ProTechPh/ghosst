@@ -3,7 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../appwrite_client.dart';
-import '../services/backend.dart';
+import '../services/worker_backend.dart';
 import '../theme.dart';
 import 'claim_reveal.dart';
 import 'download_screen.dart';

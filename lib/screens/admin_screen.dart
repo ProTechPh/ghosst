@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 
 import '../appwrite_client.dart';
 import '../premium.dart';
-import '../services/backend.dart';
+import '../services/worker_backend.dart';
 import '../theme.dart';
 
 class AdminScreen extends StatefulWidget {
