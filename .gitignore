@@ -56,3 +56,5 @@ app.*.map.json
 claim.tar.gz
 skills-lock.json
 
+
+graphify-out/

@@ -1,7 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -189,32 +187,41 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
-  Future<List<String>> _uploadAll(List<String> paths) async {
-    final ids = <String>[];
-    for (final p in paths) {
-      ids.add(await Backend.uploadImage(p));
-    }
-    return ids;
-  }
-
-  Future<void> _cleanup(List<String> ids) async {
-    for (final id in ids) {
-      try {
-        await Backend.deleteImage(id);
-      } catch (_) {
-        // best-effort orphan cleanup
-      }
-    }
-  }
-
+  /// Images are links now: paste a public URL (R2, MediaFire, Imgur, …).
+  /// No bucket needed, and nothing is stored in D1 but the string.
   Future<List<String>?> _pickImages() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      allowMultiple: true,
-      withData: false,
+    final ctl = TextEditingController();
+    final url = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Image URL'),
+        content: TextField(
+          controller: ctl,
+          autofocus: true,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(hintText: 'https://…/image.jpg'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctl.text.trim()),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
     );
-    if (result == null) return null;
-    return result.paths.whereType<String>().toList();
+    ctl.dispose();
+    if (url == null || url.isEmpty) return null;
+    if (!url.startsWith('http')) {
+      if (mounted) {
+        setState(() => message = 'Dapat magsimula sa http(s) ang image URL.');
+      }
+      return null;
+    }
+    return [url];
   }
 
   Future<void> _addProduct() async {
@@ -239,17 +246,13 @@ class _AdminScreenState extends State<AdminScreen> {
       busy = true;
       message = '';
     });
-    List<String> uploaded = [];
     try {
-      if (pickedPaths.isNotEmpty) {
-        uploaded = await _uploadAll(pickedPaths);
-      }
       final newId = await Backend.createProduct(
         name: name,
         cost: cost,
         description: productDesc.text.trim(),
         youtubeUrl: productYoutube.text.trim(),
-        imageIds: uploaded,
+        imageIds: pickedPaths,
         type: productType,
         version: productVersion.text.trim(),
         fileSize: productFileSize.text.trim(),
@@ -278,7 +281,6 @@ class _AdminScreenState extends State<AdminScreen> {
       // _load() clears `message` — set the banner after it so it survives.
       if (mounted) setState(() => message = 'Product "$name" created.');
     } catch (e) {
-      await _cleanup(uploaded);
       if (mounted) setState(() => message = 'Create failed: $e');
     } finally {
       if (mounted) setState(() => busy = false);
@@ -302,7 +304,6 @@ class _AdminScreenState extends State<AdminScreen> {
     editLink.text = await Backend.appFileFor(p.id);
     if (!mounted) return;
     var remoteIds = <String>[...p.imageIds];
-    var toDelete = <String>[];
     var localPaths = <String>[];
 
     final ok = await showDialog<bool>(
@@ -332,16 +333,14 @@ class _AdminScreenState extends State<AdminScreen> {
                 busy = true;
                 err = '';
               });
-              List<String> newIds = [];
               try {
-                newIds = await _uploadAll(localPaths);
                 await Backend.updateProduct(
                   productId: p.id,
                   name: n,
                   cost: c,
                   description: editDesc.text.trim(),
                   youtubeUrl: editYt.text.trim(),
-                  imageIds: [...remoteIds, ...newIds],
+                  imageIds: [...remoteIds, ...localPaths],
                   type: type,
                   version: editVersion.text.trim(),
                   fileSize: editFileSize.text.trim(),
@@ -356,11 +355,9 @@ class _AdminScreenState extends State<AdminScreen> {
                     await Backend.deleteAppFile(p.id);
                   }
                 }
-                // Only remove storage files AFTER the doc no longer references them.
-                await _cleanup(toDelete);
+                // Links are gone from the list — nothing to delete in storage.
                 if (ctx.mounted) Navigator.pop(ctx, true);
               } catch (e) {
-                await _cleanup(newIds);
                 if (ctx.mounted) {
                   setD(() {
                     busy = false;
@@ -527,7 +524,6 @@ class _AdminScreenState extends State<AdminScreen> {
                                   ),
                                 ),
                                 () => setD(() {
-                                  toDelete.add(id);
                                   remoteIds = remoteIds
                                       .where((x) => x != id)
                                       .toList();
@@ -535,8 +531,8 @@ class _AdminScreenState extends State<AdminScreen> {
                               ),
                             for (final path in [...localPaths])
                               thumb(
-                                Image.file(
-                                  File(path),
+                                Image.network(
+                                  path,
                                   fit: BoxFit.cover,
                                   width: 66,
                                   height: 66,
@@ -1489,16 +1485,6 @@ class _AdminScreenState extends State<AdminScreen> {
       } catch (_) {
         issues.add('the MediaFire link');
       }
-      var imageFails = 0;
-      for (final id in p.imageIds) {
-        try {
-          await Backend.deleteImage(id);
-        } catch (_) {
-          imageFails++;
-        }
-      }
-      if (imageFails > 0) issues.add('$imageFails image(s)');
-
       // Reload from the database — the list must reflect what's stored.
       await _load();
       if (!mounted) return;
@@ -1519,7 +1505,7 @@ class _AdminScreenState extends State<AdminScreen> {
     children: [
       ClipRRect(
         borderRadius: BorderRadius.circular(12),
-        child: Image.file(File(path), width: 66, height: 66, fit: BoxFit.cover),
+        child: Image.network(path, width: 66, height: 66, fit: BoxFit.cover),
       ),
       Positioned(
         right: 3,
