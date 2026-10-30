@@ -45,6 +45,9 @@ dependencies:
   open_filex: ^4.7.0 # open/install downloaded APK via FileProvider
   share_plus: ^10.0.0 # share non-APK downloads
   gma_mediation_unity: ^1.11.1
+  # Cloudflare Worker client (lib/api/) — replaces Appwrite once the cutover lands
+  dio: ^5.9.0
+  flutter_secure_storage: ^9.2.4
 dependency_overrides:
   # appwrite 12.0.4 pins flutter_web_auth_2 ^3.1.1, which no longer compiles
   # against current Flutter (removed v1 embedding 'Registrar' API). 5.x keeps

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -7,7 +6,8 @@ import 'package:flutter/services.dart';
 
 import '../appwrite_client.dart';
 import '../premium.dart';
-import '../services/backend.dart';
+import '../services/cloudinary.dart';
+import '../services/worker_backend.dart';
 import '../theme.dart';
 
 class AdminScreen extends StatefulWidget {
@@ -189,32 +189,29 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
-  Future<List<String>> _uploadAll(List<String> paths) async {
-    final ids = <String>[];
-    for (final p in paths) {
-      ids.add(await Backend.uploadImage(p));
-    }
-    return ids;
-  }
-
-  Future<void> _cleanup(List<String> ids) async {
-    for (final id in ids) {
-      try {
-        await Backend.deleteImage(id);
-      } catch (_) {
-        // best-effort orphan cleanup
-      }
-    }
-  }
-
+  /// Uploads the picked images to Cloudinary and returns their public URLs.
+  /// No bucket, no key: the preset is unsigned, so the app needs no secret.
   Future<List<String>?> _pickImages() async {
-    final result = await FilePicker.platform.pickFiles(
+    final picked = await FilePicker.platform.pickFiles(
       type: FileType.image,
       allowMultiple: true,
-      withData: false,
     );
-    if (result == null) return null;
-    return result.paths.whereType<String>().toList();
+    if (picked == null || picked.files.isEmpty) return null;
+
+    final urls = <String>[];
+    for (final f in picked.files) {
+      final path = f.path;
+      if (path == null) continue;
+      if (mounted) setState(() => message = 'Uploading ${f.name}…');
+      try {
+        urls.add(await CloudinaryUpload.upload(path));
+      } catch (e) {
+        if (mounted) setState(() => message = 'Upload failed: $e');
+        break;
+      }
+    }
+    if (mounted) setState(() => message = '');
+    return urls.isEmpty ? null : urls;
   }
 
   Future<void> _addProduct() async {
@@ -239,17 +236,13 @@ class _AdminScreenState extends State<AdminScreen> {
       busy = true;
       message = '';
     });
-    List<String> uploaded = [];
     try {
-      if (pickedPaths.isNotEmpty) {
-        uploaded = await _uploadAll(pickedPaths);
-      }
       final newId = await Backend.createProduct(
         name: name,
         cost: cost,
         description: productDesc.text.trim(),
         youtubeUrl: productYoutube.text.trim(),
-        imageIds: uploaded,
+        imageIds: pickedPaths,
         type: productType,
         version: productVersion.text.trim(),
         fileSize: productFileSize.text.trim(),
@@ -278,7 +271,6 @@ class _AdminScreenState extends State<AdminScreen> {
       // _load() clears `message` — set the banner after it so it survives.
       if (mounted) setState(() => message = 'Product "$name" created.');
     } catch (e) {
-      await _cleanup(uploaded);
       if (mounted) setState(() => message = 'Create failed: $e');
     } finally {
       if (mounted) setState(() => busy = false);
@@ -299,10 +291,15 @@ class _AdminScreenState extends State<AdminScreen> {
     var type = p.type;
     // MediaFire links are admin-only — fetch the current one before the
     // dialog opens so saving doesn't silently wipe it.
-    editLink.text = await Backend.appFileFor(p.id);
+    var linkLoaded = true;
+    try {
+      editLink.text = await Backend.appFileFor(p.id);
+    } catch (_) {
+      // Couldn't read it. Never sync blind: the save below must not clear it.
+      linkLoaded = false;
+    }
     if (!mounted) return;
     var remoteIds = <String>[...p.imageIds];
-    var toDelete = <String>[];
     var localPaths = <String>[];
 
     final ok = await showDialog<bool>(
@@ -332,16 +329,14 @@ class _AdminScreenState extends State<AdminScreen> {
                 busy = true;
                 err = '';
               });
-              List<String> newIds = [];
               try {
-                newIds = await _uploadAll(localPaths);
                 await Backend.updateProduct(
                   productId: p.id,
                   name: n,
                   cost: c,
                   description: editDesc.text.trim(),
                   youtubeUrl: editYt.text.trim(),
-                  imageIds: [...remoteIds, ...newIds],
+                  imageIds: [...remoteIds, ...localPaths],
                   type: type,
                   version: editVersion.text.trim(),
                   fileSize: editFileSize.text.trim(),
@@ -349,18 +344,16 @@ class _AdminScreenState extends State<AdminScreen> {
                 );
                 // Keep the MediaFire link in sync for app-store products.
                 final link = editLink.text.trim();
-                if (type != 'key') {
+                if (type != 'key' && linkLoaded) {
                   if (link.isNotEmpty) {
                     await Backend.upsertAppFile(p.id, link);
                   } else {
                     await Backend.deleteAppFile(p.id);
                   }
                 }
-                // Only remove storage files AFTER the doc no longer references them.
-                await _cleanup(toDelete);
+                // Links are gone from the list — nothing to delete in storage.
                 if (ctx.mounted) Navigator.pop(ctx, true);
               } catch (e) {
-                await _cleanup(newIds);
                 if (ctx.mounted) {
                   setD(() {
                     busy = false;
@@ -527,7 +520,6 @@ class _AdminScreenState extends State<AdminScreen> {
                                   ),
                                 ),
                                 () => setD(() {
-                                  toDelete.add(id);
                                   remoteIds = remoteIds
                                       .where((x) => x != id)
                                       .toList();
@@ -535,8 +527,8 @@ class _AdminScreenState extends State<AdminScreen> {
                               ),
                             for (final path in [...localPaths])
                               thumb(
-                                Image.file(
-                                  File(path),
+                                Image.network(
+                                  path,
                                   fit: BoxFit.cover,
                                   width: 66,
                                   height: 66,
@@ -1477,37 +1469,13 @@ class _AdminScreenState extends State<AdminScreen> {
       message = '';
     });
     try {
-      // Product doc first — if this throws, nothing else was touched.
+      // The route cascades keys, images and the download link itself.
       await Backend.deleteProduct(p.id);
-
-      // Cascade, tracked so leftovers get reported instead of hidden.
-      final issues = <String>[];
-      final keyFails = await Backend.deleteKeysForProduct(p.id);
-      if (keyFails > 0) issues.add('$keyFails key(s)');
-      try {
-        await Backend.deleteAppFile(p.id);
-      } catch (_) {
-        issues.add('the MediaFire link');
-      }
-      var imageFails = 0;
-      for (final id in p.imageIds) {
-        try {
-          await Backend.deleteImage(id);
-        } catch (_) {
-          imageFails++;
-        }
-      }
-      if (imageFails > 0) issues.add('$imageFails image(s)');
 
       // Reload from the database — the list must reflect what's stored.
       await _load();
       if (!mounted) return;
-      setState(() {
-        message = issues.isEmpty
-            ? 'Deleted "${p.name}".'
-            : 'Deleted "${p.name}" — but ${issues.join(', ')} '
-                  'could not be removed. Retry, or check the console.';
-      });
+      setState(() => message = 'Deleted "${p.name}".');
     } catch (e) {
       if (mounted) setState(() => message = 'Delete failed: $e');
     } finally {
@@ -1519,7 +1487,7 @@ class _AdminScreenState extends State<AdminScreen> {
     children: [
       ClipRRect(
         borderRadius: BorderRadius.circular(12),
-        child: Image.file(File(path), width: 66, height: 66, fit: BoxFit.cover),
+        child: Image.network(path, width: 66, height: 66, fit: BoxFit.cover),
       ),
       Positioned(
         right: 3,

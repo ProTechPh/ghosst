@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../appwrite_client.dart';
 import '../premium.dart';
-import '../services/backend.dart';
+import '../services/worker_backend.dart';
 import '../theme.dart';
 import 'download_screen.dart';
 

@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:appwrite/models.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -8,7 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../premium.dart';
 import '../services/ad_service.dart';
-import '../services/backend.dart';
+import '../services/worker_backend.dart';
 import '../services/consent_service.dart';
 import '../services/distribution.dart';
 import '../theme.dart';
@@ -37,7 +36,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  User? _user;
+  AppUser? _user;
   int _coins = 0;
   List<Claim> _claims = [];
   bool _loading = true;
@@ -56,7 +55,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ]);
     if (!mounted) return;
     setState(() {
-      _user = results[0] as User?;
+      _user = results[0] as AppUser?;
       _coins = results[1] as int;
       _claims = results[2] as List<Claim>;
       _loading = false;
@@ -81,7 +80,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   String get _since {
-    final created = _user?.$createdAt ?? '';
+    final created = _user?.createdAt ?? '';
     return created.length >= 10 ? created.substring(0, 10) : '';
   }
 
@@ -162,7 +161,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _deleteAccount() async {
-    final controller = TextEditingController();
     var confirmed = false;
     final approved = await showDialog<bool>(
       context: context,
@@ -182,7 +180,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const Text('Type DELETE to confirm.'),
               const SizedBox(height: 8),
               TextField(
-                controller: controller,
                 autofocus: true,
                 textCapitalization: TextCapitalization.characters,
                 onChanged: (value) =>
@@ -206,7 +203,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
-    controller.dispose();
     if (approved != true || !mounted) return;
 
     showDialog<void>(

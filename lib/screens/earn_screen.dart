@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../services/ad_service.dart';
-import '../services/backend.dart';
+import '../services/worker_backend.dart';
 import '../theme.dart';
 
 class EarnScreen extends StatefulWidget {
@@ -155,7 +155,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
 
     try {
       await _ads.showRewardedWithFallback(
-        userId: user.$id,
+        userId: user.id,
         preferInterstitial: instant,
         onEarned: (_) {
           if (AdUnits.useTestAds) {

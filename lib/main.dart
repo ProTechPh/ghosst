@@ -18,7 +18,7 @@ import 'screens/tamper_screen.dart';
 import 'screens/wallet_screen.dart';
 import 'services/ad_service.dart';
 import 'services/adblock_detector.dart';
-import 'services/backend.dart';
+import 'services/worker_backend.dart';
 import 'services/consent_service.dart';
 import 'services/distribution.dart';
 import 'services/security.dart';
@@ -261,6 +261,10 @@ class _HomeState extends State<Home> {
   @override
   void initState() {
     super.initState();
+    // A dead refresh token drops the UI back to the landing page.
+    Backend.onSignedOut = () {
+      if (mounted) setState(() => signedIn = false);
+    };
     _load();
   }
 
