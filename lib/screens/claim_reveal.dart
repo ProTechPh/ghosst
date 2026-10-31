@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../arcade.dart';
 import '../premium.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
@@ -89,6 +90,7 @@ class _ClaimFlowState extends State<_ClaimFlow> {
   String _error = '';
   bool _copied = false;
   bool _running = false;
+  bool _landed = false;
   final List<Timer> _stageTimers = [];
 
   @override
@@ -139,9 +141,10 @@ class _ClaimFlowState extends State<_ClaimFlow> {
         _key = key;
         _step = 3;
       });
-      await Future<void>.delayed(const Duration(milliseconds: 550));
+      // Apps have nothing to flip — they feel the landing vibrate here;
+      // keys get it from the card's landing callback instead.
+      if (widget.kind != 'key') await HapticFeedback.mediumImpact();
       if (!mounted) return;
-      await HapticFeedback.mediumImpact();
       setState(() => _phase = _Phase.success);
     } catch (e) {
       final msg = '$e';
@@ -167,8 +170,16 @@ class _ClaimFlowState extends State<_ClaimFlow> {
       _error = '';
       _copied = false;
       _key = '';
+      _landed = false;
     });
     _run();
+  }
+
+  /// The card has finished turning: one haptic, then the shake.
+  void _onFlipLanded() {
+    if (!mounted) return;
+    HapticFeedback.mediumImpact();
+    if (!_landed) setState(() => _landed = true);
   }
 
   Future<void> _copy() async {
@@ -289,10 +300,25 @@ class _ClaimFlowState extends State<_ClaimFlow> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _island(
-          icon: _isApp ? Icons.download_rounded : Icons.key_outlined,
-          color: AppColors.primary,
-          spin: false,
+        Container(
+          width: 76,
+          height: 76,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppColors.surface,
+            border: Border.all(
+              color: AppColors.primary.withValues(alpha: 0.35),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.28),
+                blurRadius: 44,
+                spreadRadius: -6,
+              ),
+            ],
+          ),
+          child: const ChipStack(count: 3, size: 20),
         ),
         const SizedBox(height: 30),
         Eyebrow(
@@ -347,7 +373,7 @@ class _ClaimFlowState extends State<_ClaimFlow> {
 
   Widget _successView() {
     final after = (widget.balanceBefore - widget._spent).clamp(0, 1 << 30);
-    return Column(
+    final column = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         _island(icon: Icons.check_rounded, color: AppColors.green, spin: false),
@@ -571,6 +597,22 @@ class _ClaimFlowState extends State<_ClaimFlow> {
         ],
       ],
     );
+
+    // Apps have no object to reveal: they shake where they stand. Keys turn
+    // the whole success column over, buttons included, so nothing is rebuilt
+    // and the copy stays the same.
+    if (_isApp) {
+      return ShakeBox(key: const ValueKey('app-success'), child: column);
+    }
+    return ShakeBox(
+      key: const ValueKey('key-success'),
+      enabled: _landed,
+      child: CardFlip(
+        tier: tierForCost(widget._spent),
+        onLanded: _onFlipLanded,
+        child: column,
+      ),
+    );
   }
 
   Widget _failureView() {
@@ -626,6 +668,9 @@ class _ClaimFlowState extends State<_ClaimFlow> {
       _Phase.success => _successView(),
       _Phase.failure => _failureView(),
     };
+    // The success beat has its own entrance (card flip or shake); a
+    // fade-and-slide on top of it would double the motion.
+    final success = _phase == _Phase.success;
 
     // `showGeneralDialog` has no Material ancestor, so Texts here would
     // inherit MaterialApp's _errorTextStyle (yellow double underline +
@@ -648,19 +693,24 @@ class _ClaimFlowState extends State<_ClaimFlow> {
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(26, 40, 26, 40),
                   child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 500),
+                    duration: success
+                        ? Duration.zero
+                        : const Duration(milliseconds: 500),
                     switchInCurve: kPremiumCurve,
                     switchOutCurve: kPremiumCurve,
-                    transitionBuilder: (child, anim) => FadeTransition(
-                      opacity: anim,
-                      child: SlideTransition(
-                        position: Tween<Offset>(
-                          begin: const Offset(0, 0.04),
-                          end: Offset.zero,
-                        ).animate(anim),
-                        child: child,
-                      ),
-                    ),
+                    transitionBuilder: (child, anim) {
+                      if (success) return child;
+                      return FadeTransition(
+                        opacity: anim,
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(0, 0.04),
+                            end: Offset.zero,
+                          ).animate(anim),
+                          child: child,
+                        ),
+                      );
+                    },
                     child: KeyedSubtree(key: ValueKey(_phase), child: view),
                   ),
                 ),
