@@ -297,8 +297,10 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
           const SizedBox(height: AppSpace.md),
         ],
         _primaryAction(inCooldown, cooldownFill),
-        const SizedBox(height: AppSpace.md),
-        _secondAction(inCooldown),
+        if (!inCooldown) ...[
+          const SizedBox(height: AppSpace.md),
+          _secondAction(inCooldown),
+        ],
         const SizedBox(height: AppSpace.lg),
         Text(
           inCooldown

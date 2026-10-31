@@ -17,6 +17,17 @@ test("isOurRewardedUnit accepts our two production rewarded units", () => {
   assert.equal(isOurRewardedUnit("ca-app-pub-7791552060229072/8242333892"), true);
 });
 
+test("isOurRewardedUnit accepts the bare numeric id AdMob actually sends", () => {
+  // Live callbacks carry `ad_unit=3206073177` — rejecting the bare form blocked
+  // every real reward after the guard shipped (2026-10-31 05:21Z deploy).
+  assert.equal(isOurRewardedUnit("3206073177"), true);
+  assert.equal(isOurRewardedUnit("8242333892"), true);
+});
+
+test("isOurRewardedUnit rejects a bare numeric test unit", () => {
+  assert.equal(isOurRewardedUnit("5224354917"), false);
+});
+
 test("isOurRewardedUnit accepts a callback with no ad_unit (Google omitted it)", () => {
   assert.equal(isOurRewardedUnit(""), true);
 });

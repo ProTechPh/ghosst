@@ -10,12 +10,19 @@
 /** AdMob publisher id from `lib/services/ad_service.dart` (the app id). */
 const PUBLISHER = "ca-app-pub-7791552060229072/";
 
+/**
+ * Our two rewarded units, as bare ids. AdMob's SSV callback sends the numeric
+ * ad unit id only (`3206073177`), never the `ca-app-pub-…/…` form the SDK uses,
+ * so both shapes have to pass or every real reward is rejected.
+ */
+const OUR_UNITS = new Set(["3206073177", "8242333892"]);
+
 /** Test units live under Google's 3940256099942544 publisher and pay nothing. */
 export function isOurRewardedUnit(adUnit: string): boolean {
   // An empty/missing ad_unit is accepted: it is inside the signed payload, so
   // it can only be absent if Google really omitted it — never if it was
   // tampered with. Everything else must be ours.
-  return adUnit === "" || adUnit.startsWith(PUBLISHER);
+  return adUnit === "" || adUnit.startsWith(PUBLISHER) || OUR_UNITS.has(adUnit);
 }
 
 export interface RewardLimits {
