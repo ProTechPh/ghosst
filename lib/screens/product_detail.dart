@@ -868,7 +868,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ),
             ),
           Positioned(
-            top: MediaQuery.paddingOf(context).top + AppSpace.sm,
+            // clears the 44 px glass back button above it
+            top: MediaQuery.paddingOf(context).top + AppSpace.xs + 44 + AppSpace.sm,
             left: AppSpace.lg,
             right: AppSpace.lg,
             child: CardIndex(cost: entryCost(product), type: cardType(product)),

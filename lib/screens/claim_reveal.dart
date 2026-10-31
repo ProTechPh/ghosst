@@ -608,7 +608,7 @@ class _ClaimFlowState extends State<_ClaimFlow> {
       key: const ValueKey('key-success'),
       enabled: _landed,
       child: CardFlip(
-        tier: tierForCost(widget._spent),
+        tier: tierForCost(entryCost(widget.product)),
         onLanded: _onFlipLanded,
         child: column,
       ),

@@ -93,4 +93,45 @@ void main() {
     expect(_keyText(), findsOneWidget);
     expect(haptics.length, 1);
   });
+
+  testWidgets('reveal rarity uses the entry price, not the duration price', (
+    tester,
+  ) async {
+    final tiered = Product(
+      id: 'p2',
+      name: 'Vault Key',
+      cost: 1200,
+      active: true,
+      durations: const [
+        ProductDuration(label: '1 day', cost: 1200),
+        ProductDuration(label: '30 days', cost: 4000),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(
+          body: Builder(
+            builder: (ctx) => TextButton(
+              onPressed: () => showClaimFlow(
+                context: ctx,
+                product: tiered,
+                balanceBefore: 5000,
+                cost: 4000,
+                claim: () async => 'KEY-TEST-1234',
+              ),
+              child: const Text('go'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('go'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 3000));
+    expect(
+      tester.widget<CardFlip>(find.byType(CardFlip)).tier,
+      RarityTier.plus,
+    );
+  });
 }

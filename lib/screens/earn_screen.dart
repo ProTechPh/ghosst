@@ -305,8 +305,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
         to: end,
         label: '+$_rewardCoins',
         onLanded: () {
-          _coinEntry?.remove();
-          _coinEntry = null;
+          _endCeremony();
           HapticFeedback.lightImpact();
         },
       ),
@@ -316,7 +315,10 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
   }
 
   void _endCeremony() {
-    _coinEntry?.remove();
+    final entry = _coinEntry;
+    if (entry == null) return;
+    entry.remove();
+    entry.dispose();
     _coinEntry = null;
   }
 
