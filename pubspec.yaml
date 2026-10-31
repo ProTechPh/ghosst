@@ -43,7 +43,7 @@ dependencies:
   open_filex: ^4.7.0 # open/install downloaded APK via FileProvider
   share_plus: ^10.0.0 # share non-APK downloads
   gma_mediation_unity: ^1.11.1
-  # Cloudflare Worker client (lib/api/) — the app's only backend
+  # HTTP client for the PHP API (lib/api/) — the app's only backend
   dio: ^5.9.0
   flutter_secure_storage: ^9.2.4
   in_app_update: ^5.0.0

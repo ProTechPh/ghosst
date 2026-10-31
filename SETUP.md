@@ -1,46 +1,49 @@
-# SETUP — Ghosst (Flutter + Cloudflare Worker + AdMob SSV)
+# SETUP — Ghosst (Flutter + PHP/MySQL API + AdMob SSV)
 
-The app has **one backend**: the `ghosst-api` Worker in `cf-ghosst/` (Cloudflare
-Workers + D1). There is no Appwrite, no Firebase, no server to keep awake.
-`cf-ghosst/README.md` is the Worker's own doc (routes, local dev, secrets);
-this file is the app-side setup.
+The app has **one backend**: a plain PHP 8 API on Hostinger at
+`https://ghossthub.com/api/v1`, talking to MySQL. It is the same REST contract
+the Cloudflare Worker used to serve, so the Flutter code did not change — only
+`ApiConfig.baseUrl`. There is no Appwrite, no Firebase, no Cloudflare.
 
 | Piece | Where |
 |---|---|
-| Live API | `https://ghosst-api.ghosst.workers.dev/v1` |
-| Worker source | `cf-ghosst/src/` (TypeScript, `wrangler.toml`) |
-| Database | D1 `ghosst` = `c51682ac-01b9-4799-8638-cf0de063895a` (APAC) |
-| Schema | `cf-ghosst/migrations/` (`0001_init`, `0002_reward_email_hash_and_file_sha256`) |
-| Cloudflare account | `951f13d0a78bf4d0a6b2594b936c6f45` |
+| Live API | `https://ghossthub.com/api/v1` |
+| API source | `C:\laragon\www\api\` — deployed to `public_html/api/` (not in this repo) |
+| Database | MySQL `khctcfuv_ghosst` on Hostinger, tables `app_*` |
+| Schema + data | `C:\laragon\www\database\mobile_app_schema.sql`, `mobile_app_data.sql` |
 | Flutter client | `lib/api/` (Dio) + `lib/services/worker_backend.dart` |
 | Images | Cloudinary (unsigned upload preset `ghosst`) |
 
-## 1. Data model (D1)
+`api/README.md` is the API's own doc (deploy, rollback, unported features);
+this file is the app-side setup.
 
-`users` (email, password hash, coins, is_admin), `sessions` (refresh tokens,
-only the SHA-256 is stored), `products`, `product_images`, `product_durations`,
-`product_files` (the MediaFire link for apk/file products), `keys`
-(`UNIQUE(product_id, key_value)`), `claims` (one row per purchase;
-`ux_claims_user_product` makes app/file products single-purchase),
-`ad_rewards` (SSV dedupe, PK = AdMob `transaction_id`), `idempotency`
-(PK `(user_id, key)`).
+## 1. Data model (MySQL)
 
-Apply it with:
+Ten `app_*` tables live beside the website's own 36 tables and never touch them:
+`app_users` (email, password hash, coins, is_admin, `web_user_id` → website
+`users.id`), `app_sessions` (refresh tokens, only the SHA-256 is stored),
+`app_products`, `app_product_images`, `app_product_durations`,
+`app_product_files` (the MediaFire link for apk/file products), `app_keys`
+(`UNIQUE(product_id, key_value)`), `app_claims` (`ux_app_claims_owned` makes
+app/file products single-purchase), `app_ad_rewards` (SSV dedupe, PK = AdMob
+`transaction_id`), `app_idempotency` (`idem_key`, PK `(user_id, idem_key)`).
+
+Apply both files in order, in phpMyAdmin or:
 
 ```powershell
-cd cf-ghosst
-npx wrangler d1 execute ghosst --remote --file=migrations/0001_init.sql
-npx wrangler d1 execute ghosst --remote --file=migrations/0002_reward_email_hash_and_file_sha256.sql
+mysql -u khctcfuv_ghost_premium -p khctcfuv_ghosst < database\mobile_app_schema.sql
+mysql -u khctcfuv_ghost_premium -p khctcfuv_ghosst < database\mobile_app_data.sql
 ```
+
+Both are pure additions (`CREATE TABLE IF NOT EXISTS` + `INSERT`). Re-running
+the data file duplicates rows — it is a one-shot migration of the old D1 data.
 
 ## 2. Admin
 
 There is no team/console UI. An account becomes admin with one statement:
 
-```powershell
-"UPDATE users SET is_admin = 1 WHERE email = 'you@example.com';" | Set-Content -Encoding utf8 $env:TEMP\admin.sql
-cd cf-ghosst
-npx wrangler d1 execute ghosst --remote --file=$env:TEMP\admin.sql
+```sql
+UPDATE app_users SET is_admin = 1 WHERE email = 'you@example.com';
 ```
 
 Sign out and back in afterwards — the app caches `isAdmin` for the session.
@@ -49,7 +52,7 @@ The **Admin** tab appears for admins only.
 Coins are server-side only. To hand yourself some for testing:
 
 ```sql
-UPDATE users SET coins = 100 WHERE email = 'you@example.com';
+UPDATE app_users SET coins = 100 WHERE email = 'you@example.com';
 ```
 
 ## 3. AdMob
@@ -68,23 +71,24 @@ App ID (already in the manifest): `ca-app-pub-7791552060229072~1855578469`.
 
 1. **Rewarded units** (both): Ad unit → **Edit** → **Server-side
    verification** → set the bare URL
-   `https://ghosst-api.ghosst.workers.dev/v1/ads/ssv` → **Verify URL** →
-   **Save**. Reward amount = coins per ad (currently `10`); it comes back as
+   `https://ghossthub.com/api/v1/ads/ssv` → **Verify URL** → **Save**.
+   Reward amount = coins per ad (currently `10`); it comes back as
    `reward_amount` in the signed callback.
-2. **Coins never arrive?** The Worker logs every SSV attempt. Watch it with
-   `cd cf-ghosst && npx wrangler tail ghosst-api`. No request at all ⇒ the
-   callback URL is wrong in AdMob; a logged mismatch ⇒ the alert carries the
-   `requestId`.
+2. **Coins never arrive?** The API logs every rejection to PHP's error log
+   (`SSV blocked: <reason>`). On Hostinger that is
+   `public_html/logs/` / `error_log` in the File Manager. No log line at all
+   ⇒ the callback URL is wrong in AdMob. A logged signature error ⇒ the
+   verifier keys could not be fetched, not your URL.
 3. **Unity Ads mediation fallback:** AdMob → Mediation → a rewarded group
    targeting both rewarded units, then Unity Ads as an ad source. Merely
    shipping `gma_mediation_unity` does not enable Unity inventory; startup
    logs must show `Unity Ads Adapter: ready`.
 4. **Ad-blocker gate:** `lib/services/adblock_detector.dart` probes AdMob
-   hosts with `/v1/products` on the Worker as the control. 2 of 3 ad hosts
+   hosts with `$API_BASE_URL/products` as the control. 2 of 3 ad hosts
    blocked while the control answers = gate (`lib/screens/adblock_screen.dart`,
    third gate in `main.dart`, re-checked on resume). Fails open when offline or
    inconclusive; Private DNS is shown as context, never a standalone trigger.
-5. **Coin-farm guards** (`cf-ghosst/src/lib/rewards.ts`, enforced in `ads.ts`
+5. **Coin-farm guards** (`api/lib/rewards.php`, enforced in `routes/ads.php`
    after the signature check, before the credit):
    - `ad_unit` must sit under our publisher id `ca-app-pub-7791552060229072/`.
      A callback signed for anyone else's ad unit is their ad, not ours.
@@ -94,7 +98,9 @@ App ID (already in the manifest): `ca-app-pub-7791552060229072~1855578469`.
      signed payload hash, so a replay cannot create a second credit.
    - A single reward is capped at 1000 coins, so a wrong AdMob reward setting
      cannot mint a balance.
-   Each rejection logs `SSV blocked: <reason>` — check `wrangler tail` before
+   - Pacing is keyed on `sha256(lower(email))`, so deleting and re-registering
+     the same address does not reset the daily cap.
+   Each rejection writes `SSV blocked: <reason>` — check the error log before
    assuming the callback URL is wrong.
 
 ## 4. Run & test
@@ -112,9 +118,9 @@ flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=false
 flutter build apk --release --flavor direct
 ```
 
-The API base URL can be pointed elsewhere with
-`--dart-define=API_BASE_URL=http://127.0.0.1:8788/v1` (see
-`lib/api/api_config.dart`; `npx wrangler dev` in `cf-ghosst/`).
+The API base URL defaults to production; point it at a local server with
+`--dart-define=API_BASE_URL=http://127.0.0.1:8099/v1` after starting
+`php -S 127.0.0.1:8099 -t C:\laragon\www\api C:\laragon\www\api\index.php`.
 
 1. Sign up → **Admin** appears for an admin account.
 2. Admin: **New product** → name, cost, image (Cloudinary picker or URL) →
@@ -139,11 +145,10 @@ The API base URL can be pointed elsewhere with
 
 - [ ] Real AdMob app ID in the manifest and real unit IDs for all five formats
       in `AdUnits`, and SSV enabled on **both rewarded units** pointing at
-      `https://ghosst-api.ghosst.workers.dev/v1/ads/ssv`.
-- [ ] Worker deployed (`cd cf-ghosst && npx wrangler deploy`) and the schema
-      applied to the production D1.
-- [ ] `JWT_SECRET` and (if R2 is ever enabled) the R2 keys set with
-      `wrangler secret put` — never in `wrangler.toml`.
+      `https://ghossthub.com/api/v1/ads/ssv`.
+- [ ] `api/` uploaded to `public_html/api/` and both SQL files applied to the
+      production DB.
+- [ ] `JWT_SECRET` in `api/config.php` changed from the placeholder.
 - [ ] `CLOUDINARY_API_SECRET` set, so deleting a product also deletes its
       images.
 - [ ] Each published APK/file product has a working MediaFire link.
@@ -163,28 +168,29 @@ The API base URL can be pointed elsewhere with
 
 | Symptom | Likely cause |
 |---|---|
-| Coins never arrive after a real ad | No SSV request in `wrangler tail` ⇒ callback URL wrong in AdMob; a logged signature/key error ⇒ see its `requestId` |
+| Every request `500 internal` | DB unreachable or `app_*` tables missing — check `api/config.php` credentials, then the error log |
+| Coins never arrive after a real ad | No `SSV blocked` and no credit line in the error log ⇒ callback URL wrong in AdMob |
 | `401` right after opening the app | Refresh token expired/revoked — sign in again |
-| Admin tab missing | `users.is_admin = 0` for that account, or the app still holds the cached session (sign out/in) |
+| Admin tab missing | `app_users.is_admin = 0` for that account, or the app still holds the cached session (sign out/in) |
 | Store shows no products | Create one in Admin, `active = 1` |
-| Buy app → `Download not configured` | No `product_files` row for that product — re-save the link in the Admin edit dialog |
+| Buy app → `Download not configured` | No `app_product_files` row for that product — re-save the link in the Admin edit dialog |
 | Download stuck / `Could not resolve` | MediaFire link invalid or page changed — paste a fresh share link |
 | APK won't install | `REQUEST_INSTALL_PACKAGES` missing from the manifest (play flavor) or "install unknown apps" disabled for Ghosst |
 | Release: `Missing classes detected while running R8` | Copy the `-dontwarn` lines from `build/app/outputs/mapping/<variant>/missing_rules.txt` into `android/app/proguard-rules.pro` |
 | Release: `Gradle build daemon disappeared` | `org.gradle.jvmargs` too big for the machine — 4G works on 12 GB Windows and 7 GB CI runners |
-| `429` / `quota exceeded` banner | Daily Free-plan limit (D1 writes 100k, Worker requests 100k). Wait for the UTC reset; the app retries on its own |
 
 ## 7. Trust boundaries
 
-- Coins move **only** in the Worker: acquired via a signed AdMob SSV callback
-  (ECDSA P-256 over the raw query string), spent via a guarded
-  `UPDATE users SET coins = coins - ? WHERE coins >= ? RETURNING coins`.
+- Coins move **only** in the API: acquired via a signed AdMob SSV callback
+  (ECDSA P-256 over the raw query string, verified with `openssl_verify`
+  against Google's published keys), spent inside a MySQL transaction that
+  locks the user row (`SELECT coins ... FOR UPDATE`) before touching a key.
 - Keys stay server-side: only `GET /v1/claims` (owner-scoped) returns the key
   text. Download links are different — the claim response and `downloads/:id`
   hand the buyer the `downloadUrl` itself, and MediaFire keeps a copied link
   valid, so deleting a claim does not revoke it. That is why APK/file products
   are single-purchase.
 - Untrusted input is validated at the edge: JWT signature, 1 MB body cap,
-  presign restricted to admins with a server-generated key prefix.
-- A modded client can only send requests faster; idempotency + the guarded
-  UPDATE make that useless.
+  server-side validation of every field the Admin form sends.
+- A modded client can only send requests faster; idempotency + the locked
+  transaction make that useless.

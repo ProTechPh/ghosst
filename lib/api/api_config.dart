@@ -1,11 +1,11 @@
-/// Where the Worker lives. Override per build:
-/// `flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8787/v1`
+/// Where the API lives. Override per build:
+/// `flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8099/v1`
 class ApiConfig {
   const ApiConfig._();
 
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://ghosst-api.ghosst.workers.dev/v1',
+    defaultValue: 'https://ghossthub.com/api/v1',
   );
 
   static const Duration connectTimeout = Duration(seconds: 15);
