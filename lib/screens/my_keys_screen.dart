@@ -288,9 +288,7 @@ class _MyKeysScreenState extends State<MyKeysScreen> {
 
     return Stack(
       children: [
-        const Positioned.fill(
-          child: IgnorePointer(child: TableSurface()),
-        ),
+        const Positioned.fill(child: IgnorePointer(child: TableSurface())),
         RefreshIndicator(
           onRefresh: _load,
           child: ListView(
@@ -307,7 +305,9 @@ class _MyKeysScreenState extends State<MyKeysScreen> {
               const Text('My purchases', style: AppText.headline),
               const SizedBox(height: AppSpace.xs + 2),
               Text(
-                '${claims.length} purchase(s) in your collection',
+                claims.length == 1
+                    ? '1 purchase in your collection'
+                    : '${claims.length} purchases in your collection',
                 style: AppText.caption,
               ),
               const SizedBox(height: AppSpace.xl),
@@ -374,19 +374,22 @@ class _MyKeysScreenState extends State<MyKeysScreen> {
         ? (c.isDownload ? 'Download' : 'License key')
         : c.productName;
     final meta =
-        '${_date(c.createdAt)} · ${c.cost} coins'
+        '${_date(c.createdAt)}'
         '${c.duration.isEmpty ? '' : ' · ${c.duration}'}'
         '${c.isDownload ? ' · ${c.keyText == 'apk' ? 'APK' : 'FILE'}' : ''}';
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: AppColors.border.withValues(alpha: 0.6)),
-        ),
-      ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.sm + 2),
       child: Pressable(
         onTap: () => c.isDownload ? _openDownload(c) : _showKey(c),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: AppSpace.md),
+        child: Container(
+          padding: const EdgeInsets.all(AppSpace.md),
+          decoration: BoxDecoration(
+            color: AppColors.surface.withValues(alpha: 0.42),
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(
+              color: edgeColor(tierForCost(c.cost)).withValues(alpha: 0.30),
+            ),
+          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -429,7 +432,27 @@ class _MyKeysScreenState extends State<MyKeysScreen> {
                         ),
                       ),
                     const SizedBox(height: AppSpace.xs),
-                    Text(meta, style: AppText.caption),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            meta,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppText.caption,
+                          ),
+                        ),
+                        const SizedBox(width: AppSpace.sm),
+                        Text(
+                          '${c.cost} coins',
+                          style: monoStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.gold,
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
