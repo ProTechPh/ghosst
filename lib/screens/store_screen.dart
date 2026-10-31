@@ -279,12 +279,18 @@ class _StoreScreenState extends State<StoreScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Eyebrow(text: _tab == 'key' ? 'License store' : 'App store'),
-                const SizedBox(height: AppSpace.lg),
+                const SizedBox(height: AppSpace.md),
                 Text(
-                  _tab == 'key'
-                      ? 'Spend coins,\nclaim keys'
-                      : 'Spend coins,\ndownload apps',
-                  style: AppText.display,
+                  'Spend coins,',
+                  style: AppText.display.copyWith(fontSize: 38, height: 1.02),
+                ),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: GradientText(
+                    _tab == 'key' ? 'claim keys.' : 'download apps.',
+                    style: AppText.display.copyWith(fontSize: 38, height: 1.02),
+                  ),
                 ),
                 const SizedBox(height: AppSpace.md),
                 Text(
@@ -307,93 +313,115 @@ class _StoreScreenState extends State<StoreScreen> {
             const SizedBox(height: AppSpace.xl),
           ],
 
-          // ---- balance hero --------------------------------------------
+          // ---- balance strip -------------------------------------------
           ScrollReveal(
             delay: const Duration(milliseconds: 110),
-            child: Pressable(
-              onTap: widget.onOpenWallet,
-              child: DoubleBezel(
-                padding: const EdgeInsets.all(AppSpace.lg),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF0E2229), Color(0xFF07161B)],
-                ),
-                glowColor: AppColors.gold,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+            child: CardFrame(
+              radius: AppRadius.hero,
+              glow: true,
+              child: Column(
+                children: [
+                  Pressable(
+                    onTap: widget.onOpenWallet,
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpace.lg),
+                      child: Row(
                         children: [
-                          Text(
-                            'YOUR BALANCE',
-                            style: AppText.caption.copyWith(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 2.2,
+                          const CoinMedallion(size: 56),
+                          const SizedBox(width: AppSpace.md + 2),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'YOUR BALANCE',
+                                  style: AppText.caption.copyWith(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 2.2,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.baseline,
+                                  textBaseline: TextBaseline.alphabetic,
+                                  children: [
+                                    AnimatedCounter(
+                                      value: widget.coins,
+                                      style: monoStyle(
+                                        fontSize: 34,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.gold,
+                                        height: 1.05,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text('coins', style: AppText.caption),
+                                  ],
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: AppSpace.sm),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.baseline,
-                            textBaseline: TextBaseline.alphabetic,
-                            children: [
-                              AnimatedCounter(
-                                value: widget.coins,
-                                style: monoStyle(
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.gold,
-                                  height: 1.05,
-                                ),
-                              ),
-                              const SizedBox(width: AppSpace.sm),
-                              Text('coins', style: AppText.caption),
-                            ],
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 20,
+                            color: AppColors.textDim.withValues(alpha: 0.7),
                           ),
                         ],
                       ),
                     ),
+                  ),
+                  // Top-up lives inside the balance card: one object, two taps.
+                  if (widget.onGoToEarn != null) ...[
                     Container(
-                      width: 54,
-                      height: 54,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: kGoldGradient,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.gold.withValues(alpha: 0.35),
-                            blurRadius: 24,
-                            spreadRadius: -6,
-                          ),
-                        ],
+                      height: 1,
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: AppSpace.lg,
                       ),
-                      child: const Icon(
-                        Icons.monetization_on_outlined,
-                        size: 24,
-                        color: Color(0xFF422006),
+                      color: Colors.white.withValues(alpha: 0.06),
+                    ),
+                    Pressable(
+                      onTap: widget.onGoToEarn,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpace.lg,
+                          AppSpace.md,
+                          AppSpace.lg,
+                          AppSpace.md,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.play_circle_outline_rounded,
+                              size: 16,
+                              color: AppColors.primary,
+                            ),
+                            const SizedBox(width: AppSpace.sm),
+                            Text(
+                              'Watch an ad to top up',
+                              style: AppText.caption.copyWith(
+                                color: AppColors.text,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              'EARN',
+                              style: AppText.label.copyWith(
+                                fontSize: 9.5,
+                                letterSpacing: 2,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
-                ),
+                ],
               ),
             ),
           ),
-          if (widget.onGoToEarn != null) ...[
-            const SizedBox(height: AppSpace.md),
-            ScrollReveal(
-              delay: const Duration(milliseconds: 170),
-              child: IslandButton(
-                dense: true,
-                outline: true,
-                glow: false,
-                label: 'Watch ads to top up',
-                icon: CupertinoIcons.play_rectangle,
-                onPressed: widget.onGoToEarn,
-              ),
-            ),
-          ],
           const SizedBox(height: AppSpace.xxl),
 
           // ---- products -------------------------------------------------
