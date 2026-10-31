@@ -29,8 +29,6 @@ class AppUser {
 class Backend {
   Backend._();
 
-  static const stockChunkSize = 100;
-
   static final SessionStore _session = SessionStore();
   static final ApiClient _api = ApiClient(session: _session);
   static final ApiBackend _apiBackend = ApiBackend(_api);
@@ -173,7 +171,7 @@ class Backend {
     return key;
   }
 
-  static Future<String> claimApp(String productId) async {
+  static Future<({String url, String? sha256})> claimApp(String productId) async {
     final res = await _apiBackend.claim(productId);
     final url = res['downloadUrl'] as String?;
     if (url == null || url.trim().isEmpty) {
@@ -182,14 +180,18 @@ class Backend {
         message: 'Wala pang download link ang produktong ito.',
       );
     }
-    return url;
+    return (url: url, sha256: res['sha256'] as String?);
   }
 
   static Future<bool> owns(String productId) async =>
       (await myClaims()).any((c) => c.productId == productId);
 
-  static Future<Set<String>> ownedProductIds() async =>
-      (await myClaims()).map((c) => c.productId).toSet();
+  /// Ticket-free: the Store only needs the id set, so no `/downloads/:id`
+  /// request per owned product.
+  static Future<Set<String>> ownedProductIds() async {
+    if (await _session.accessToken() == null) return {};
+    return _apiBackend.ownedProductIds();
+  }
 
   // ---- history ----
 
@@ -202,14 +204,17 @@ class Backend {
     for (final c in raw) {
       // The claim row never carries the link; ask for a fresh one instead.
       var url = '';
+      String? sha;
       if (c.isDownload) {
         try {
-          url = (await _apiBackend.downloadTicket(c.productId)).url;
+          final ticket = await _apiBackend.downloadTicket(c.productId);
+          url = ticket.url;
+          sha = ticket.sha256;
         } on ApiException {
           url = '';
         }
       }
-      out.add(_claim(c, url));
+      out.add(_claim(c, url, sha: sha ?? c.sha256));
     }
     return out;
   }
@@ -282,8 +287,6 @@ class Backend {
 
   static Future<List<StockEntry>> listKeys() => _adminKeys();
 
-  static Future<List<StockEntry>> listAvailableKeys() => _adminKeys(status: 'available');
-
   static Future<List<StockEntry>> keysForProduct(
     String productId, {
     String duration = '',
@@ -292,9 +295,6 @@ class Backend {
     final rows = await _adminKeys(productId: productId, limit: limit);
     return duration.isEmpty ? rows : rows.where((k) => k.duration == duration).toList();
   }
-
-  static Future<int> availableStock() async =>
-      (await _adminKeys(status: 'available', limit: 5000)).length;
 
   static Future<List<StockEntry>> _adminKeys({
     String productId = '',
@@ -449,7 +449,7 @@ class Backend {
             .toList(),
       );
 
-  static Claim _claim(ApiClaim c, String downloadUrl) => Claim(
+  static Claim _claim(ApiClaim c, String downloadUrl, {String? sha}) => Claim(
         id: c.id,
         productId: c.productId,
         productName: c.productName,
@@ -458,6 +458,7 @@ class Backend {
         createdAt: c.createdAt?.toIso8601String() ?? '',
         downloadUrl: downloadUrl,
         duration: c.duration,
+        sha256: sha,
       );
 
   /// The admin UI still hands durations over as a JSON string.

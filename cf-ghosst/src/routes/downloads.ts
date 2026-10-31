@@ -22,10 +22,10 @@ export async function ticket(ctx: Ctx): Promise<Response> {
   if (!claim) throw new ApiError(403, "not_owned", "Buy this item first");
 
   const file = await ctx.env.DB.prepare(
-    `SELECT object_key, filename, size FROM product_files WHERE product_id = ?1`,
+    `SELECT object_key, filename, size, sha256 FROM product_files WHERE product_id = ?1`,
   )
     .bind(productId)
-    .first<{ object_key: string; filename: string; size: number }>();
+    .first<{ object_key: string; filename: string; size: number; sha256: string | null }>();
 
   if (!file) throw new ApiError(404, "download_unavailable", "Download not configured");
 
@@ -36,6 +36,7 @@ export async function ticket(ctx: Ctx): Promise<Response> {
     url: t.url,
     filename: file.filename,
     size: file.size,
+    sha256: file.sha256,
     expiresIn: t.expiresIn,
     expiresAt: new Date(Date.now() + t.expiresIn * 1000).toISOString(),
   });

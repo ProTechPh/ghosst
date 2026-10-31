@@ -74,6 +74,7 @@ interface CompleteBody {
   filename?: string;
   expectedSize?: number;
   expectedType?: string;
+  sha256?: string;
 }
 
 /** POST /v1/uploads/complete — verifies R2 metadata, then persists the row. */
@@ -89,6 +90,13 @@ export async function complete(ctx: Ctx): Promise<Response> {
   // object the product references by URL later. A file needs its product row.
   if (!productId && kind === "file") {
     throw new ApiError(400, "invalid_product", "productId is required");
+  }
+
+  // The client hashes the file (a Worker cannot digest 300 MB); we only check
+  // the shape so a client-side mismatch check has something to compare to.
+  const sha256 = body.sha256 ?? null;
+  if (sha256 !== null && !/^[0-9a-f]{64}$/.test(sha256)) {
+    throw new ApiError(400, "bad_sha256", "sha256 must be 64 lowercase hex characters");
   }
 
   const meta = await verifyObject(ctx.env, objectKey);
@@ -116,14 +124,23 @@ export async function complete(ctx: Ctx): Promise<Response> {
       .run();
   } else {
     await ctx.env.DB.prepare(
-      `INSERT INTO product_files (product_id, object_key, filename, size, content_type, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+      `INSERT INTO product_files (product_id, object_key, filename, size, content_type, sha256, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
        ON CONFLICT(product_id) DO UPDATE SET
          object_key = excluded.object_key, filename = excluded.filename,
          size = excluded.size, content_type = excluded.content_type,
+         sha256 = excluded.sha256,
          updated_at = excluded.updated_at`,
     )
-      .bind(productId, objectKey, body.filename ?? objectKey.split("/").pop()!, meta.size, meta.contentType, now)
+      .bind(
+        productId,
+        objectKey,
+        body.filename ?? objectKey.split("/").pop()!,
+        meta.size,
+        meta.contentType,
+        sha256,
+        now,
+      )
       .run();
   }
 

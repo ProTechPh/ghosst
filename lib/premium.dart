@@ -38,14 +38,16 @@ TextStyle monoStyle({
     color: color,
     letterSpacing: letterSpacing,
     height: height,
+    // Tabular digits — counters and key fragments keep their column width.
+    fontFeatures: const [FontFeature.tabularFigures()],
   );
 }
 
 String groupDigits(int value) {
   return value.toString().replaceAllMapped(
-        RegExp(r'\B(?=(\d{3})+(?!\d))'),
-        (m) => ',',
-      );
+    RegExp(r'\B(?=(\d{3})+(?!\d))'),
+    (m) => ',',
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -334,7 +336,8 @@ class _IslandButtonState extends State<IslandButton> {
   Widget build(BuildContext context) {
     final pressed = _down && _enabled;
     final isOutline = widget.outline;
-    final labelColor = widget.textColor ??
+    final labelColor =
+        widget.textColor ??
         (isOutline ? AppColors.text : const Color(0xFF04212A));
 
     final Widget button = Container(
@@ -349,11 +352,11 @@ class _IslandButtonState extends State<IslandButton> {
         gradient: isOutline
             ? null
             : (widget.gradient ??
-                const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF67E8F9), Color(0xFF22D3EE)],
-                )),
+                  const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF67E8F9), Color(0xFF22D3EE)],
+                  )),
         border: isOutline
             ? Border.all(
                 color: Colors.white.withValues(alpha: _enabled ? 0.16 : 0.08),
@@ -462,10 +465,7 @@ class _IslandButtonState extends State<IslandButton> {
         scale: pressed ? 0.97 : 1,
         duration: kMotionFast,
         curve: kPremiumCurve,
-        child: Opacity(
-          opacity: _enabled ? 1 : 0.45,
-          child: button,
-        ),
+        child: Opacity(opacity: _enabled ? 1 : 0.45, child: button),
       ),
     );
 
@@ -475,10 +475,44 @@ class _IslandButtonState extends State<IslandButton> {
 }
 
 // ---------------------------------------------------------------------------
-// PressableScale — tap feedback for cards and rows
+// Pressable — tap feedback for cards and rows
 // ---------------------------------------------------------------------------
 
-class PressableScale extends StatefulWidget {
+class Pressable extends StatefulWidget {
+  const Pressable({super.key, this.onTap, this.child, this.scale = 0.98});
+
+  final VoidCallback? onTap;
+  final Widget? child;
+  final double scale;
+
+  @override
+  State<Pressable> createState() => _PressableState();
+}
+
+class _PressableState extends State<Pressable> {
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.onTap != null;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: enabled ? (_) => setState(() => _down = true) : null,
+      onTapUp: enabled ? (_) => setState(() => _down = false) : null,
+      onTapCancel: enabled ? () => setState(() => _down = false) : null,
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _down && enabled ? widget.scale : 1,
+        duration: kMotionPress,
+        curve: kPremiumCurve,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+/// Legacy name for [Pressable]; kept so existing call sites compile.
+class PressableScale extends StatelessWidget {
   const PressableScale({
     super.key,
     required this.child,
@@ -491,27 +525,156 @@ class PressableScale extends StatefulWidget {
   final double scale;
 
   @override
-  State<PressableScale> createState() => _PressableScaleState();
+  Widget build(BuildContext context) {
+    return Pressable(onTap: onTap, scale: scale, child: child);
+  }
 }
 
-class _PressableScaleState extends State<PressableScale> {
-  bool _down = false;
+// ---------------------------------------------------------------------------
+// Skeleton — shimmering placeholder for loading states
+// ---------------------------------------------------------------------------
+
+class Skeleton extends StatefulWidget {
+  const Skeleton({
+    super.key,
+    this.width,
+    required this.height,
+    this.radius = AppRadius.input,
+  });
+
+  /// Null fills the parent's width.
+  final double? width;
+  final double height;
+  final double radius;
+
+  @override
+  State<Skeleton> createState() => _SkeletonState();
+}
+
+class _SkeletonState extends State<Skeleton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _shimmer = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _shimmer.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final pressed = _down && widget.onTap != null;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: widget.onTap != null ? (_) => setState(() => _down = true) : null,
-      onTapUp: widget.onTap != null ? (_) => setState(() => _down = false) : null,
-      onTapCancel: widget.onTap != null ? () => setState(() => _down = false) : null,
-      onTap: widget.onTap,
-      child: AnimatedScale(
-        scale: pressed ? widget.scale : 1,
-        duration: kMotionFast,
-        curve: kPremiumCurve,
-        child: widget.child,
+    return AnimatedBuilder(
+      animation: _shimmer,
+      builder: (context, _) => Container(
+        width: widget.width,
+        height: widget.height,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(widget.radius),
+          gradient: LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            stops: const [0.25, 0.5, 0.75],
+            colors: [
+              Colors.white.withValues(alpha: 0.05),
+              Colors.white.withValues(alpha: 0.12),
+              Colors.white.withValues(alpha: 0.05),
+            ],
+            transform: _ShimmerTransform(_shimmer.value),
+          ),
+        ),
       ),
+    );
+  }
+}
+
+class _ShimmerTransform extends GradientTransform {
+  const _ShimmerTransform(this.progress);
+
+  final double progress;
+
+  @override
+  Matrix4? transform(Rect bounds, {TextDirection? textDirection}) =>
+      Matrix4.translationValues(bounds.width * (progress * 2 - 1), 0, 0);
+}
+
+// ---------------------------------------------------------------------------
+// StatCell — small metric tile (balance, coins, keys, timer)
+// ---------------------------------------------------------------------------
+
+class StatCell extends StatelessWidget {
+  const StatCell({
+    super.key,
+    required this.label,
+    required this.value,
+    this.icon,
+    this.color,
+  });
+
+  final String label;
+  final String value;
+  final IconData? icon;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final tone = color ?? AppColors.text;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: AppText.caption),
+        const SizedBox(height: AppSpace.xs),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 16, color: tone),
+              const SizedBox(width: AppSpace.xs + 2),
+            ],
+            Flexible(
+              child: Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppText.figure.copyWith(color: tone),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SectionHeader — label plus optional trailing action
+// ---------------------------------------------------------------------------
+
+class SectionHeader extends StatelessWidget {
+  const SectionHeader({super.key, required this.title, this.trailing});
+
+  final String title;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: SectionLabel(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        if (trailing != null) ...[
+          const SizedBox(width: AppSpace.md),
+          trailing!,
+        ],
+      ],
     );
   }
 }
@@ -543,10 +706,7 @@ class AnimatedCounter extends StatelessWidget {
       duration: duration,
       curve: kPremiumCurve,
       builder: (context, current, _) {
-        return Text(
-          '$prefix${groupDigits(current)}$suffix',
-          style: style,
-        );
+        return Text('$prefix${groupDigits(current)}$suffix', style: style);
       },
     );
   }
@@ -646,11 +806,7 @@ class MeshBackground extends StatelessWidget {
               Positioned(
                 top: -140,
                 left: -110,
-                child: _orb(
-                  size: 420,
-                  color: AppColors.primary,
-                  alpha: 0.22,
-                ),
+                child: _orb(size: 420, color: AppColors.primary, alpha: 0.22),
               ),
               Positioned(
                 top: 180,

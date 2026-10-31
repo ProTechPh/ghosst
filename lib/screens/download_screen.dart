@@ -31,6 +31,7 @@ class DownloadScreen extends StatefulWidget {
     this.preferredName = '',
     this.imageUrl = '',
     this.youtubeUrl = '',
+    this.sha256,
   });
 
   /// MediaFire share page (or a direct link).
@@ -51,6 +52,10 @@ class DownloadScreen extends StatefulWidget {
   /// button on the downloaded state so buyers can learn the app after install.
   final String youtubeUrl;
 
+  /// Expected lowercase hex SHA-256 of the file. Null for legacy MediaFire
+  /// links — those downloads stay unverified (today's behaviour).
+  final String? sha256;
+
   @override
   State<DownloadScreen> createState() => _DownloadScreenState();
 }
@@ -59,6 +64,9 @@ class _DownloadScreenState extends State<DownloadScreen> {
   _State _state = _State.idle;
   DownloadProgress? _progress;
   DownloadTask? _task;
+
+  /// 1-second repaint so the speed counter keeps moving between chunks.
+  Timer? _uiTick;
   Timer? _publicDownloadPoll;
   int _publicDownloadId = 0;
   bool _checkingPublicDownload = false;
@@ -80,11 +88,15 @@ class _DownloadScreenState extends State<DownloadScreen> {
   @override
   void dispose() {
     _task?.cancel();
+    _uiTick?.cancel();
     _publicDownloadPoll?.cancel();
     super.dispose();
   }
 
   Future<void> _start() async {
+    // A retry must not stack another repaint timer on the old one.
+    _uiTick?.cancel();
+    _uiTick = null;
     if (_isApk && Distribution.isPlay) {
       await _startPublicApkDownload();
       return;
@@ -104,6 +116,7 @@ class _DownloadScreenState extends State<DownloadScreen> {
     _task = DownloadService.start(
       pageUrl: widget.url,
       preferredName: name,
+      sha256: widget.sha256,
       onProgress: (p) {
         if (!mounted) return;
         setState(() => _progress = p);
@@ -135,7 +148,7 @@ class _DownloadScreenState extends State<DownloadScreen> {
 
     // Cheap UI tick so the speed counter keeps moving between chunks.
     if (!mounted) return;
-    Timer.periodic(const Duration(seconds: 1), (t) {
+    _uiTick = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted || _state != _State.running) {
         t.cancel();
         return;
@@ -147,6 +160,10 @@ class _DownloadScreenState extends State<DownloadScreen> {
   /// Play builds may download APK products, but never invoke Android's package
   /// installer. DownloadManager owns the transfer and saves it to the public
   /// Downloads folder for the user to install later from Files/My Files.
+  ///
+  /// shortcut: Android's DownloadManager bytes never pass through the app, so
+  /// [DownloadScreen.sha256] cannot be checked on this path; verify in-app
+  /// before relying on the digest for Play builds.
   Future<void> _startPublicApkDownload() async {
     _publicDownloadPoll?.cancel();
     final rawName = widget.preferredName.trim().isEmpty

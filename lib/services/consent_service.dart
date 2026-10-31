@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:gma_mediation_unity/gma_mediation_unity.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 /// Google UMP consent gate. Ads initialize only after UMP says requests are
@@ -76,22 +75,6 @@ class ConsentService {
     return ConsentInformation.instance.canRequestAds();
   }
 
-  /// Explicitly forwards GDPR / CCPA consent flags to Unity Ads SDK via
-  /// the official gma_mediation_unity adapter plugin.
-  /// (Note: Google UMP automatically writes IAB TCF strings to SharedPreferences).
-  static Future<void> updateUnityConsent({
-    required bool gdprConsent,
-    required bool ccpaConsent,
-  }) async {
-    try {
-      final unityMediation = GmaMediationUnity();
-      await unityMediation.setGDPRConsent(gdprConsent);
-      await unityMediation.setCCPAConsent(ccpaConsent);
-      debugPrint(
-        '[Consent] Unity Ads consent flags set: GDPR=$gdprConsent, CCPA=$ccpaConsent',
-      );
-    } catch (e) {
-      debugPrint('[Consent] Failed to set Unity Ads consent: $e');
-    }
-  }
+  // Consent reaches Unity Ads through the UMP/TCF string UMP itself writes —
+  // the app forwards nothing by hand.
 }

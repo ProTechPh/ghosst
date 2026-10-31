@@ -1,6 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'premium.dart' show kPremiumCurve;
+
+/// Press feedback: fast enough to feel instant. Transform only — never layout.
+/// Lives here (not premium.dart) so the theme does not depend on a widget file.
+const kMotionPress = Duration(milliseconds: 120);
+
+/// Standard state transition (expands, fades, swaps).
+const kMotionStandard = Duration(milliseconds: 220);
+
 /// Dark-neon ("gamer") design system for Ghosst.
 class AppColors {
   AppColors._();
@@ -39,6 +48,114 @@ const Gradient kGoldGradient = LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
 );
+
+/// Spacing scale — every gap is one of these, never a magic number.
+class AppSpace {
+  AppSpace._();
+
+  static const double xs = 4;
+  static const double sm = 8;
+  static const double md = 12;
+  static const double lg = 16;
+  static const double xl = 24;
+  static const double xxl = 32;
+  static const double huge = 48;
+}
+
+/// Radius scale — tight inner elements, soft containers.
+class AppRadius {
+  AppRadius._();
+
+  static const double chip = 8;
+  static const double input = 12;
+  static const double button = 16;
+  static const double card = 22;
+  static const double hero = 28;
+  static const double pill = 999;
+}
+
+/// Type scale. Sizes, weights, heights and tracking are set here once so the
+/// app reads as one deliberate type system, not per-screen guesses.
+///
+/// Numbers (coins, keys, timers, prices) use [figure] — JetBrainsMono with
+/// tabular figures so columns of digits never jitter.
+class AppText {
+  AppText._();
+
+  static const String _sans = 'SpaceGrotesk';
+  static const String _mono = 'JetBrainsMono';
+
+  static const TextStyle display = TextStyle(
+    fontFamily: _sans,
+    fontSize: 34,
+    fontWeight: FontWeight.w800,
+    height: 1.05,
+    letterSpacing: -1.0,
+    color: AppColors.text,
+  );
+
+  static const TextStyle headline = TextStyle(
+    fontFamily: _sans,
+    fontSize: 26,
+    fontWeight: FontWeight.w800,
+    height: 1.08,
+    letterSpacing: -0.6,
+    color: AppColors.text,
+  );
+
+  static const TextStyle title = TextStyle(
+    fontFamily: _sans,
+    fontSize: 19,
+    fontWeight: FontWeight.w700,
+    height: 1.2,
+    letterSpacing: -0.3,
+    color: AppColors.text,
+  );
+
+  static const TextStyle subtitle = TextStyle(
+    fontFamily: _sans,
+    fontSize: 15.5,
+    fontWeight: FontWeight.w600,
+    height: 1.35,
+    color: AppColors.text,
+  );
+
+  static const TextStyle body = TextStyle(
+    fontFamily: _sans,
+    fontSize: 14,
+    fontWeight: FontWeight.w400,
+    height: 1.5,
+    color: AppColors.text,
+  );
+
+  static const TextStyle caption = TextStyle(
+    fontFamily: _sans,
+    fontSize: 12.5,
+    fontWeight: FontWeight.w500,
+    height: 1.45,
+    color: AppColors.textDim,
+  );
+
+  /// Uppercase, wide-tracked eyebrow above sections.
+  static const TextStyle label = TextStyle(
+    fontFamily: _sans,
+    fontSize: 11.5,
+    fontWeight: FontWeight.w800,
+    height: 1.2,
+    letterSpacing: 2,
+    color: AppColors.cyan,
+  );
+
+  static const TextStyle figure = TextStyle(
+    fontFamily: _mono,
+    fontSize: 15,
+    fontWeight: FontWeight.w700,
+    height: 1.2,
+    letterSpacing: -0.2,
+    color: AppColors.text,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+}
 
 class AppTheme {
   AppTheme._();
@@ -81,26 +198,31 @@ class AppTheme {
         color: AppColors.surface,
         elevation: 0,
         margin: EdgeInsets.zero,
+        shadowColor: AppColors.primary.withValues(alpha: 0.12),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(AppRadius.card),
           side: const BorderSide(color: AppColors.border),
         ),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: AppColors.surface,
         surfaceTintColor: Colors.transparent,
+        shadowColor: AppColors.primary.withValues(alpha: 0.16),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(AppRadius.hero),
           side: const BorderSide(color: AppColors.border),
         ),
-        titleTextStyle: const TextStyle(
-          color: AppColors.text,
-          fontSize: 20,
-          fontWeight: FontWeight.w800,
-        ),
-        contentTextStyle: const TextStyle(
-          color: AppColors.textDim,
-          fontSize: 14.5,
+        titleTextStyle: AppText.title,
+        contentTextStyle: AppText.body.copyWith(color: AppColors.textDim),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppColors.surface,
+        surfaceTintColor: Colors.transparent,
+        modalBackgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppRadius.hero),
+          ),
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
@@ -109,6 +231,7 @@ class AppTheme {
         elevation: 0,
         height: 68,
         indicatorColor: AppColors.primary.withValues(alpha: 0.20),
+        indicatorShape: const StadiumBorder(),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return IconThemeData(
@@ -118,7 +241,7 @@ class AppTheme {
         }),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
-          return TextStyle(
+          return AppText.caption.copyWith(
             fontSize: 11.5,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             color: selected ? AppColors.primary : AppColors.textDim,
@@ -127,57 +250,96 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surface,
-        hintStyle: const TextStyle(color: AppColors.textDim),
+        fillColor: AppColors.surfaceHigh.withValues(alpha: 0.55),
+        hintStyle: AppText.caption,
+        labelStyle: AppText.caption,
         prefixIconColor: AppColors.textDim,
         suffixIconColor: AppColors.textDim,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.lg,
+          vertical: AppSpace.lg,
+        ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadius.input),
           borderSide: const BorderSide(color: AppColors.border),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadius.input),
           borderSide: const BorderSide(color: AppColors.border),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadius.input),
           borderSide: const BorderSide(color: AppColors.primary, width: 1.6),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.input),
+          borderSide: const BorderSide(color: AppColors.red),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.input),
+          borderSide: const BorderSide(color: AppColors.red, width: 1.6),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
-          textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpace.xl,
+            vertical: AppSpace.lg,
+          ),
+          textStyle: AppText.subtitle.copyWith(fontSize: 15),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.button),
+          ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppColors.cyan,
-          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+          textStyle: AppText.caption.copyWith(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: AppColors.surfaceHigh,
-        contentTextStyle: const TextStyle(color: AppColors.text),
+        contentTextStyle: AppText.caption.copyWith(color: AppColors.text),
+        actionTextColor: AppColors.cyan,
+        elevation: 0,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.input),
+        ),
       ),
-      dividerTheme:
-          const DividerThemeData(color: AppColors.border, thickness: 1),
-      textTheme:
-          base.textTheme.apply(bodyColor: AppColors.text, displayColor: AppColors.text),
+      dividerTheme: const DividerThemeData(
+        color: AppColors.border,
+        thickness: 1,
+      ),
+      textTheme: base.textTheme.copyWith(
+        displayLarge: AppText.display,
+        displayMedium: AppText.display.copyWith(fontSize: 30),
+        headlineLarge: AppText.headline,
+        headlineMedium: AppText.headline.copyWith(fontSize: 22),
+        headlineSmall: AppText.headline.copyWith(fontSize: 20),
+        titleLarge: AppText.title,
+        titleMedium: AppText.subtitle,
+        titleSmall: AppText.subtitle.copyWith(fontSize: 14),
+        bodyLarge: AppText.body.copyWith(fontSize: 15),
+        bodyMedium: AppText.body,
+        bodySmall: AppText.caption,
+        labelLarge: AppText.subtitle.copyWith(fontWeight: FontWeight.w700),
+        labelMedium: AppText.caption.copyWith(fontWeight: FontWeight.w600),
+        labelSmall: AppText.label,
+      ),
       listTileTheme: const ListTileThemeData(
         iconColor: AppColors.textDim,
         textColor: AppColors.text,
       ),
-      progressIndicatorTheme:
-          const ProgressIndicatorThemeData(color: AppColors.primary),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: AppColors.primary,
+      ),
       iconTheme: const IconThemeData(color: AppColors.textDim),
     );
   }
@@ -198,12 +360,19 @@ class LogoBadge extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.40),
+            color: AppColors.primary.withValues(alpha: 0.34),
             blurRadius: size * 0.45,
             spreadRadius: 1,
+          ),
+          // Inner top highlight — light comes from above.
+          BoxShadow(
+            color: Colors.white.withValues(alpha: 0.10),
+            offset: const Offset(0, 1),
+            blurRadius: 1,
+            blurStyle: BlurStyle.inner,
           ),
         ],
       ),
@@ -260,7 +429,7 @@ class GradientText extends StatelessWidget {
 }
 
 /// Gradient CTA button with neon glow. Disabled when [onPressed] is null.
-class NeonButton extends StatelessWidget {
+class NeonButton extends StatefulWidget {
   const NeonButton({
     super.key,
     required this.onPressed,
@@ -281,24 +450,44 @@ class NeonButton extends StatelessWidget {
   final bool glow;
 
   @override
+  State<NeonButton> createState() => _NeonButtonState();
+}
+
+class _NeonButtonState extends State<NeonButton> {
+  bool _down = false;
+
+  @override
   Widget build(BuildContext context) {
-    final enabled = onPressed != null;
-    final radius = BorderRadius.circular(16);
+    final enabled = widget.onPressed != null;
+    final outline = widget.outline;
+    final radius = BorderRadius.circular(AppRadius.button);
     final decoration = BoxDecoration(
-      gradient: enabled && !outline ? gradient : null,
+      gradient: enabled && !outline ? widget.gradient : null,
       color: enabled
           ? (outline ? Colors.transparent : null)
-          : AppColors.surfaceHigh,
+          : AppColors.surfaceHigh.withValues(alpha: 0.55),
       borderRadius: radius,
       border: Border.all(
-        color: enabled && outline ? AppColors.border : (enabled ? Colors.transparent : AppColors.border),
+        color: enabled && !outline
+            ? Colors.transparent
+            : (outline && enabled
+                  ? Colors.white.withValues(alpha: 0.16)
+                  : AppColors.border),
       ),
-      boxShadow: enabled && glow && !outline
+      boxShadow: enabled && !outline
           ? [
+              if (widget.glow)
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.30),
+                  blurRadius: 24,
+                  spreadRadius: -6,
+                  offset: const Offset(0, 8),
+                ),
               BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.35),
-                blurRadius: 18,
-                offset: const Offset(0, 6),
+                color: Colors.white.withValues(alpha: 0.14),
+                offset: const Offset(0, 1),
+                blurRadius: 1,
+                blurStyle: BlurStyle.inner,
               ),
             ]
           : null,
@@ -308,29 +497,43 @@ class NeonButton extends StatelessWidget {
       type: MaterialType.transparency,
       child: InkWell(
         borderRadius: radius,
-        onTap: onPressed,
+        onTap: widget.onPressed,
+        onTapDown: enabled ? (_) => setState(() => _down = true) : null,
+        onTapUp: enabled ? (_) => setState(() => _down = false) : null,
+        onTapCancel: enabled ? () => setState(() => _down = false) : null,
         child: Padding(
-          padding: dense
-              ? const EdgeInsets.symmetric(horizontal: 16, vertical: 10)
-              : const EdgeInsets.symmetric(horizontal: 22, vertical: 15),
+          padding: widget.dense
+              ? const EdgeInsets.symmetric(
+                  horizontal: AppSpace.lg,
+                  vertical: AppSpace.sm + 2,
+                )
+              : const EdgeInsets.symmetric(
+                  horizontal: AppSpace.xl,
+                  vertical: AppSpace.lg,
+                ),
           child: DefaultTextStyle(
-            style: TextStyle(
+            style: AppText.subtitle.copyWith(
+              fontSize: widget.dense ? 13.5 : 15,
               fontWeight: FontWeight.w800,
-              fontSize: dense ? 13.5 : 15,
               letterSpacing: 0.2,
               color: outline
                   ? (enabled ? AppColors.cyan : AppColors.textDim)
-                  : (enabled ? const Color(0xFF04212A) : Colors.white),
+                  : (enabled ? const Color(0xFF04212A) : AppColors.textDim),
             ),
             textAlign: TextAlign.center,
-            child: child,
+            child: widget.child,
           ),
         ),
       ),
     );
 
-    final button = DecoratedBox(decoration: decoration, child: content);
-    if (expand) return SizedBox(width: double.infinity, child: button);
+    final button = AnimatedScale(
+      scale: _down && enabled ? 0.98 : 1,
+      duration: kMotionPress,
+      curve: kPremiumCurve,
+      child: DecoratedBox(decoration: decoration, child: content),
+    );
+    if (widget.expand) return SizedBox(width: double.infinity, child: button);
     return button;
   }
 }
@@ -354,7 +557,7 @@ class GlowCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(20);
+    final radius = BorderRadius.circular(AppRadius.card);
     Widget content = child;
     if (onTap != null) {
       content = Material(
@@ -365,7 +568,8 @@ class GlowCard extends StatelessWidget {
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        gradient: gradient ??
+        gradient:
+            gradient ??
             const LinearGradient(
               colors: [Color(0xFF0C1C22), Color(0xFF071317)],
               begin: Alignment.topLeft,
@@ -373,15 +577,22 @@ class GlowCard extends StatelessWidget {
             ),
         borderRadius: radius,
         border: Border.all(color: AppColors.border),
-        boxShadow: glow
-            ? [
-                BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.18),
-                  blurRadius: 26,
-                  offset: const Offset(0, 10),
-                ),
-              ]
-            : null,
+        boxShadow: [
+          // One light source, above: a soft cyan-tinted cast, never pure black.
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: glow ? 0.18 : 0.08),
+            blurRadius: glow ? 30 : 18,
+            spreadRadius: -6,
+            offset: const Offset(0, 10),
+          ),
+          // 1px inner top highlight so the top edge catches light.
+          BoxShadow(
+            color: Colors.white.withValues(alpha: 0.06),
+            offset: const Offset(0, 1),
+            blurRadius: 1,
+            blurStyle: BlurStyle.inner,
+          ),
+        ],
       ),
       child: content,
     );
@@ -404,23 +615,27 @@ class NeonPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.sm,
+        vertical: AppSpace.xs,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
         border: Border.all(color: color.withValues(alpha: 0.40)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 13, color: color),
-          const SizedBox(width: 5),
+          const SizedBox(width: AppSpace.xs),
           Text(
             label,
             style: TextStyle(
               color: color,
               fontSize: 12,
               fontWeight: FontWeight.w700,
+              height: 1.2,
             ),
           ),
         ],
@@ -439,30 +654,46 @@ class CoinPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pill = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.md,
+        vertical: AppSpace.sm - 1,
+      ),
       decoration: BoxDecoration(
         gradient: kGoldGradient,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
         boxShadow: [
           BoxShadow(
-            color: AppColors.gold.withValues(alpha: 0.35),
-            blurRadius: 12,
+            color: AppColors.gold.withValues(alpha: 0.30),
+            blurRadius: 14,
+            spreadRadius: -4,
             offset: const Offset(0, 4),
+          ),
+          // Inner top highlight — the pill is raised, lit from above.
+          BoxShadow(
+            color: Colors.white.withValues(alpha: 0.30),
+            offset: const Offset(0, 1),
+            blurRadius: 1,
+            blurStyle: BlurStyle.inner,
           ),
         ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.monetization_on_rounded,
-              size: 16, color: Color(0xFF422006)),
-          const SizedBox(width: 6),
+          const Icon(
+            Icons.monetization_on_rounded,
+            size: 16,
+            color: Color(0xFF422006),
+          ),
+          const SizedBox(width: AppSpace.xs + 2),
           Text(
             '$coins',
-            style: const TextStyle(
-              color: Color(0xFF422006),
-              fontWeight: FontWeight.w900,
+            // Tabular mono digits — the balance never wiggles as it counts.
+            style: AppText.figure.copyWith(
+              color: const Color(0xFF422006),
               fontSize: 14,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
             ),
           ),
         ],
@@ -492,40 +723,55 @@ class EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(AppSpace.xxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               width: 76,
               height: 76,
+              padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.35),
+                  color: AppColors.primary.withValues(alpha: 0.12),
                 ),
               ),
-              child: Icon(icon, size: 34, color: AppColors.primary),
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.primary.withValues(alpha: 0.10),
+                  border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.30),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.16),
+                      blurRadius: 24,
+                      spreadRadius: -8,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Icon(icon, size: 30, color: AppColors.primary),
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpace.lg),
             Text(
               title,
-              style: const TextStyle(
-                  fontSize: 17, fontWeight: FontWeight.w800),
+              style: AppText.title.copyWith(fontSize: 17),
               textAlign: TextAlign.center,
             ),
             if (message != null) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpace.sm),
               Text(
                 message!,
-                style: const TextStyle(
-                    color: AppColors.textDim, fontSize: 13.5, height: 1.5),
+                style: AppText.caption,
                 textAlign: TextAlign.center,
               ),
             ],
             if (action != null) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpace.xl),
               action!,
             ],
           ],
@@ -537,12 +783,7 @@ class EmptyState extends StatelessWidget {
 
 /// Small uppercase cyan section label.
 class SectionLabel extends StatelessWidget {
-  const SectionLabel(
-    this.text, {
-    super.key,
-    this.maxLines,
-    this.overflow,
-  });
+  const SectionLabel(this.text, {super.key, this.maxLines, this.overflow});
 
   final String text;
   final int? maxLines;
@@ -551,17 +792,12 @@ class SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10, top: 6),
+      padding: const EdgeInsets.only(bottom: AppSpace.sm, top: AppSpace.xs),
       child: Text(
         text.toUpperCase(),
         maxLines: maxLines,
         overflow: overflow,
-        style: const TextStyle(
-          color: AppColors.cyan,
-          fontSize: 11.5,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 2,
-        ),
+        style: AppText.label,
       ),
     );
   }

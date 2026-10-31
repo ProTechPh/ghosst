@@ -67,12 +67,24 @@ export async function remove(ctx: Ctx): Promise<Response> {
 
   await ctx.env.DB.batch([
     ctx.env.DB.prepare(`DELETE FROM claims WHERE user_id = ?1`).bind(uid),
-    ctx.env.DB.prepare(`DELETE FROM ad_rewards WHERE user_id = ?1`).bind(uid),
+    // ad_rewards rows deliberately survive: they hold only a transaction id, the
+    // tombstone user id, an email hash and a timestamp — no PII — and they are
+    // what keeps the daily ad cap from resetting on a delete + re-register.
     ctx.env.DB.prepare(`DELETE FROM idempotency WHERE user_id = ?1`).bind(uid),
+    // Back to the shelf: leaving status = 'claimed' would strand the key forever.
     ctx.env.DB.prepare(
-      `UPDATE keys SET claimed_by = NULL WHERE claimed_by = ?1`,
+      `UPDATE keys SET status = 'available', claimed_by = NULL, claimed_at = NULL
+        WHERE claimed_by = ?1`,
     ).bind(uid),
-    ctx.env.DB.prepare(`UPDATE users SET deleted_at = ?1 WHERE id = ?2`).bind(now, uid),
+    // Anonymise rather than keep the PII: the row stays as a tombstone so the
+    // id never gets reused, but the email/password are gone for good.
+    ctx.env.DB.prepare(
+      `UPDATE users SET deleted_at = ?1,
+         email = 'deleted+' || ?2 || '@invalid',
+         display_name = '',
+         password_hash = ''
+       WHERE id = ?2`,
+    ).bind(now, uid),
     ctx.env.DB.prepare(`UPDATE sessions SET revoked_at = ?1 WHERE user_id = ?2`).bind(now, uid),
   ]);
 

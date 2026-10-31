@@ -20,16 +20,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Set up Java
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: '3.47.6'
           channel: stable
@@ -51,6 +51,10 @@ jobs:
           sed -i "s/^version: .*/version: ${BASE}+${NEW}/" pubspec.yaml
           echo "APP_VERSION=${BASE}+${NEW}" >> "$GITHUB_ENV"
           echo "ASSET_VERSION=${BASE}-${NEW}" >> "$GITHUB_ENV"
+          # QA artifacts get a version code far from the live one so a test-ads
+          # APK can never install over the live app, and Play never sees the
+          # same code twice.
+          echo "QA_BUILD=$((NEW + 500))" >> "$GITHUB_ENV"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pubspec.yaml
@@ -73,30 +77,23 @@ jobs:
       - name: Prepare release assets
         run: mkdir -p release-assets
 
-      # Debug mode normally defaults to test ads, but the define is explicit so
-      # a future default change cannot accidentally put live ads in this APK.
-      - name: Build debug APK (test ads)
-        run: |
-          set -euo pipefail
-          flutter build apk --debug --flavor play --dart-define=USE_TEST_ADS=true
-          cp build/app/outputs/flutter-apk/app-play-debug.apk \
-            "release-assets/ghosst-play-debug-test-ads-${ASSET_VERSION}.apk"
-
       # Release-mode QA catches optimizer/release-only bugs while still using
       # Google's guaranteed-fill sample IDs. Never publish this APK to users.
+      # The +500 version code keeps QA out of the live build's install slot.
       - name: Build release QA APK (test ads)
         run: |
           set -euo pipefail
-          flutter build apk --release --flavor play --dart-define=USE_TEST_ADS=true
+          flutter build apk --release --flavor play --dart-define=USE_TEST_ADS=true \
+            --build-number "$QA_BUILD"
           cp build/app/outputs/flutter-apk/app-play-release.apk \
             "release-assets/ghosst-play-release-test-ads-${ASSET_VERSION}.apk"
 
-      # Closed-testing bundle. Upload this OR the live bundle for a given
-      # version code, never both; Play accepts each version code only once.
+      # Closed-testing bundle. Same separated version code as the QA APK.
       - name: Build closed-beta bundle (test ads)
         run: |
           set -euo pipefail
-          flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=true
+          flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=true \
+            --build-number "$QA_BUILD"
           cp build/app/outputs/bundle/playRelease/app-play-release.aab \
             "release-assets/ghosst-play-closed-beta-test-ads-${ASSET_VERSION}.aab"
 
@@ -114,22 +111,29 @@ jobs:
           cp build/app/outputs/bundle/playRelease/app-play-release.aab \
             "release-assets/ghosst-play-live-ads-${ASSET_VERSION}.aab"
 
-      # R8 mapping corresponds to the final live-ads Play bundle build.
-      - name: Compress deobfuscation mapping
+      # A wrong --dart-define silently ships test ads (no SSV, no coins) or
+      # live ads to beta testers; both bundles must carry their own units.
+      # grep -c (not -q) so unzip is never killed by SIGPIPE under pipefail.
+      - name: Verify ad units in bundles
         run: |
           set -euo pipefail
-          MAP=build/app/outputs/mapping/playRelease/mapping.txt
-          test -f "$MAP"
-          gzip -c "$MAP" > "release-assets/mapping-play-release-${ASSET_VERSION}.txt.gz"
+          unzip -p "release-assets/ghosst-play-live-ads-${ASSET_VERSION}.aab" \
+            | grep -ac 'ca-app-pub-7791552060229072/3206073177' >/dev/null
+          unzip -p "release-assets/ghosst-play-closed-beta-test-ads-${ASSET_VERSION}.aab" \
+            | grep -ac 'ca-app-pub-3940256099942544/5224354917' >/dev/null
 
       # Keep a downloadable Actions artifact even if GitHub Release publishing
       # is temporarily unavailable. GitHub wraps this copy in a zip; the files
-      # attached to the Release below remain raw APK/AAB/GZ assets.
+      # attached to the Release below remain raw APK/AAB assets. The R8 mapping
+      # stays here only: publishing it next to the APK would hand out the
+      # tamper-check method names.
       - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ghosst-android-${{ env.ASSET_VERSION }}
-          path: release-assets/*
+          path: |
+            release-assets/*
+            build/app/outputs/mapping/playRelease/mapping.txt
           if-no-files-found: error
           retention-days: 30
 
@@ -144,8 +148,7 @@ jobs:
           NOTES="${NOTES}"$'\n\n'"- **Play AAB / live-ads APK:** production AdMob IDs + Apps/APK shelf"
           NOTES="${NOTES}"$'\n'"- **closed-beta-test-ads AAB:** test ads + Apps/APK shelf; do not promote to production"
           NOTES="${NOTES}"$'\n'"- **release-test-ads APK:** release-mode QA with Google sample ads; do not distribute"
-          NOTES="${NOTES}"$'\n'"- **debug-test-ads APK:** debug/testing only"
-          NOTES="${NOTES}"$'\n'"- Upload only one AAB for this version code; Play version codes cannot be reused"
+          NOTES="${NOTES}"$'\n'"- Live builds use version code ${APP_VERSION##*+}; QA builds use ${QA_BUILD}. Play cannot reuse a version code"
           NOTES="${NOTES}"$'\n\n'"Source commit: \`${GITHUB_SHA:0:7}\`"
           NOTES="${NOTES}"$'\n'"Workflow: ${RUN_URL}"
 
@@ -158,4 +161,4 @@ jobs:
               --target "$BUMP_SHA" \
               --latest
           fi
-          echo "Published ${TAG} with live, debug, and test-ad builds"
+          echo "Published ${TAG} with live and test-ad builds"

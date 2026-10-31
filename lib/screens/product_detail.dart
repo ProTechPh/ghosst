@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../premium.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
 import 'claim_reveal.dart';
@@ -122,24 +123,29 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 
   /// URL from an earlier purchase (owned products never re-spend coins).
-  Future<String> _ownedUrl() async {
+  Future<Claim?> _ownedClaim() async {
     try {
       final claims = await Backend.myClaims();
       for (final c in claims) {
         if (c.productId == widget.product.id && c.downloadUrl.isNotEmpty) {
-          return c.downloadUrl;
+          return c;
         }
       }
     } catch (_) {
       // Fall through — the admin can re-check the link if nothing is found.
     }
-    return '';
+    return null;
   }
 
   Future<void> _openDownload() async {
     final p = widget.product;
     var url = _lastUrl;
-    if (url.isEmpty) url = await _ownedUrl();
+    var sha = _lastSha;
+    if (url.isEmpty) {
+      final c = await _ownedClaim();
+      url = c?.downloadUrl ?? '';
+      sha = c?.sha256;
+    }
     if (url.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -162,6 +168,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           preferredName: p.isApk ? '${p.name}.apk' : '',
           imageUrl: Backend.productThumbUrl(p.imageIds),
           youtubeUrl: p.youtubeUrl,
+          sha256: sha,
         ),
       ),
     );
@@ -181,6 +188,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   /// `Backend.claimApp` returns the current MediaFire URL).
   String _lastUrl = '';
 
+  /// Checksum that came with [_lastUrl], when the server published one.
+  String? _lastSha;
+
   Future<void> _claim() async {
     if (claiming) return;
     final p = widget.product;
@@ -199,9 +209,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         if (!isApp) {
           return Backend.claim(p.id, duration: duration);
         }
-        final url = await Backend.claimApp(p.id);
-        _lastUrl = url;
-        return url;
+        final res = await Backend.claimApp(p.id);
+        _lastUrl = res.url;
+        _lastSha = res.sha256;
+        return res.url;
       },
     );
     if (!mounted) return;
@@ -222,7 +233,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         if (_lastUrl.isEmpty) {
           // Defensive only — the claim already succeeded, so read the link
           // back from the existing purchase instead of charging again.
-          _lastUrl = await _ownedUrl();
+          final c = await _ownedClaim();
+          _lastUrl = c?.downloadUrl ?? '';
+          _lastSha = c?.sha256;
         }
         if (!mounted) return;
         if (_lastUrl.isNotEmpty) await _openDownload();
@@ -259,267 +272,447 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         ? 'Out of stock'
         : affordable
         ? isApp
-              ? 'Buy & download · $cost coins'
-              : 'Claim key · $cost coins'
+              ? 'Buy & download'
+              : 'Claim key'
         : 'Not enough coins';
 
     return Scaffold(
-      appBar: AppBar(title: Text(isApp ? 'App details' : 'Product details')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+      backgroundColor: AppColors.bg,
+      body: Stack(
         children: [
-          _carousel(),
-          const SizedBox(height: 18),
-          Text(
-            p.name,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.4,
-              height: 1.15,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          ListView(
+            padding: const EdgeInsets.only(bottom: AppSpace.lg),
             children: [
-              NeonPill(
-                icon: Icons.monetization_on_rounded,
-                label: '$cost coins',
-                color: AppColors.gold,
-              ),
-              if (isApp)
-                NeonPill(
-                  icon: p.isApk
-                      ? Icons.android_rounded
-                      : Icons.insert_drive_file_outlined,
-                  label: p.isApk ? 'APK' : 'FILE',
-                  color: AppColors.cyan,
+              _hero(),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpace.xl,
+                  AppSpace.xl,
+                  AppSpace.xl,
+                  0,
                 ),
-              if (p.version.isNotEmpty)
-                NeonPill(
-                  icon: Icons.tag_rounded,
-                  label: p.version,
-                  color: AppColors.textDim,
-                ),
-              if (p.fileSize.isNotEmpty)
-                NeonPill(
-                  icon: Icons.data_usage_rounded,
-                  label: p.fileSize,
-                  color: AppColors.cyan,
-                ),
-              if (isOwned)
-                const NeonPill(
-                  icon: Icons.check_circle_rounded,
-                  label: 'Owned',
-                  color: AppColors.green,
-                ),
-              if (p.isKey && widget.stock >= 0)
-                widget.stock == 0
-                    ? const NeonPill(
-                        icon: Icons.remove_shopping_cart_outlined,
-                        label: 'Out of stock',
-                        color: AppColors.red,
-                      )
-                    : NeonPill(
-                        icon: Icons.inventory_2_outlined,
-                        label: '${widget.stock} in stock',
-                        color: AppColors.green,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(p.name, style: AppText.headline),
+                    const SizedBox(height: AppSpace.sm),
+                    Text(
+                      isApp
+                          ? (p.isApk
+                                ? 'Android app · downloaded with your coins'
+                                : 'Digital file · downloaded with your coins')
+                          : 'License key · delivered instantly',
+                      style: AppText.caption,
+                    ),
+                    const SizedBox(height: AppSpace.lg),
+
+                    // ---- price / stock / type --------------------------
+                    _stats(
+                      cost: cost,
+                      outOfStock: outOfStock,
+                      isApp: isApp,
+                    ),
+                    if (p.version.isNotEmpty || p.fileSize.isNotEmpty) ...[
+                      const SizedBox(height: AppSpace.md),
+                      Wrap(
+                        spacing: AppSpace.sm,
+                        runSpacing: AppSpace.xs,
+                        children: [
+                          if (p.version.isNotEmpty)
+                            NeonPill(
+                              icon: Icons.tag_rounded,
+                              label: p.version,
+                              color: AppColors.textDim,
+                            ),
+                          if (p.fileSize.isNotEmpty)
+                            NeonPill(
+                              icon: Icons.data_usage_rounded,
+                              label: p.fileSize,
+                              color: AppColors.cyan,
+                            ),
+                        ],
                       ),
-              NeonPill(
-                icon: Icons.account_balance_wallet_outlined,
-                label: '$coins coins',
-                color: AppColors.cyan,
+                    ],
+
+                    // ---- description -----------------------------------
+                    const SizedBox(height: AppSpace.xl),
+                    const SectionHeader(title: 'About this product'),
+                    Text(
+                      p.description.trim().isEmpty
+                          ? 'No description yet.'
+                          : p.description.trim(),
+                      style: AppText.body.copyWith(
+                        height: 1.6,
+                        color: p.description.trim().isEmpty
+                            ? AppColors.textDim
+                            : AppColors.text,
+                      ),
+                    ),
+
+                    // ---- youtube --------------------------------------
+                    if (_ytId != null) ...[
+                      const SizedBox(height: AppSpace.xl),
+                      SectionHeader(
+                        title: p.isDownloadable ? 'Tutorial' : 'Video',
+                      ),
+                      GlowCard(
+                        padding: const EdgeInsets.all(6),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(
+                            AppRadius.input + 2,
+                          ),
+                          child: AspectRatio(
+                            aspectRatio: 16 / 9,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                Image.network(
+                                  'https://i.ytimg.com/vi/$_ytId/hqdefault.jpg',
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stack) =>
+                                      const ColoredBox(color: Colors.black),
+                                ),
+                                const ColoredBox(color: Color(0x2E000000)),
+                                Center(
+                                  child: Pressable(
+                                    scale: 0.94,
+                                    onTap: _openExternal,
+                                    child: Container(
+                                      width: 58,
+                                      height: 58,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Colors.black.withValues(
+                                          alpha: 0.62,
+                                        ),
+                                        border: Border.all(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.24,
+                                          ),
+                                        ),
+                                      ),
+                                      child: const Icon(
+                                        Icons.play_arrow_rounded,
+                                        color: Colors.white,
+                                        size: 34,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ] else if (p.youtubeUrl.trim().isNotEmpty) ...[
+                      const SizedBox(height: AppSpace.xl),
+                      SectionHeader(
+                        title: p.isDownloadable ? 'Tutorial' : 'Video',
+                      ),
+                      GlowCard(
+                        padding: const EdgeInsets.all(AppSpace.md),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.link_off_rounded,
+                              color: AppColors.gold,
+                              size: 20,
+                            ),
+                            const SizedBox(width: AppSpace.sm + 2),
+                            Expanded(
+                              child: Text(
+                                'YouTube link not recognized. Use a video link like '
+                                'https://youtu.be/… , https://www.youtube.com/watch?v=… '
+                                'or https://www.youtube.com/shorts/…',
+                                style: AppText.caption.copyWith(height: 1.45),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    // ---- duration options -----------------------------
+                    if (p.hasDurations) ...[
+                      const SizedBox(height: AppSpace.xl),
+                      const SectionHeader(title: 'Duration'),
+                      Wrap(
+                        spacing: AppSpace.sm,
+                        runSpacing: AppSpace.sm,
+                        children: [
+                          for (final d in p.durations)
+                            _durationChip(
+                              label: d.label,
+                              cost: d.cost,
+                              selected: d.label == (sel?.label ?? ''),
+                              onTap: () =>
+                                  setState(() => _durationLabel = d.label),
+                            ),
+                        ],
+                      ),
+                    ],
+
+                    // ---- purchase note --------------------------------
+                    if (isApp && !isOwned) ...[
+                      const SizedBox(height: AppSpace.xl),
+                      Text(
+                        'One purchase — you can re-download it any time from '
+                        'My Purchases.',
+                        style: AppText.caption,
+                      ),
+                    ],
+                    const SizedBox(height: AppSpace.xl),
+                  ],
+                ),
               ),
             ],
           ),
 
-          // ---- description ----
-          const SizedBox(height: 20),
-          const SectionLabel('About this product'),
-          Text(
-            p.description.trim().isEmpty
-                ? 'No description yet.'
-                : p.description.trim(),
-            style: TextStyle(
-              color: p.description.trim().isEmpty
-                  ? AppColors.textDim
-                  : AppColors.text,
-              fontSize: 14.5,
-              height: 1.55,
-            ),
+          // ---- floating glass back button ---------------------------
+          Positioned(
+            top: MediaQuery.paddingOf(context).top + AppSpace.xs,
+            left: AppSpace.lg,
+            child: _glassBack(context),
           ),
-
-          // ---- youtube ----
-          if (_ytId != null) ...[
-            const SizedBox(height: 20),
-            SectionLabel(p.isDownloadable ? 'Tutorial' : 'Video'),
-            GlowCard(
-              padding: const EdgeInsets.all(6),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: GestureDetector(
-                    onTap: _openExternal,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        Image.network(
-                          'https://i.ytimg.com/vi/$_ytId/hqdefault.jpg',
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stack) =>
-                              const ColoredBox(color: Colors.black),
-                        ),
-                        const ColoredBox(color: Color(0x2E000000)),
-                        Center(
-                          child: Container(
-                            width: 62,
-                            height: 62,
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Color(0xCC000000),
-                            ),
-                            child: const Icon(
-                              Icons.play_arrow_rounded,
-                              color: Colors.white,
-                              size: 38,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ] else if (p.youtubeUrl.trim().isNotEmpty) ...[
-            const SizedBox(height: 20),
-            SectionLabel(p.isDownloadable ? 'Tutorial' : 'Video'),
-            GlowCard(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(
-                    Icons.link_off_rounded,
-                    color: AppColors.gold,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'YouTube link not recognized. Use a video link like '
-                      'https://youtu.be/… , https://www.youtube.com/watch?v=… '
-                      'or https://www.youtube.com/shorts/…',
-                      style: const TextStyle(
-                        color: AppColors.textDim,
-                        fontSize: 13,
-                        height: 1.45,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-
-          // ---- duration options ----
-          if (p.hasDurations) ...[
-            const SizedBox(height: 22),
-            const SectionLabel('Duration'),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final d in p.durations)
-                  _durationChip(
-                    label: d.label,
-                    cost: d.cost,
-                    selected: d.label == (sel?.label ?? ''),
-                    onTap: () => setState(() => _durationLabel = d.label),
-                  ),
-              ],
-            ),
-          ],
-
-          // ---- claim ----
-          const SizedBox(height: 24),
-          NeonButton(
-            expand: true,
-            onPressed: canClaim || isOwned
-                ? () {
-                    if (isOwned) {
-                      _openDownload();
-                    } else {
-                      _claim();
-                    }
-                  }
-                : null,
-            child: claiming
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.4,
-                      color: Colors.white,
-                    ),
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (isOwned) ...[
-                        const Icon(Icons.download_rounded, size: 17),
-                        const SizedBox(width: 7),
-                      ],
-                      Text(label),
-                    ],
-                  ),
-          ),
-          if (!isOwned && !affordable && !outOfStock) ...[
-            const SizedBox(height: 10),
-            Text(
-              'Watch ads on the Earn tab to get ${cost - coins} more coins.',
-              style: const TextStyle(color: AppColors.textDim, fontSize: 13),
-              textAlign: TextAlign.center,
-            ),
-          ],
-          if (isApp && !isOwned) ...[
-            const SizedBox(height: 10),
-            Text(
-              'One purchase — you can re-download it any time from '
-              'My Purchases.',
-              style: const TextStyle(color: AppColors.textDim, fontSize: 13),
-              textAlign: TextAlign.center,
-            ),
-          ],
         ],
+      ),
+      bottomNavigationBar: _buyBar(
+        cost: cost,
+        isOwned: isOwned,
+        affordable: affordable,
+        outOfStock: outOfStock,
+        canClaim: canClaim,
+        label: label,
       ),
     );
   }
 
-  /// Selectable duration chip (durations block) — hardcoded styling because
-  /// this screen deliberately doesn't import premium.dart.
+  Widget _glassBack(BuildContext context) {
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AppColors.bg.withValues(alpha: 0.55),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+      ),
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        tooltip: 'Back',
+        onPressed: () => Navigator.of(context).maybePop(),
+        icon: const Icon(
+          Icons.arrow_back_rounded,
+          size: 20,
+          color: AppColors.text,
+        ),
+      ),
+    );
+  }
+
+  /// Price / stock / type — mono figures, never body text.
+  Widget _stats({
+    required int cost,
+    required bool outOfStock,
+    required bool isApp,
+  }) {
+    final type = widget.product.isApk
+        ? 'APK'
+        : widget.product.isFile
+        ? 'FILE'
+        : 'KEY';
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: StatCell(
+            label: 'Price',
+            value: groupDigits(cost),
+            icon: Icons.monetization_on_rounded,
+            color: AppColors.gold,
+          ),
+        ),
+        if (widget.product.isKey && widget.stock >= 0) ...[
+          _statDivider(),
+          Expanded(
+            child: StatCell(
+              label: 'In stock',
+              value: groupDigits(widget.stock),
+              color: outOfStock ? AppColors.red : AppColors.green,
+            ),
+          ),
+        ],
+        _statDivider(),
+        Expanded(
+          child: StatCell(
+            label: 'Type',
+            value: type,
+            color: isApp ? AppColors.cyan : AppColors.text,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _statDivider() {
+    return Container(
+      width: 1,
+      height: 34,
+      margin: const EdgeInsets.symmetric(horizontal: AppSpace.md),
+      color: AppColors.border,
+    );
+  }
+
+  /// Sticky purchase bar: price on the left, CTA on the right.
+  Widget _buyBar({
+    required int cost,
+    required bool isOwned,
+    required bool affordable,
+    required bool outOfStock,
+    required bool canClaim,
+    required String label,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.bg.withValues(alpha: 0.96),
+        border: const Border(top: BorderSide(color: AppColors.border)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpace.xl,
+            AppSpace.md,
+            AppSpace.xl,
+            AppSpace.md,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!isOwned && !affordable && !outOfStock) ...[
+                Text(
+                  'Watch ads on the Earn tab to get ${cost - coins} more coins.',
+                  style: AppText.caption,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: AppSpace.sm),
+              ],
+              Row(
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        isOwned ? 'OWNED' : 'PRICE',
+                        style: AppText.caption.copyWith(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpace.xs),
+                      if (isOwned)
+                        Text(
+                          'Ready',
+                          style: AppText.subtitle.copyWith(
+                            color: AppColors.cyan,
+                          ),
+                        )
+                      else
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.monetization_on_rounded,
+                              size: 17,
+                              color: AppColors.gold,
+                            ),
+                            const SizedBox(width: AppSpace.xs),
+                            Text(
+                              groupDigits(cost),
+                              style: AppText.figure.copyWith(
+                                fontSize: 19,
+                                color: AppColors.gold,
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                  const SizedBox(width: AppSpace.lg),
+                  Expanded(
+                    child: NeonButton(
+                      expand: true,
+                      onPressed: canClaim || isOwned
+                          ? () {
+                              if (isOwned) {
+                                _openDownload();
+                              } else {
+                                _claim();
+                              }
+                            }
+                          : null,
+                      child: claiming
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.4,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (isOwned) ...[
+                                  const Icon(Icons.download_rounded, size: 17),
+                                  const SizedBox(width: AppSpace.sm - 1),
+                                ],
+                                Flexible(
+                                  child: Text(
+                                    label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Selectable duration chip — mono cost, gold price tone.
   Widget _durationChip({
     required String label,
     required int cost,
     required bool selected,
     required VoidCallback onTap,
   }) {
-    return InkWell(
+    return Pressable(
+      scale: 0.97,
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        duration: kMotionStandard,
+        curve: kPremiumCurve,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.md + 2,
+          vertical: AppSpace.sm + 1,
+        ),
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.cyan.withValues(alpha: 0.12)
+              ? AppColors.primary.withValues(alpha: 0.14)
               : AppColors.surface,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.input),
           border: Border.all(
-            color: selected ? AppColors.cyan : AppColors.border,
+            color: selected ? AppColors.primary : AppColors.border,
             width: selected ? 1.4 : 1,
           ),
         ),
@@ -528,19 +721,25 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           children: [
             Text(
               label,
-              style: TextStyle(
-                fontSize: 13.5,
+              style: AppText.caption.copyWith(
+                fontSize: 13,
                 fontWeight: FontWeight.w700,
+                letterSpacing: 0,
                 color: selected ? AppColors.text : AppColors.textDim,
               ),
             ),
-            const SizedBox(width: 7),
+            const SizedBox(width: AppSpace.sm),
+            Icon(
+              Icons.monetization_on_rounded,
+              size: 12,
+              color: AppColors.gold.withValues(alpha: selected ? 1 : 0.7),
+            ),
+            const SizedBox(width: AppSpace.xs - 1),
             Text(
-              '$cost',
-              style: const TextStyle(
+              groupDigits(cost),
+              style: AppText.figure.copyWith(
                 fontSize: 13,
-                fontWeight: FontWeight.w800,
-                color: AppColors.gold,
+                color: AppColors.gold.withValues(alpha: selected ? 1 : 0.7),
               ),
             ),
           ],
@@ -549,85 +748,110 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
-  Widget _carousel() {
-    final ids = widget.product.imageIds;
-    if (ids.isEmpty) {
-      // No images yet — styled placeholder.
-      return Container(
-        height: 210,
-        decoration: BoxDecoration(
-          gradient: widget.product.isApk ? kNeonGradient : kTealGradient,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Center(
-          child: Icon(
-            widget.product.isKey
-                ? Icons.key_rounded
-                : widget.product.isApk
-                ? Icons.android_rounded
-                : Icons.insert_drive_file_rounded,
-            color: Colors.white,
-            size: 64,
-          ),
-        ),
-      );
-    }
+  /// Edge-to-edge poster with a scrim that melts into the page background.
+  Widget _hero() {
+    final product = widget.product;
+    final ids = product.imageIds;
 
-    return Column(
-      children: [
-        Container(
-          height: 250,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: AppColors.border),
-            color: AppColors.surface,
-          ),
-          child: PageView.builder(
-            controller: _page,
-            itemCount: ids.length,
-            onPageChanged: (i) => setState(() => _pageIdx = i),
-            itemBuilder: (context, i) => Image.network(
-              Backend.imageUrl(ids[i], width: 900),
-              fit: BoxFit.cover,
-              width: double.infinity,
-              loadingBuilder: (context, child, progress) => progress == null
-                  ? child
-                  : const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2.6),
-                    ),
-              errorBuilder: (context, e, s) => Container(
-                color: AppColors.surfaceHigh,
-                child: const Icon(
-                  Icons.broken_image_outlined,
-                  color: AppColors.textDim,
-                  size: 42,
+    return SizedBox(
+      height: 320,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (ids.isEmpty)
+            Container(
+              color: AppColors.surfaceHigh,
+              child: Center(
+                child: Icon(
+                  product.isKey
+                      ? Icons.key_rounded
+                      : product.isApk
+                      ? Icons.android_rounded
+                      : Icons.insert_drive_file_rounded,
+                  color: AppColors.cyan.withValues(alpha: 0.45),
+                  size: 72,
+                ),
+              ),
+            )
+          else
+            PageView.builder(
+              controller: _page,
+              itemCount: ids.length,
+              onPageChanged: (i) => setState(() => _pageIdx = i),
+              itemBuilder: (context, i) => Image.network(
+                Backend.imageUrl(ids[i], width: 900),
+                fit: BoxFit.cover,
+                loadingBuilder: (context, child, progress) => progress == null
+                    ? child
+                    : const Center(
+                        child: CircularProgressIndicator(strokeWidth: 2.6),
+                      ),
+                errorBuilder: (context, e, s) => Container(
+                  color: AppColors.surfaceHigh,
+                  child: const Icon(
+                    Icons.broken_image_outlined,
+                    color: AppColors.textDim,
+                    size: 42,
+                  ),
                 ),
               ),
             ),
+
+          // Darken under the floating back button.
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: const [0, 0.42],
+                colors: [
+                  AppColors.bg.withValues(alpha: 0.62),
+                  AppColors.bg.withValues(alpha: 0),
+                ],
+              ),
+            ),
           ),
-        ),
-        if (ids.length > 1) ...[
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              for (var i = 0; i < ids.length; i++)
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  width: i == _pageIdx ? 20 : 7,
-                  height: 7,
-                  decoration: BoxDecoration(
-                    color: i == _pageIdx ? AppColors.cyan : AppColors.border,
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-            ],
+          // Melt the bottom edge into the page.
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: const [0.55, 1],
+                colors: [
+                  AppColors.bg.withValues(alpha: 0),
+                  AppColors.bg,
+                ],
+              ),
+            ),
           ),
+
+          if (ids.length > 1)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: AppSpace.md,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (var i = 0; i < ids.length; i++)
+                    AnimatedContainer(
+                      duration: kMotionStandard,
+                      margin: const EdgeInsets.symmetric(horizontal: AppSpace.xs - 1),
+                      width: i == _pageIdx ? 20 : 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: i == _pageIdx
+                            ? AppColors.primary
+                            : Colors.white.withValues(alpha: 0.28),
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                      ),
+                    ),
+                ],
+              ),
+            ),
         ],
-      ],
+      ),
     );
   }
 }

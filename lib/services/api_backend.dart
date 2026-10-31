@@ -68,6 +68,7 @@ class ApiClaim {
     required this.duration,
     required this.isDownload,
     required this.createdAt,
+    this.sha256,
   });
 
   final String id;
@@ -79,6 +80,9 @@ class ApiClaim {
   final bool isDownload;
   final DateTime? createdAt;
 
+  /// Lowercase hex SHA-256 of the purchased file (download claims only).
+  final String? sha256;
+
   factory ApiClaim.fromJson(Map<String, dynamic> json) => ApiClaim(
         id: json['id'] as String,
         productId: json['productId'] as String? ?? '',
@@ -88,6 +92,7 @@ class ApiClaim {
         duration: json['duration'] as String? ?? '',
         isDownload: json['isDownload'] as bool? ?? false,
         createdAt: DateTime.tryParse(json['createdAt'] as String? ?? ''),
+        sha256: json['sha256'] as String?,
       );
 }
 
@@ -96,11 +101,15 @@ class DownloadTicket {
     required this.url,
     required this.filename,
     required this.size,
+    this.sha256,
   });
 
   final String url;
   final String filename;
   final int size;
+
+  /// Lowercase hex SHA-256 of the file, when the server publishes one.
+  final String? sha256;
 }
 
 /// Thin, typed wrapper over the Worker. Kept separate from `Backend`, which
@@ -171,6 +180,7 @@ class ApiBackend {
       url: res['url'] as String,
       filename: res['filename'] as String? ?? 'download',
       size: (res['size'] as num?)?.toInt() ?? 0,
+      sha256: res['sha256'] as String?,
     );
   }
 

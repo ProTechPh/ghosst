@@ -47,6 +47,7 @@ dependencies:
   dio: ^5.9.0
   flutter_secure_storage: ^9.2.4
   in_app_update: ^5.0.0
+  crypto: ^3.0.7 # SHA-256 check on downloaded files
 
 dev_dependencies:
   flutter_test:

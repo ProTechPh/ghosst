@@ -47,37 +47,56 @@ function toProduct(
   };
 }
 
+// D1 caps a statement at 100 bound parameters: one id per placeholder -> 50.
+const IDS_PER_QUERY = 50;
+
 async function attach(env: Env, rows: ProductRow[]) {
   if (rows.length === 0) return [];
 
   const ids = rows.map((r) => r.id);
-  const placeholders = ids.map((_, i) => `?${i + 1}`).join(",");
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += IDS_PER_QUERY) chunks.push(ids.slice(i, i + IDS_PER_QUERY));
 
-  const [images, durations] = await Promise.all([
-    env.DB.prepare(
-      `SELECT product_id, object_key FROM product_images
-        WHERE product_id IN (${placeholders}) ORDER BY position`,
-    )
-      .bind(...ids)
-      .all<{ product_id: string; object_key: string }>(),
-    env.DB.prepare(
-      `SELECT product_id, label, cost FROM product_durations
-        WHERE product_id IN (${placeholders}) ORDER BY cost`,
-    )
-      .bind(...ids)
-      .all<{ product_id: string; label: string; cost: number }>(),
+  const [imagePages, durationPages] = await Promise.all([
+    Promise.all(
+      chunks.map((chunk) =>
+        env.DB.prepare(
+          `SELECT product_id, object_key FROM product_images
+            WHERE product_id IN (${placeholders(chunk)}) ORDER BY position`,
+        )
+          .bind(...chunk)
+          .all<{ product_id: string; object_key: string }>(),
+      ),
+    ),
+    Promise.all(
+      chunks.map((chunk) =>
+        env.DB.prepare(
+          `SELECT product_id, label, cost FROM product_durations
+            WHERE product_id IN (${placeholders(chunk)}) ORDER BY cost`,
+        )
+          .bind(...chunk)
+          .all<{ product_id: string; label: string; cost: number }>(),
+      ),
+    ),
   ]);
+
+  const images = imagePages.flatMap((p) => p.results ?? []);
+  const durations = durationPages.flatMap((p) => p.results ?? []);
 
   return rows.map((row) =>
     toProduct(
       row,
-      (images.results ?? []).filter((i) => i.product_id === row.id).map((i) => i.object_key),
-      (durations.results ?? [])
+      images.filter((i) => i.product_id === row.id).map((i) => i.object_key),
+      durations
         .filter((d) => d.product_id === row.id)
         .map((d) => ({ label: d.label, cost: d.cost })),
       env.PUBLIC_CDN,
     ),
   );
+}
+
+function placeholders(chunk: string[]): string {
+  return chunk.map((_, i) => `?${i + 1}`).join(",");
 }
 
 export async function list(ctx: Ctx): Promise<Response> {
@@ -94,7 +113,9 @@ export async function list(ctx: Ctx): Promise<Response> {
 }
 
 export async function get(ctx: Ctx): Promise<Response> {
-  const row = await ctx.env.DB.prepare(`${SELECT_PRODUCTS} WHERE p.id = ?1`)
+  const row = await ctx.env.DB.prepare(
+    `${SELECT_PRODUCTS} WHERE p.id = ?1${ctx.user?.isAdmin ? "" : " AND p.active = 1"}`,
+  )
     .bind(ctx.params.id)
     .first<ProductRow>();
   if (!row) throw new ApiError(404, "product_not_found", "Product not found");
@@ -227,7 +248,9 @@ export async function update(ctx: Ctx): Promise<Response> {
         `INSERT INTO product_files (product_id, object_key, filename, updated_at)
          VALUES (?1, ?2, ?3, ?4)
          ON CONFLICT(product_id) DO UPDATE SET
-           object_key = excluded.object_key, updated_at = excluded.updated_at`,
+           object_key = excluded.object_key,
+           sha256 = NULL, -- a new link invalidates the old file's hash
+           updated_at = excluded.updated_at`,
       )
         .bind(id, link, filename || "download", new Date().toISOString())
         .run();

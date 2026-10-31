@@ -16,10 +16,10 @@ interface ProductRef {
  *
  * Same semantics as the Appwrite `claim` function, but the `crit` lock is
  * gone: a guarded UPDATE is the serialization point instead.
- *   1. charge  (atomic: WHERE coins >= cost)   ← serialization point
- *   2. assign  (oldest available key)
- *   3. record  (claims row)
- * If step 2 finds no stock, step 1 is refunded.
+ *   1. charge + assign  (one batch = one transaction)
+ *   2. record  (claims row; re-read on failure instead of refunding blindly)
+ * If there is no stock, nothing is charged; if the charge is refused, the key
+ * goes back.
  */
 export async function claim(ctx: Ctx): Promise<Response> {
   const uid = ctx.user!.id;
@@ -42,6 +42,7 @@ export async function claim(ctx: Ctx): Promise<Response> {
     throw new ApiError(409, "request_in_progress", "Same request is still running — retry", 2);
   }
 
+  let claimed = false;
   try {
     const product = await ctx.env.DB.prepare(
       `SELECT id, name, cost, type FROM products WHERE id = ?1 AND active = 1`,
@@ -55,11 +56,19 @@ export async function claim(ctx: Ctx): Promise<Response> {
         ? await claimLicense(ctx, uid, product, (body.duration ?? "").trim())
         : await claimDownload(ctx, uid, product);
 
-    await complete(ctx.env, uid, idemKey, result);
+    claimed = true;
+    try {
+      await complete(ctx.env, uid, idemKey, result);
+    } catch (err) {
+      // The coins are gone and the goods are assigned: the claim did happen.
+      // Only its replay cache is missing, so the caller still gets it.
+      console.error(`[${ctx.requestId}] idempotency complete failed`, err);
+    }
     return result;
   } catch (err) {
-    // Free the reservation so the client's own retry is not blocked by it.
-    await release(ctx.env, uid, idemKey).catch(() => {});
+    // Free the reservation so the client's own retry is not blocked by it —
+    // but never after a successful claim, or a retry would charge again.
+    if (!claimed) await release(ctx.env, uid, idemKey).catch(() => {});
     throw err;
   }
 }
@@ -82,41 +91,50 @@ async function claimLicense(
     cost = option.cost;
   }
 
-  // 1. Reserve the coins. This is the only place a balance can move down and
-  //    the WHERE clause makes a negative balance impossible.
-  const charged = await ctx.env.DB.prepare(
-    `UPDATE users SET coins = coins - ?1 WHERE id = ?2 AND coins >= ?1 RETURNING coins`,
+  // Pre-pick a candidate so the batch below can claim one exact row; the
+  // guarded UPDATE, not this read, decides a race.
+  const candidate = await ctx.env.DB.prepare(
+    `SELECT id, key_value FROM keys
+      WHERE product_id = ?1 AND status = 'available' AND (?2 = '' OR duration = ?2)
+      ORDER BY created_at LIMIT 1`,
   )
-    .bind(cost, uid)
-    .first<{ coins: number }>();
+    .bind(product.id, durationLabel)
+    .first<{ id: string; key_value: string }>();
 
-  if (!charged) throw await insufficient(cost, uid, ctx);
+  if (!candidate) throw outOfStock(durationLabel);
 
-  // 2. Oldest available key, honouring the duration pool.
   const now = new Date().toISOString();
+
+  // 1 + 2 in one transaction: the coins leave the wallet only if the key also
+  // leaves the pool, so a crash can never strand either one.
+  const [chargeRes, pickRes] = await ctx.env.DB.batch([
+    ctx.env.DB.prepare(
+      `UPDATE users SET coins = coins - ?1 WHERE id = ?2 AND coins >= ?1`,
+    ).bind(cost, uid),
+    ctx.env.DB.prepare(
+      `UPDATE keys SET status = 'claimed', claimed_by = ?2, claimed_at = ?3
+        WHERE id = ?1 AND status = 'available'`,
+    ).bind(candidate.id, uid, now),
+  ]);
+
+  // The batch commits even when a WHERE matched nothing, so undo the other half.
+  if ((chargeRes.meta.changes ?? 0) === 0) {
+    await unclaimKey(ctx, candidate.id, uid, now);
+    throw await insufficient(cost, uid, ctx);
+  }
+  if ((pickRes.meta.changes ?? 0) === 0) {
+    await refund(ctx, uid, cost);
+    throw outOfStock(durationLabel);
+  }
+
+  const wallet = await ctx.env.DB.prepare(`SELECT coins FROM users WHERE id = ?1`)
+    .bind(uid)
+    .first<{ coins: number }>();
+  const coins = wallet?.coins ?? 0;
+  const body = { ok: true, key: candidate.key_value, cost, coins };
+
+  // 3. Record it.
   try {
-    const picked = await ctx.env.DB.prepare(
-      `UPDATE keys SET status = 'claimed', claimed_by = ?3, claimed_at = ?4
-        WHERE id = (
-          SELECT id FROM keys
-           WHERE product_id = ?1 AND status = 'available' AND (?2 = '' OR duration = ?2)
-           ORDER BY created_at LIMIT 1
-        )
-        AND status = 'available'
-        RETURNING id, key_value`,
-    )
-      .bind(product.id, durationLabel, uid, now)
-      .first<{ id: string; key_value: string }>();
-
-    if (!picked) {
-      throw new ApiError(
-        409,
-        "out_of_stock",
-        durationLabel ? `Out of stock for ${durationLabel}` : "Out of stock",
-      );
-    }
-
-    // 3. Record it.
     await ctx.env.DB.prepare(
       `INSERT INTO claims (id, user_id, product_id, product_name, key_id, key_text, cost, duration, created_at)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
@@ -126,27 +144,65 @@ async function claimLicense(
         uid,
         product.id,
         product.name,
-        picked.id,
-        picked.key_value,
+        candidate.id,
+        candidate.key_value,
         cost,
         durationLabel,
         now,
       )
       .run();
-
-    return json({ ok: true, key: picked.key_value, cost, coins: charged.coins });
   } catch (err) {
-    // Compensate: refund and hand the key back. Keyed on (claimed_by, claimed_at)
-    // so a key taken by someone else is never released.
+    // The insert may have landed before the error; read it back and finish the
+    // claim rather than refunding something the buyer already owns.
+    const recorded = await ctx.env.DB.prepare(
+      `SELECT id FROM claims WHERE user_id = ?1 AND product_id = ?2 AND key_id = ?3 LIMIT 1`,
+    )
+      .bind(uid, product.id, candidate.id)
+      .first<{ id: string }>();
+
+    if (recorded) return json(body);
+
     await ctx.env.DB.batch([
       ctx.env.DB.prepare(`UPDATE users SET coins = coins + ?1 WHERE id = ?2`).bind(cost, uid),
       ctx.env.DB.prepare(
         `UPDATE keys SET status = 'available', claimed_by = NULL, claimed_at = NULL
-          WHERE product_id = ?1 AND claimed_by = ?2 AND claimed_at = ?3`,
-      ).bind(product.id, uid, now),
+          WHERE id = ?1 AND claimed_by = ?2 AND claimed_at = ?3`,
+      ).bind(candidate.id, uid, now),
     ]).catch(() => {});
     throw err;
   }
+
+  return json(body);
+}
+
+function outOfStock(durationLabel: string): ApiError {
+  return new ApiError(
+    409,
+    "out_of_stock",
+    durationLabel ? `Out of stock for ${durationLabel}` : "Out of stock",
+  );
+}
+
+async function refund(ctx: Ctx, uid: string, cost: number): Promise<void> {
+  await ctx.env.DB.prepare(`UPDATE users SET coins = coins + ?1 WHERE id = ?2`)
+    .bind(cost, uid)
+    .run()
+    .catch(() => {});
+}
+
+async function unclaimKey(
+  ctx: Ctx,
+  keyId: string,
+  uid: string,
+  now: string,
+): Promise<void> {
+  await ctx.env.DB.prepare(
+    `UPDATE keys SET status = 'available', claimed_by = NULL, claimed_at = NULL
+      WHERE id = ?1 AND claimed_by = ?2 AND claimed_at = ?3`,
+  )
+    .bind(keyId, uid, now)
+    .run()
+    .catch(() => {});
 }
 
 async function claimDownload(ctx: Ctx, uid: string, product: ProductRef): Promise<Response> {
@@ -160,10 +216,10 @@ async function claimDownload(ctx: Ctx, uid: string, product: ProductRef): Promis
     .first<{ cost: number }>();
 
   const file = await ctx.env.DB.prepare(
-    `SELECT object_key, filename FROM product_files WHERE product_id = ?1`,
+    `SELECT object_key, filename, sha256 FROM product_files WHERE product_id = ?1`,
   )
     .bind(product.id)
-    .first<{ object_key: string; filename: string }>();
+    .first<{ object_key: string; filename: string; sha256: string | null }>();
 
   if (prior) {
     if (!file) throw new ApiError(409, "download_unavailable", "Already purchased — link unavailable");
@@ -173,6 +229,7 @@ async function claimDownload(ctx: Ctx, uid: string, product: ProductRef): Promis
       alreadyOwned: true,
       downloadUrl: t.url,
       filename: file.filename,
+      sha256: file.sha256,
       expiresIn: t.expiresIn,
       cost: prior.cost,
       coins: ctx.user!.coins,
@@ -181,49 +238,35 @@ async function claimDownload(ctx: Ctx, uid: string, product: ProductRef): Promis
 
   if (!file) throw new ApiError(409, "download_unavailable", "Download not configured");
 
-  const charged = await ctx.env.DB.prepare(
-    `UPDATE users SET coins = coins - ?1 WHERE id = ?2 AND coins >= ?1 RETURNING coins`,
-  )
-    .bind(product.cost, uid)
-    .first<{ coins: number }>();
-
-  if (!charged) throw await insufficient(product.cost, uid, ctx);
-
   const now = new Date().toISOString();
-  let won = false;
-  try {
-    const inserted = await ctx.env.DB.prepare(
+  const claimId = crypto.randomUUID();
+
+  // One transaction: the purchase row and the charge land together. The insert
+  // decides a race (UNIQUE user+product), the guarded UPDATE refuses an overdraft.
+  const [insRes, chargeRes] = await ctx.env.DB.batch([
+    ctx.env.DB.prepare(
       `INSERT INTO claims (id, user_id, product_id, product_name, key_id, key_text, cost, object_key, created_at)
        VALUES (?1, ?2, ?3, ?4, ?5, 'app', ?6, ?7, ?8)
        ON CONFLICT DO NOTHING`,
-    )
-      .bind(
-        crypto.randomUUID(),
-        uid,
-        product.id,
-        product.name,
-        file.object_key,
-        product.cost,
-        file.object_key,
-        now,
-      )
-      .run();
-    won = (inserted.meta.changes ?? 0) > 0;
-  } catch (err) {
-    // Charged but not recorded — give the coins back before surfacing the error.
-    await ctx.env.DB.prepare(`UPDATE users SET coins = coins + ?1 WHERE id = ?2`)
-      .bind(product.cost, uid)
-      .run()
-      .catch(() => {});
-    throw err;
-  }
+    ).bind(claimId, uid, product.id, product.name, file.object_key, product.cost, file.object_key, now),
+    ctx.env.DB.prepare(
+      `UPDATE users SET coins = coins - ?1 WHERE id = ?2 AND coins >= ?1`,
+    ).bind(product.cost, uid),
+  ]);
 
-  if (!won) {
-    // Lost a race against another instance — refund and serve the existing claim.
-    await ctx.env.DB.prepare(`UPDATE users SET coins = coins + ?1 WHERE id = ?2`)
-      .bind(product.cost, uid)
-      .run();
+  const won = (insRes.meta.changes ?? 0) > 0;
+  const paid = (chargeRes.meta.changes ?? 0) > 0;
+
+  if (!paid) {
+    // The batch committed, but no money moved: drop our own row if it landed.
+    if (won) await ctx.env.DB.prepare(`DELETE FROM claims WHERE id = ?1`).bind(claimId).run().catch(() => {});
+    throw await insufficient(product.cost, uid, ctx);
   }
+  if (!won) await refund(ctx, uid, product.cost); // lost the race — serve the existing claim
+
+  const wallet = won
+    ? await ctx.env.DB.prepare(`SELECT coins FROM users WHERE id = ?1`).bind(uid).first<{ coins: number }>()
+    : null;
 
   const t = await fileTicket(ctx.env, file.object_key, file.filename);
   return json({
@@ -231,9 +274,10 @@ async function claimDownload(ctx: Ctx, uid: string, product: ProductRef): Promis
     alreadyOwned: !won,
     downloadUrl: t.url,
     filename: file.filename,
+    sha256: file.sha256,
     expiresIn: t.expiresIn,
     cost: won ? product.cost : 0,
-    coins: won ? charged!.coins : ctx.user!.coins,
+    coins: won ? (wallet?.coins ?? 0) : ctx.user!.coins,
   });
 }
 
@@ -247,8 +291,10 @@ async function insufficient(cost: number, uid: string, ctx: Ctx): Promise<ApiErr
 /** GET /v1/claims — the user's own history (keys + owned downloads). */
 export async function listMine(ctx: Ctx): Promise<Response> {
   const rows = await ctx.env.DB.prepare(
-    `SELECT id, product_id, product_name, key_text, cost, duration, object_key, created_at
-       FROM claims WHERE user_id = ?1 ORDER BY created_at DESC LIMIT 200`,
+    `SELECT c.id, c.product_id, c.product_name, c.key_text, c.cost, c.duration,
+            c.object_key, c.created_at, f.sha256
+       FROM claims c LEFT JOIN product_files f ON f.product_id = c.product_id
+      WHERE c.user_id = ?1 ORDER BY c.created_at DESC LIMIT 200`,
   )
     .bind(ctx.user!.id)
     .all<{
@@ -260,6 +306,7 @@ export async function listMine(ctx: Ctx): Promise<Response> {
       duration: string;
       object_key: string | null;
       created_at: string;
+      sha256: string | null;
     }>();
 
   const claims = (rows.results ?? []).map((r) => ({
@@ -270,6 +317,7 @@ export async function listMine(ctx: Ctx): Promise<Response> {
     cost: r.cost,
     duration: r.duration,
     isDownload: r.object_key != null,
+    sha256: r.object_key != null ? r.sha256 : null,
     createdAt: r.created_at,
   }));
 

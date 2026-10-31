@@ -29,5 +29,12 @@ export function corsHeaders(req: Request, env: Env): Headers {
   );
   h.set("access-control-expose-headers", "x-request-id, retry-after");
   h.set("access-control-max-age", "86400");
+
+  // Every response passes through here, so this is also where the headers go.
+  h.set("x-content-type-options", "nosniff");
+  h.set("x-frame-options", "DENY");
+  h.set("referrer-policy", "no-referrer");
+  h.set("strict-transport-security", "max-age=31536000; includeSubDomains");
+  h.set("content-security-policy", "default-src 'none'; frame-ancestors 'none'");
   return h;
 }

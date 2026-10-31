@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'api/api_exception.dart';
-import 'premium.dart';
+import 'auth_ui.dart';
 import 'services/worker_backend.dart';
 import 'theme.dart';
 import 'validation.dart';
@@ -11,10 +11,15 @@ class SignUp extends StatefulWidget {
     super.key,
     required this.onSignedUp,
     required this.onGoToSignIn,
+    this.onBack,
   });
 
   final VoidCallback onSignedUp;
   final VoidCallback onGoToSignIn;
+
+  /// Returns to the signed-out landing page. Null pops when this route was
+  /// pushed; either way the screen is never a dead end.
+  final VoidCallback? onBack;
 
   @override
   State<SignUp> createState() => _SignUpState();
@@ -55,11 +60,7 @@ class _SignUpState extends State<SignUp> {
     });
     try {
       final cleanEmail = email.text.trim();
-      await Backend.signUp(
-        cleanEmail,
-        password.text,
-        name: name.text.trim(),
-      );
+      await Backend.signUp(cleanEmail, password.text, name: name.text.trim());
       widget.onSignedUp();
     } on ApiException catch (e) {
       if (mounted) {
@@ -79,308 +80,96 @@ class _SignUpState extends State<SignUp> {
     }
   }
 
-  Widget _errorBox() {
-    return AnimatedSize(
-      duration: kMotionBase,
-      curve: kPremiumCurve,
-      alignment: Alignment.topCenter,
-      child: error.isEmpty
-          ? const SizedBox(width: double.infinity)
-          : AnimatedOpacity(
-              duration: kMotionFast,
-              curve: kPremiumCurve,
-              opacity: 1,
-              child: Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(top: 16),
-                padding: const EdgeInsets.all(13),
-                decoration: BoxDecoration(
-                  color: AppColors.red.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(16),
-                  border:
-                      Border.all(color: AppColors.red.withValues(alpha: 0.35)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.error_outline,
-                        size: 18, color: AppColors.red),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        error,
-                        style: const TextStyle(
-                            color: AppColors.red, fontSize: 13.5),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-    );
+  void _back() {
+    final back = widget.onBack;
+    if (back != null) {
+      back();
+    } else {
+      Navigator.maybePop(context);
+    }
   }
 
-  /// Inline validation message under a field (animated reveal).
-  Widget _fieldError(String? message) {
-    return AnimatedSize(
-      duration: kMotionBase,
-      curve: kPremiumCurve,
-      alignment: Alignment.topCenter,
-      child: message == null
-          ? const SizedBox(width: double.infinity)
-          : Padding(
-              padding: const EdgeInsets.only(top: 8, left: 4),
-              child: Row(
-                children: [
-                  const Icon(Icons.error_outline,
-                      size: 14, color: AppColors.red),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      message,
-                      style:
-                          const TextStyle(color: AppColors.red, fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-    );
-  }
-
-  /// Under-password assist: rule hint normally, error while invalid.
-  Widget _passAssist() {
-    return AnimatedSize(
-      duration: kMotionBase,
-      curve: kPremiumCurve,
-      alignment: Alignment.topCenter,
-      child: Padding(
-        padding: const EdgeInsets.only(top: 8, left: 4),
-        child: passErr == null
-            ? Text(
-                'Minimum 8 characters',
-                style: TextStyle(
-                  color: AppColors.textDim.withValues(alpha: 0.75),
-                  fontSize: 11.5,
-                ),
-              )
-            : Row(
-                children: [
-                  const Icon(Icons.error_outline,
-                      size: 14, color: AppColors.red),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      passErr!,
-                      style: const TextStyle(
-                          color: AppColors.red, fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-      ),
-    );
+  void _clearErrors() {
+    if (emailErr != null || passErr != null || error.isNotEmpty) {
+      setState(() {
+        emailErr = null;
+        passErr = null;
+        error = '';
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
+    return AuthScaffold(
+      onBack: _back,
       children: [
-        const MeshBackground(),
-        Positioned.fill(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(24, 56, 24, 40),
-            children: [
-              const Center(child: LogoBadge(size: 76, fontSize: 38)),
-              const SizedBox(height: 30),
-              const Center(
-                child: ScrollReveal(
-                  child: Eyebrow(text: 'New member'),
-                ),
+        const AuthHeader(
+          title: 'Create account',
+          subtitle: 'Watch an ad, get coins. Spend them on keys.',
+        ),
+        const SizedBox(height: AppSpace.xxl),
+        const AuthFieldLabel('Name (optional)'),
+        TextField(
+          controller: name,
+          textInputAction: TextInputAction.next,
+          autofillHints: const [AutofillHints.name],
+          onSubmitted: (_) => FocusScope.of(context).nextFocus(),
+          decoration: authDecoration(
+            hint: 'Your display name',
+            icon: Icons.person_outline_rounded,
+          ),
+        ),
+        const SizedBox(height: AppSpace.lg),
+        const AuthFieldLabel('Email'),
+        TextField(
+          controller: email,
+          keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.next,
+          autocorrect: false,
+          autofillHints: const [AutofillHints.email],
+          onChanged: (_) => _clearErrors(),
+          onSubmitted: (_) => FocusScope.of(context).nextFocus(),
+          decoration: authDecoration(
+            hint: 'you@example.com',
+            icon: Icons.alternate_email_rounded,
+            errorText: emailErr,
+          ),
+        ),
+        const SizedBox(height: AppSpace.lg),
+        const AuthFieldLabel('Password'),
+        TextField(
+          controller: password,
+          obscureText: obscure,
+          textInputAction: TextInputAction.done,
+          keyboardType: TextInputType.visiblePassword,
+          autofillHints: const [AutofillHints.password],
+          onChanged: (_) => _clearErrors(),
+          onSubmitted: (_) => _submit(),
+          decoration: authDecoration(
+            hint: 'Your password',
+            icon: Icons.lock_outline_rounded,
+            errorText: passErr,
+            helperText: 'Minimum 8 characters',
+            suffixIcon: IconButton(
+              tooltip: obscure ? 'Show password' : 'Hide password',
+              icon: Icon(
+                obscure
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
               ),
-              const SizedBox(height: 18),
-              const ScrollReveal(
-                delay: Duration(milliseconds: 120),
-                child: Center(
-                  child: GradientText(
-                    'Create account',
-                    style: TextStyle(
-                      fontSize: 36,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const ScrollReveal(
-                delay: Duration(milliseconds: 200),
-                child: Center(
-                  child: Text(
-                    'Join and start claiming license keys',
-                    style: TextStyle(color: AppColors.textDim, fontSize: 14.5),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 44),
-              ScrollReveal(
-                delay: const Duration(milliseconds: 260),
-                child: DoubleBezel(
-                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      TextField(
-                        controller: name,
-                        textInputAction: TextInputAction.next,
-                        autofillHints: const [AutofillHints.name],
-                        onSubmitted: (_) =>
-                            FocusScope.of(context).nextFocus(),
-                        decoration: const InputDecoration(
-                          hintText: 'Name (optional)',
-                          prefixIcon: Icon(Icons.person_outline),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      TextField(
-                        controller: email,
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                        autocorrect: false,
-                        autofillHints: const [AutofillHints.email],
-                        onChanged: (_) {
-                          if (emailErr != null || error.isNotEmpty) {
-                            setState(() {
-                              emailErr = null;
-                              error = '';
-                            });
-                          }
-                        },
-                        onSubmitted: (_) =>
-                            FocusScope.of(context).nextFocus(),
-                        decoration: InputDecoration(
-                          hintText: 'Email',
-                          prefixIcon: Icon(
-                            Icons.mail_outline,
-                            color: emailErr == null
-                                ? AppColors.textDim
-                                : AppColors.red,
-                          ),
-                          enabledBorder: emailErr == null
-                              ? null
-                              : OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: BorderSide(
-                                    color:
-                                        AppColors.red.withValues(alpha: 0.55),
-                                  ),
-                                ),
-                          focusedBorder: emailErr == null
-                              ? null
-                              : OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: const BorderSide(
-                                      color: AppColors.red, width: 1.6),
-                                ),
-                        ),
-                      ),
-                      _fieldError(emailErr),
-                      const SizedBox(height: 14),
-                      TextField(
-                        controller: password,
-                        obscureText: obscure,
-                        textInputAction: TextInputAction.done,
-                        keyboardType: TextInputType.visiblePassword,
-                        autofillHints: const [AutofillHints.password],
-                        onChanged: (_) {
-                          if (passErr != null || error.isNotEmpty) {
-                            setState(() {
-                              passErr = null;
-                              error = '';
-                            });
-                          }
-                        },
-                        onSubmitted: (_) => _submit(),
-                        decoration: InputDecoration(
-                          hintText: 'Password',
-                          prefixIcon: Icon(
-                            Icons.lock_outline,
-                            color: passErr == null
-                                ? AppColors.textDim
-                                : AppColors.red,
-                          ),
-                          suffixIcon: IconButton(
-                            icon: Icon(obscure
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined),
-                            onPressed: () =>
-                                setState(() => obscure = !obscure),
-                          ),
-                          enabledBorder: passErr == null
-                              ? null
-                              : OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: BorderSide(
-                                    color:
-                                        AppColors.red.withValues(alpha: 0.55),
-                                  ),
-                                ),
-                          focusedBorder: passErr == null
-                              ? null
-                              : OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: const BorderSide(
-                                      color: AppColors.red, width: 1.6),
-                                ),
-                        ),
-                      ),
-                      _passAssist(),
-                      _errorBox(),
-                      const SizedBox(height: 24),
-                      IslandButton(
-                        label: 'Create account',
-                        busy: busy,
-                        onPressed: _submit,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 22),
-              const ScrollReveal(
-                delay: Duration(milliseconds: 340),
-                child: Center(
-                  child: Text(
-                    'KEYS DELIVERED INSTANTLY',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 2.4,
-                      color: AppColors.textDim,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 30),
-              ScrollReveal(
-                delay: const Duration(milliseconds: 400),
-                child: Center(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'Already have an account? ',
-                        style:
-                            TextStyle(color: AppColors.textDim, fontSize: 14),
-                      ),
-                      TextButton(
-                        onPressed: widget.onGoToSignIn,
-                        child: const Text('Sign in'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+              onPressed: () => setState(() => obscure = !obscure),
+            ),
+          ),
+        ),
+        AuthErrorBox(message: error),
+        const SizedBox(height: AppSpace.xl),
+        AuthSubmit(label: 'Create account', busy: busy, onPressed: _submit),
+        const SizedBox(height: AppSpace.md),
+        Center(
+          child: TextButton(
+            onPressed: widget.onGoToSignIn,
+            child: const Text('I already have an account'),
           ),
         ),
       ],

@@ -37,8 +37,7 @@ class StoreScreen extends StatefulWidget {
   State<StoreScreen> createState() => _StoreScreenState();
 }
 
-class _StoreScreenState extends State<StoreScreen>
-    with SingleTickerProviderStateMixin {
+class _StoreScreenState extends State<StoreScreen> {
   List<Product> products = [];
   Map<String, int> stock = {};
   bool loading = true;
@@ -55,12 +54,6 @@ class _StoreScreenState extends State<StoreScreen>
   /// Product ids the signed-in user already bought (repeat buys are disabled
   /// for app-store items — they'd spend coins on a link they already own).
   Set<String> owned = {};
-
-  /// Soft pulse for the skeleton placeholders (opacity only).
-  late final AnimationController _pulse = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 760),
-  )..repeat(reverse: true);
 
   /// Sponsored native card at the end of the shelf (passive revenue).
   NativeAd? _nativeAd;
@@ -89,7 +82,6 @@ class _StoreScreenState extends State<StoreScreen>
 
   @override
   void dispose() {
-    _pulse.dispose();
     _nativeRetryTimer?.cancel();
     AdService.instance.adsEnabledNotifier.removeListener(
       _onAdsEnabledForNative,
@@ -218,6 +210,8 @@ class _StoreScreenState extends State<StoreScreen>
       .where((p) => _tab == 'key' ? p.isKey : p.isDownloadable)
       .toList();
 
+  int _stockOf(Product p) => p.isKey ? (stock[p.id] ?? -1) : -1;
+
   Future<void> _openDetail(Product p) async {
     await Navigator.push(
       context,
@@ -241,7 +235,7 @@ class _StoreScreenState extends State<StoreScreen>
     if (error.isNotEmpty) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(AppSpace.xl),
           child: EmptyState(
             icon: Icons.cloud_off_rounded,
             title: 'Could not load store',
@@ -261,12 +255,19 @@ class _StoreScreenState extends State<StoreScreen>
     }
 
     final shelf = _shelf;
+    final rest = shelf.length > 1 ? shelf.sublist(1) : const <Product>[];
 
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 10, 20, 36),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpace.xl,
+          AppSpace.md,
+          AppSpace.xl,
+          // Clears the floating nav pill so the last row is never covered.
+          AppSpace.huge + AppSpace.xxl,
+        ),
         children: [
           // ---- editorial header ----------------------------------------
           ScrollReveal(
@@ -274,33 +275,24 @@ class _StoreScreenState extends State<StoreScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Eyebrow(text: _tab == 'key' ? 'License store' : 'App store'),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpace.lg),
                 Text(
                   _tab == 'key'
                       ? 'Spend coins,\nclaim keys'
                       : 'Spend coins,\ndownload apps',
-                  style: const TextStyle(
-                    fontSize: 30,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.6,
-                    height: 1.12,
-                  ),
+                  style: AppText.display,
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: AppSpace.md),
                 Text(
                   _tab == 'key'
                       ? 'Every claim gives you a fresh, unused license key.'
                       : 'Buy APKs and files with your ad coins, then download them here.',
-                  style: const TextStyle(
-                    color: AppColors.textDim,
-                    fontSize: 13.5,
-                    height: 1.5,
-                  ),
+                  style: AppText.caption.copyWith(height: 1.5),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: AppSpace.xl),
 
           // ---- shelf switch (Keys | Apps) -------------------------------
           if (Distribution.showsDownloadStore) ...[
@@ -308,16 +300,16 @@ class _StoreScreenState extends State<StoreScreen>
               delay: const Duration(milliseconds: 60),
               child: _segment(),
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: AppSpace.xl),
           ],
 
           // ---- balance hero --------------------------------------------
           ScrollReveal(
             delay: const Duration(milliseconds: 110),
-            child: PressableScale(
+            child: Pressable(
               onTap: widget.onOpenWallet,
               child: DoubleBezel(
-                padding: const EdgeInsets.all(18),
+                padding: const EdgeInsets.all(AppSpace.lg),
                 gradient: const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -330,37 +322,30 @@ class _StoreScreenState extends State<StoreScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'YOUR BALANCE',
-                            style: TextStyle(
+                            style: AppText.caption.copyWith(
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
                               letterSpacing: 2.2,
-                              color: AppColors.textDim,
                             ),
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: AppSpace.sm),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.baseline,
                             textBaseline: TextBaseline.alphabetic,
                             children: [
                               AnimatedCounter(
                                 value: widget.coins,
-                                style: const TextStyle(
-                                  fontSize: 34,
-                                  fontWeight: FontWeight.w700,
+                                style: monoStyle(
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.w800,
                                   color: AppColors.gold,
                                   height: 1.05,
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'coins',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: AppColors.textDim,
-                                ),
-                              ),
+                              const SizedBox(width: AppSpace.sm),
+                              Text('coins', style: AppText.caption),
                             ],
                           ),
                         ],
@@ -392,7 +377,7 @@ class _StoreScreenState extends State<StoreScreen>
             ),
           ),
           if (widget.onGoToEarn != null) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.md),
             ScrollReveal(
               delay: const Duration(milliseconds: 170),
               child: IslandButton(
@@ -405,10 +390,9 @@ class _StoreScreenState extends State<StoreScreen>
               ),
             ),
           ],
-          const SizedBox(height: 30),
+          const SizedBox(height: AppSpace.xxl),
 
           // ---- products -------------------------------------------------
-          SectionLabel(_tab == 'key' ? 'AVAILABLE KEYS' : 'APPS & FILES'),
           if (shelf.isEmpty)
             ScrollReveal(
               child: EmptyState(
@@ -419,31 +403,65 @@ class _StoreScreenState extends State<StoreScreen>
                 message: _tab == 'key'
                     ? 'Check back soon — new keys drop regularly.'
                     : 'Apps and files you buy with coins show up here.',
+                action: widget.onGoToEarn == null
+                    ? null
+                    : IslandButton(
+                        expand: false,
+                        dense: true,
+                        label: 'Earn coins',
+                        icon: CupertinoIcons.play_rectangle,
+                        onPressed: widget.onGoToEarn,
+                      ),
+              ),
+            )
+          else ...[
+            ScrollReveal(
+              child: SectionHeader(
+                title: 'Featured',
+                trailing: Text(
+                  _tab == 'key' ? 'LICENSE' : 'DOWNLOAD',
+                  style: AppText.label.copyWith(
+                    fontSize: 10,
+                    color: AppColors.textDim,
+                  ),
+                ),
               ),
             ),
-          for (var i = 0; i < shelf.length; i++) ...[
-            // Cinematic stagger only on the first entry — after a shelf
-            // switch, cards must appear instantly instead of remounting
-            // their reveal delay + 800ms fade.
-            if (_switchedShelf)
-              _productCard(shelf[i])
-            else
-              ScrollReveal(
-                delay: Duration(milliseconds: (60 * i).clamp(0, 400)),
-                child: _productCard(shelf[i]),
+            const SizedBox(height: AppSpace.xs),
+            ScrollReveal(
+              delay: const Duration(milliseconds: 60),
+              child: _featuredCard(shelf.first),
+            ),
+            if (rest.isNotEmpty) ...[
+              const SizedBox(height: AppSpace.xl),
+              SectionHeader(
+                title: _tab == 'key' ? 'All keys' : 'Apps & files',
+                trailing: Text(
+                  '${rest.length}',
+                  style: AppText.figure.copyWith(
+                    fontSize: 12,
+                    color: AppColors.textDim,
+                  ),
+                ),
               ),
-            const SizedBox(height: 12),
+              _switchedShelf
+                  ? _grid(rest)
+                  : ScrollReveal(
+                      delay: const Duration(milliseconds: 120),
+                      child: _grid(rest),
+                    ),
+            ],
           ],
-          const SizedBox(height: 22),
+          const SizedBox(height: AppSpace.xl),
 
           // ---- sponsored native ad ------------------------------------
           if (shelf.isNotEmpty && _nativeLoaded && _nativeAd != null) ...[
-            const SectionLabel('Sponsored'),
+            const SectionHeader(title: 'Sponsored'),
             ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 350, maxHeight: 400),
               child: AdWidget(ad: _nativeAd!),
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: AppSpace.xl),
           ],
 
           Center(
@@ -451,9 +469,8 @@ class _StoreScreenState extends State<StoreScreen>
               _tab == 'key'
                   ? 'FRESH DROPS · DELIVERED INSTANTLY'
                   : 'MEDIAFIRE BACKED · DOWNLOADS ANY TIME',
-              style: const TextStyle(
+              style: AppText.label.copyWith(
                 fontSize: 10,
-                fontWeight: FontWeight.w700,
                 letterSpacing: 2.4,
                 color: AppColors.textDim,
               ),
@@ -472,8 +489,8 @@ class _StoreScreenState extends State<StoreScreen>
     Widget item(String id, String label, IconData icon) {
       final on = _tab == id;
       return Expanded(
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
+        child: Pressable(
+          scale: 0.97,
           onTap: () {
             if (_tab == id) return;
             setState(() {
@@ -486,20 +503,15 @@ class _StoreScreenState extends State<StoreScreen>
             // of the perceived lag when swapping shelves.
             duration: const Duration(milliseconds: 240),
             curve: kPremiumCurve,
-            height: 46,
+            height: 44,
             decoration: BoxDecoration(
               gradient: on ? kNeonGradient : null,
               color: on ? null : Colors.transparent,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: on
-                    ? Colors.white.withValues(alpha: 0.25)
-                    : Colors.white.withValues(alpha: 0.10),
-              ),
+              borderRadius: BorderRadius.circular(AppRadius.pill),
               boxShadow: on
                   ? [
                       BoxShadow(
-                        color: AppColors.cyan.withValues(alpha: 0.28),
+                        color: AppColors.primary.withValues(alpha: 0.28),
                         blurRadius: 22,
                         spreadRadius: -8,
                       ),
@@ -511,17 +523,16 @@ class _StoreScreenState extends State<StoreScreen>
               children: [
                 Icon(
                   icon,
-                  size: 16,
-                  color: on ? Colors.white : AppColors.textDim,
+                  size: 15,
+                  color: on ? const Color(0xFF04212A) : AppColors.textDim,
                 ),
-                const SizedBox(width: 7),
+                const SizedBox(width: AppSpace.sm - 1),
                 Text(
                   label,
-                  style: TextStyle(
-                    fontSize: 14,
+                  style: AppText.subtitle.copyWith(
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: -0.1,
-                    color: on ? Colors.white : AppColors.textDim,
+                    color: on ? const Color(0xFF04212A) : AppColors.textDim,
                   ),
                 ),
               ],
@@ -532,10 +543,10 @@ class _StoreScreenState extends State<StoreScreen>
     }
 
     return Container(
-      padding: const EdgeInsets.all(5),
+      padding: const EdgeInsets.all(AppSpace.xs),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(21),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
         border: Border.all(color: AppColors.border),
       ),
       child: Row(
@@ -548,201 +559,353 @@ class _StoreScreenState extends State<StoreScreen>
   }
 
   // ---- loading skeleton ----------------------------------------------
-  Widget _skeletonBox(double? width, double height, {double radius = 12}) {
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(radius),
-      ),
-    );
-  }
-
   Widget _skeleton() {
-    return AnimatedBuilder(
-      animation: _pulse,
-      builder: (context, _) => Opacity(
-        opacity: 0.45 + 0.35 * _pulse.value,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 36),
-          children: [
-            _skeletonBox(138, 26, radius: 99),
-            const SizedBox(height: 16),
-            _skeletonBox(224, 32, radius: 12),
-            const SizedBox(height: 8),
-            _skeletonBox(224, 32, radius: 12),
-            const SizedBox(height: 10),
-            _skeletonBox(258, 14, radius: 99),
-            const SizedBox(height: 22),
-            _skeletonBox(null, 94, radius: 26),
-            const SizedBox(height: 30),
-            _skeletonBox(124, 14, radius: 99),
-            const SizedBox(height: 14),
-            for (var i = 0; i < 3; i++) ...[
-              _skeletonBox(null, 94, radius: 26),
-              const SizedBox(height: 12),
-            ],
-          ],
-        ),
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.xl,
+        AppSpace.md,
+        AppSpace.xl,
+        AppSpace.huge,
       ),
-    );
-  }
-
-  // ---- product card ----------------------------------------------------
-  Widget _thumb(Product p) {
-    const size = 60.0;
-    if (p.imageIds.isNotEmpty) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Image.network(
-          Backend.imageUrl(p.imageIds.first, width: 200),
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-          errorBuilder: (context, e, s) => _thumbFallback(size, p),
-        ),
-      );
-    }
-    return _thumbFallback(size, p);
-  }
-
-  Widget _thumbFallback(double size, Product p) => Container(
-    width: size,
-    height: size,
-    decoration: BoxDecoration(
-      gradient: p.isApk
-          ? kNeonGradient
-          : p.isFile
-          ? const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF2563EB), Color(0xFF7C3AED)],
-            )
-          : kTealGradient,
-      borderRadius: BorderRadius.circular(16),
-    ),
-    child: Icon(
-      p.isKey
-          ? Icons.key_rounded
-          : p.isApk
-          ? Icons.android_rounded
-          : Icons.insert_drive_file_rounded,
-      color: Colors.white,
-      size: 26,
-    ),
-  );
-
-  Widget _productCard(Product p) {
-    final count = p.isKey ? (stock[p.id] ?? -1) : -1;
-    final desc = p.description.trim();
-    final isOwned = owned.contains(p.id);
-
-    return PressableScale(
-      scale: 0.98,
-      onTap: () => _openDetail(p),
-      child: DoubleBezel(
-        radius: 24,
-        outerPadding: const EdgeInsets.all(5),
-        padding: const EdgeInsets.all(14),
-        child: Row(
+      children: [
+        const Skeleton(width: 116, height: 26, radius: AppRadius.pill),
+        const SizedBox(height: AppSpace.lg),
+        const Skeleton(width: 232, height: 30, radius: AppRadius.chip),
+        const SizedBox(height: AppSpace.sm),
+        const Skeleton(width: 180, height: 30, radius: AppRadius.chip),
+        const SizedBox(height: AppSpace.md),
+        const Skeleton(width: 250, height: 12, radius: AppRadius.pill),
+        const SizedBox(height: AppSpace.xl),
+        const Skeleton(height: 44, radius: AppRadius.pill),
+        const SizedBox(height: AppSpace.xl),
+        const Skeleton(height: 96, radius: AppRadius.hero),
+        const SizedBox(height: AppSpace.xxl),
+        const Skeleton(width: 90, height: 12, radius: AppRadius.pill),
+        const SizedBox(height: AppSpace.md),
+        const Skeleton(height: 288, radius: AppRadius.hero),
+        const SizedBox(height: AppSpace.xl),
+        const Skeleton(width: 74, height: 12, radius: AppRadius.pill),
+        const SizedBox(height: AppSpace.md),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _thumb(p),
-            const SizedBox(width: 14),
-            Expanded(
+            const Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    p.name,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.2,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (desc.isNotEmpty) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      desc,
-                      style: const TextStyle(
-                        color: AppColors.textDim,
-                        fontSize: 12.5,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 7,
-                    runSpacing: 6,
-                    children: [
-                      NeonPill(
-                        icon: Icons.monetization_on_rounded,
-                        label: p.hasDurations
-                            ? 'from ${p.durations.map((d) => d.cost).reduce((a, b) => a < b ? a : b)} coins'
-                            : '${p.cost} coins',
-                        color: AppColors.gold,
-                      ),
-                      if (p.isDownloadable)
-                        NeonPill(
-                          icon: p.isApk
-                              ? Icons.android_rounded
-                              : Icons.insert_drive_file_outlined,
-                          label: p.isApk
-                              ? (p.version.isEmpty ? 'APK' : 'APK ${p.version}')
-                              : (p.fileSize.isEmpty
-                                    ? 'FILE'
-                                    : 'FILE · ${p.fileSize}'),
-                          color: AppColors.cyan,
-                        ),
-                      if (isOwned)
-                        const NeonPill(
-                          icon: Icons.check_circle_rounded,
-                          label: 'Owned',
-                          color: AppColors.green,
-                        ),
-                      if (p.isKey && count >= 0)
-                        count == 0
-                            ? const NeonPill(
-                                icon: Icons.remove_shopping_cart_outlined,
-                                label: 'Out of stock',
-                                color: AppColors.red,
-                              )
-                            : NeonPill(
-                                icon: Icons.inventory_2_outlined,
-                                label: '$count in stock',
-                                color: AppColors.green,
-                              ),
-                    ],
-                  ),
+                  Skeleton(height: 268, radius: AppRadius.card),
+                  SizedBox(height: AppSpace.md),
+                  Skeleton(height: 214, radius: AppRadius.card),
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.06),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-              ),
-              child: Icon(
-                isOwned && p.isDownloadable
-                    ? Icons.download_rounded
-                    : CupertinoIcons.chevron_right,
-                size: 15,
-                color: AppColors.textDim,
+            const SizedBox(width: AppSpace.md),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: AppSpace.lg),
+                child: const Column(
+                  children: [
+                    Skeleton(height: 214, radius: AppRadius.card),
+                    SizedBox(height: AppSpace.md),
+                    Skeleton(height: 268, radius: AppRadius.card),
+                  ],
+                ),
               ),
             ),
           ],
         ),
+      ],
+    );
+  }
+
+  // ---- product imagery -------------------------------------------------
+  Widget _cover(Product p, {int width = 800}) {
+    if (p.imageIds.isNotEmpty) {
+      return Image.network(
+        Backend.imageUrl(p.imageIds.first, width: width),
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        errorBuilder: (context, e, s) => _coverFallback(p),
+      );
+    }
+    return _coverFallback(p);
+  }
+
+  Widget _coverFallback(Product p) {
+    return Container(
+      color: AppColors.surfaceHigh,
+      child: Center(
+        child: Icon(
+          p.isKey
+              ? Icons.key_rounded
+              : p.isApk
+              ? Icons.android_rounded
+              : Icons.insert_drive_file_rounded,
+          color: AppColors.cyan.withValues(alpha: 0.55),
+          size: 34,
+        ),
       ),
     );
+  }
+
+  /// Mono price with the coin mark — never plain body text.
+  Widget _priceTag(int cost, {double size = 14}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.monetization_on_rounded,
+          size: size + 1,
+          color: AppColors.gold,
+        ),
+        const SizedBox(width: AppSpace.xs),
+        Text(
+          groupDigits(cost),
+          style: AppText.figure.copyWith(
+            fontSize: size,
+            color: AppColors.gold,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Lowest selectable price (duration products advertise their entry tier).
+  int _entryCost(Product p) => p.hasDurations
+      ? p.durations.map((d) => d.cost).reduce((a, b) => a < b ? a : b)
+      : p.cost;
+
+  // ---- featured hero panel --------------------------------------------
+  Widget _featuredCard(Product p) {
+    final count = _stockOf(p);
+    final isOwned = owned.contains(p.id);
+    final soldOut = p.isKey && count == 0;
+    final desc = p.description.trim();
+
+    return Pressable(
+      scale: 0.99,
+      onTap: soldOut ? null : () => _openDetail(p),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.hero),
+        child: SizedBox(
+          height: 286,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              _cover(p),
+              // Cyan-tinted scrim: the poster fades into the page, never a
+              // black rectangle behind the title.
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: const [0, 0.45, 1],
+                    colors: [
+                      AppColors.bg.withValues(alpha: 0.05),
+                      AppColors.bg.withValues(alpha: 0.35),
+                      AppColors.bg.withValues(alpha: 0.96),
+                    ],
+                  ),
+                ),
+              ),
+              if (soldOut)
+                ColoredBox(color: AppColors.bg.withValues(alpha: 0.45)),
+              Positioned(
+                left: AppSpace.lg,
+                right: AppSpace.lg,
+                bottom: AppSpace.lg,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      p.name,
+                      style: AppText.headline,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (desc.isNotEmpty) ...[
+                      const SizedBox(height: AppSpace.xs + 2),
+                      Text(
+                        desc,
+                        style: AppText.caption,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    const SizedBox(height: AppSpace.md),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        if (isOwned)
+                          const NeonPill(
+                            icon: Icons.check_circle_rounded,
+                            label: 'Owned',
+                            color: AppColors.cyan,
+                          )
+                        else if (soldOut)
+                          NeonPill(
+                            icon: Icons.remove_shopping_cart_outlined,
+                            label: 'Sold out',
+                            color: AppColors.textDim,
+                          )
+                        else ...[
+                          if (p.hasDurations) ...[
+                            Text('from', style: AppText.caption),
+                            const SizedBox(width: AppSpace.xs + 2),
+                          ],
+                          _priceTag(_entryCost(p), size: 17),
+                          const SizedBox(width: AppSpace.xs + 2),
+                          Text('coins', style: AppText.caption),
+                        ],
+                        const Spacer(),
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white.withValues(alpha: 0.10),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.22),
+                            ),
+                          ),
+                          child: Icon(
+                            soldOut
+                                ? Icons.lock_outline_rounded
+                                : CupertinoIcons.chevron_right,
+                            size: 16,
+                            color: soldOut ? AppColors.textDim : AppColors.text,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---- 2-column staggered grid ----------------------------------------
+  Widget _grid(List<Product> items) {
+    final left = <Widget>[];
+    final right = <Widget>[];
+    for (var i = 0; i < items.length; i++) {
+      (i.isEven ? left : right).add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: AppSpace.md),
+          child: _gridCard(items[i]),
+        ),
+      );
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: Column(children: left)),
+        const SizedBox(width: AppSpace.md),
+        // Dropping the right column gives the grid its editorial stagger.
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(top: items.length > 1 ? AppSpace.lg : 0),
+            child: Column(children: right),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _gridCard(Product p) {
+    final count = _stockOf(p);
+    final isOwned = owned.contains(p.id);
+    final soldOut = p.isKey && count == 0;
+    final meta = p.isDownloadable
+        ? (p.isApk
+              ? (p.version.isEmpty ? 'APK' : 'APK ${p.version}')
+              : (p.fileSize.isEmpty ? 'FILE' : 'FILE · ${p.fileSize}'))
+        : 'License key';
+
+    final card = Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF0C1C22), Color(0xFF071317)],
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AspectRatio(
+            aspectRatio: 1,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _cover(p, width: 400),
+                if (soldOut)
+                  ColoredBox(color: AppColors.bg.withValues(alpha: 0.55)),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(AppSpace.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  p.name,
+                  style: AppText.subtitle.copyWith(fontSize: 14.5),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: AppSpace.xs),
+                Text(meta, style: AppText.caption.copyWith(fontSize: 11.5)),
+                const SizedBox(height: AppSpace.sm + 2),
+                if (isOwned)
+                  const NeonPill(
+                    icon: Icons.check_circle_rounded,
+                    label: 'Owned',
+                    color: AppColors.cyan,
+                  )
+                else if (soldOut)
+                  NeonPill(
+                    icon: Icons.remove_shopping_cart_outlined,
+                    label: 'Sold out',
+                    color: AppColors.textDim,
+                  )
+                else
+                  Row(
+                    children: [
+                      if (p.hasDurations) ...[
+                        Text('from', style: AppText.caption),
+                        const SizedBox(width: AppSpace.xs),
+                      ],
+                      _priceTag(_entryCost(p)),
+                    ],
+                  ),
+                if (!isOwned && !soldOut && count > 0) ...[
+                  const SizedBox(height: AppSpace.xs),
+                  Text(
+                    '$count in stock',
+                    style: AppText.caption.copyWith(
+                      fontSize: 11.5,
+                      color: AppColors.green,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return Pressable(onTap: soldOut ? null : () => _openDetail(p), child: card);
   }
 }

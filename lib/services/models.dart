@@ -75,6 +75,7 @@ class Claim {
     required this.createdAt,
     this.downloadUrl = '',
     this.duration = '',
+    this.sha256,
   });
 
   final String id;
@@ -90,6 +91,10 @@ class Claim {
 
   /// Duration option the buyer picked (key products with durations only).
   final String duration;
+
+  /// Lowercase hex SHA-256 of the file for download claims, when the server
+  /// has one. Null for legacy MediaFire links — those downloads are unverified.
+  final String? sha256;
 
   /// Download claims never carry a link in `keyText`; the Worker stores the
   /// product type there instead. The URL can be missing when its ticket fails.

@@ -146,10 +146,14 @@ export async function requireUser(ctx: Ctx): Promise<AuthUser> {
   const claims = await verifyAccessToken(token, ctx.env.JWT_SECRET);
   if (!claims) throw new ApiError(401, "unauthorized", "Invalid or expired token");
 
+  // The session join is what makes a logout stick: signature alone would let a
+  // revoked access token live out its hour.
   const row = await ctx.env.DB.prepare(
-    `SELECT id, email, coins, is_admin FROM users WHERE id = ?1 AND deleted_at IS NULL`,
+    `SELECT u.id, u.email, u.coins, u.is_admin
+       FROM users u JOIN sessions s ON s.id = ?2 AND s.user_id = u.id
+      WHERE u.id = ?1 AND u.deleted_at IS NULL AND s.revoked_at IS NULL`,
   )
-    .bind(claims.sub)
+    .bind(claims.sub, claims.sid ?? "")
     .first<{ id: string; email: string; coins: number; is_admin: number }>();
 
   if (!row) throw new ApiError(401, "unauthorized", "Account not found");

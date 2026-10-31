@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -21,7 +21,6 @@ class AdUnits {
       'ca-app-pub-7791552060229072/8242333892';
   static const prodBanner = 'ca-app-pub-7791552060229072/3870834884';
   static const prodInterstitial = 'ca-app-pub-7791552060229072/9227103348';
-  static const prodAppOpen = 'ca-app-pub-7791552060229072/5447640437';
   static const prodNative = 'ca-app-pub-7791552060229072/4134558763';
 
   // Google official test ad unit IDs (Android).
@@ -31,7 +30,6 @@ class AdUnits {
       'ca-app-pub-3940256099942544/5354046379';
   static const testBanner = 'ca-app-pub-3940256099942544/6300978111';
   static const testInterstitial = 'ca-app-pub-3940256099942544/1033173712';
-  static const testAppOpen = 'ca-app-pub-3940256099942544/9257395921';
   static const testNative = 'ca-app-pub-3940256099942544/2247696110';
 
   /// No production device is registered as an AdMob test device. Builds using
@@ -52,18 +50,18 @@ class AdUnits {
   static String get banner => useTestAds ? testBanner : prodBanner;
   static String get interstitial =>
       useTestAds ? testInterstitial : prodInterstitial;
-  static String get appOpen => useTestAds ? testAppOpen : prodAppOpen;
   static String get native => useTestAds ? testNative : prodNative;
 }
 
 /// Lifecycle states for an individual advertisement slot.
 enum AdState { idle, loading, loaded, showing, failed }
 
-/// Centralized advertisement manager covering all six AdMob formats:
+/// Centralized advertisement manager covering the five AdMob formats the app
+/// actually shows:
 ///
-/// * **Rewarded** & **Rewarded interstitial** — earn coins (SSV → function).
-/// * **Interstitial**, **App open**, **Banner**, **Native** — passive
-///   revenue only; they never touch the coin balance.
+/// * **Rewarded** & **Rewarded interstitial** â€” earn coins (SSV â†’ function).
+/// * **Interstitial**, **Banner**, **Native** â€” passive revenue only; they
+///   never touch the coin balance.
 ///
 /// Enforces:
 /// - Explicit ad state management (idle, loading, loaded, showing, failed).
@@ -93,46 +91,38 @@ class AdService {
   RewardedAd? _ad;
   RewardedInterstitialAd? _ri;
   InterstitialAd? _inter;
-  AppOpenAd? _appOpen;
 
   // States
   AdState _adState = AdState.idle;
   AdState _riState = AdState.idle;
   AdState _interState = AdState.idle;
-  AdState _appOpenState = AdState.idle;
 
   // Timestamps
   DateTime? _adLoadedTime;
   DateTime? _riLoadedTime;
   DateTime? _interLoadedTime;
-  DateTime? _appOpenLoadedTime;
 
   // In-flight single-flight completers.
   Completer<RewardedAd?>? _rewardedCompleter;
   Completer<RewardedInterstitialAd?>? _riCompleter;
   Completer<InterstitialAd?>? _interCompleter;
-  Completer<AppOpenAd?>? _appOpenCompleter;
 
   // Failure tracking & backoff
   DateTime? _lastRewardedFailTime;
   DateTime? _lastRiFailTime;
   DateTime? _lastInterFailTime;
-  DateTime? _lastAppOpenFailTime;
 
   int? _lastRewardedErrorCode;
   int? _lastRiErrorCode;
   int? _lastInterErrorCode;
-  int? _lastAppOpenErrorCode;
 
   int _rewardedRetryAttempts = 0;
   int _riRetryAttempts = 0;
   int _interRetryAttempts = 0;
-  int _appOpenRetryAttempts = 0;
 
   Duration? _rewardedRetryDelay;
   Duration? _riRetryDelay;
   Duration? _interRetryDelay;
-  Duration? _appOpenRetryDelay;
 
   // Global full-screen presentation mutex.
   bool _isShowingFullScreenAd = false;
@@ -142,18 +132,14 @@ class AdService {
   bool get ready => _ad != null && !_isAdExpired(_adLoadedTime);
   bool get riReady => _ri != null && !_isAdExpired(_riLoadedTime);
   bool get interReady => _inter != null && !_isAdExpired(_interLoadedTime);
-  bool get appOpenReady =>
-      _appOpen != null && !_isAdExpired(_appOpenLoadedTime);
 
   AdState get rewardedState => _adState;
   AdState get riState => _riState;
   AdState get interState => _interState;
-  AdState get appOpenState => _appOpenState;
 
   int? get lastRewardedErrorCode => _lastRewardedErrorCode;
   int? get lastRiErrorCode => _lastRiErrorCode;
   int? get lastInterErrorCode => _lastInterErrorCode;
-  int? get lastAppOpenErrorCode => _lastAppOpenErrorCode;
 
   // Mediation adapter initialization tracking
   InitializationStatus? _initializationStatus;
@@ -271,7 +257,7 @@ class AdService {
   /// Earliest wall-clock time the next full-screen load may start.
   static DateTime? _nextFullscreenSlot;
 
-  /// Paces full-screen load requests [gap] apart — but only during the
+  /// Paces full-screen load requests [gap] apart â€” but only during the
   /// startup burst.
   ///
   /// Rewarded, Rewarded Interstitial and Interstitial are kicked off by
@@ -280,8 +266,8 @@ class AdService {
   /// from one device against a brand-new AdMob app looks like request spam
   /// and can contribute to ad-serving limits and blanket no-fill responses.
   ///
-  /// The window closes after [pacingWindow], so steady-state behaviour — a
-  /// user tapping Watch, or a tab switch waiting on an interstitial — is
+  /// The window closes after [pacingWindow], so steady-state behaviour â€” a
+  /// user tapping Watch, or a tab switch waiting on an interstitial â€” is
   /// never delayed by this gate.
   static Future<void> _paceFullscreenRequest() async {
     const gap = Duration(seconds: 2);
@@ -347,7 +333,7 @@ class AdService {
         // rather than an in-app block.
         debugPrint(
           '[$timestamp][AdService][$format][Waterfall] '
-          'no mediator responded — Google had no ad to serve and no '
+          'no mediator responded â€” Google had no ad to serve and no '
           'mediation source (Unity) placed a bid.',
         );
       }
@@ -379,7 +365,7 @@ class AdService {
   }
 
   // ---------------------------------------------------------------------
-  // Rewarded — watch a video, earn coins (SSV credits server-side).
+  // Rewarded â€” watch a video, earn coins (SSV credits server-side).
   // ---------------------------------------------------------------------
 
   /// Preload a rewarded ad; awaits an in-flight load if already running.
@@ -586,7 +572,7 @@ class AdService {
   }
 
   // ---------------------------------------------------------------------
-  // Rewarded interstitial — the second way to earn coins (SSV same as above).
+  // Rewarded interstitial â€” the second way to earn coins (SSV same as above).
   // ---------------------------------------------------------------------
 
   Future<RewardedInterstitialAd?> preloadRewardedInterstitial({
@@ -704,7 +690,7 @@ class AdService {
   }
 
   /// Show the rewarded interstitial earn option. Same SSV contract as
-  /// [show] — the same reward function credits the coins.
+  /// [show] â€” the same reward function credits the coins.
   Future<void> showRewardedInterstitial({
     required String userId,
     required void Function(RewardItem reward) onEarned,
@@ -888,7 +874,7 @@ class AdService {
   }
 
   // ---------------------------------------------------------------------
-  // Interstitial — passive profit, no coins. Preloaded for instant show.
+  // Interstitial â€” passive profit, no coins. Preloaded for instant show.
   // ---------------------------------------------------------------------
 
   Future<InterstitialAd?> preloadInterstitial({
@@ -999,7 +985,7 @@ class AdService {
   }
 
   /// Show the preloaded interstitial (silently skips if the ad isn't ready
-  /// or if another full-screen ad is active — passive formats must never
+  /// or if another full-screen ad is active â€” passive formats must never
   /// freeze the navigation).
   ///
   /// Returns `true` only when an AdMob interstitial was actually handed to
@@ -1077,167 +1063,6 @@ class AdService {
     }
   }
 
-  // ---------------------------------------------------------------------
-  // App open — passive profit on cold start, preloaded during splash.
-  // ---------------------------------------------------------------------
-
-  /// Preload App Open ad in the background.
-  Future<AppOpenAd?> preloadAppOpen({
-    Duration timeout = const Duration(seconds: 6),
-  }) async {
-    if (!adsEnabled) return null;
-
-    if (_appOpen != null) {
-      if (_isAdExpired(_appOpenLoadedTime)) {
-        debugPrint('[AdService] Cached AppOpenAd expired (>4h); clearing');
-        _appOpen?.dispose();
-        _appOpen = null;
-        _appOpenState = AdState.idle;
-      } else {
-        return _appOpen;
-      }
-    }
-
-    if (_lastAppOpenFailTime != null && _appOpenRetryDelay != null) {
-      final elapsed = DateTime.now().difference(_lastAppOpenFailTime!);
-      if (elapsed < _appOpenRetryDelay!) {
-        return null;
-      }
-    }
-
-    if (_appOpenCompleter != null) {
-      try {
-        return await _appOpenCompleter!.future.timeout(timeout);
-      } catch (_) {
-        return _appOpen;
-      }
-    }
-
-    final completer = Completer<AppOpenAd?>();
-    _appOpenCompleter = completer;
-    _appOpenState = AdState.loading;
-
-    try {
-      debugPrint(
-        '[AdService] Preloading AppOpenAd (unit: ${AdUnits.appOpen})...',
-      );
-      await AppOpenAd.load(
-        adUnitId: AdUnits.appOpen,
-        request: const AdRequest(),
-        adLoadCallback: AppOpenAdLoadCallback(
-          onAdLoaded: (ad) {
-            _appOpenState = AdState.loaded;
-            _appOpenLoadedTime = DateTime.now();
-            _lastAppOpenFailTime = null;
-            _lastAppOpenErrorCode = null;
-            _appOpenRetryAttempts = 0;
-            _appOpenRetryDelay = null;
-            _appOpen?.dispose();
-            _appOpen = ad;
-            _appOpenCompleter = null;
-            final adapter =
-                ad.responseInfo?.mediationAdapterClassName ?? 'None';
-            final responseId = ad.responseInfo?.responseId ?? 'None';
-            final isUnity = adapter.toLowerCase().contains('unity');
-            debugPrint(
-              '[AdService] AppOpenAd loaded successfully via adapter="$adapter"'
-              '${isUnity ? " (Unity Ads Mediation)" : ""}'
-              ' (responseId: $responseId)',
-            );
-            if (!completer.isCompleted) completer.complete(ad);
-          },
-          onAdFailedToLoad: (err) {
-            _appOpenState = AdState.failed;
-            _lastAppOpenFailTime = DateTime.now();
-            _lastAppOpenErrorCode = err.code;
-            _appOpenRetryAttempts++;
-            _appOpenRetryDelay = _calculateBackoff(
-              _appOpenRetryAttempts,
-              isNoFill: err.code == 3,
-            );
-            _logAdError('AppOpen', AdUnits.appOpen, err, action: 'load');
-            _appOpenCompleter = null;
-            if (!completer.isCompleted) completer.complete(null);
-          },
-        ),
-      );
-    } catch (e) {
-      _appOpenState = AdState.failed;
-      _lastAppOpenFailTime = DateTime.now();
-      _appOpenRetryAttempts++;
-      _appOpenRetryDelay = _calculateBackoff(_appOpenRetryAttempts);
-      _logAdError('AppOpen', AdUnits.appOpen, e, action: 'load_exception');
-      _appOpenCompleter = null;
-      if (!completer.isCompleted) completer.complete(null);
-    }
-
-    try {
-      return await completer.future.timeout(timeout);
-    } catch (_) {
-      return _appOpen;
-    }
-  }
-
-  /// Show App Open ad ONLY IF it was preloaded and is already ready.
-  /// Never delays or cold-loads over active UI.
-  Future<void> showAppOpenIfAvailable({void Function()? onClosed}) async {
-    if (!adsEnabled || _isShowingFullScreenAd) {
-      onClosed?.call();
-      return;
-    }
-
-    final ad = _appOpen;
-    if (ad == null || _isAdExpired(_appOpenLoadedTime)) {
-      debugPrint('[AdService] AppOpen ad not preloaded; skipping presentation');
-      onClosed?.call();
-      return;
-    }
-
-    _appOpen = null;
-    _appOpenState = AdState.showing;
-    _isShowingFullScreenAd = true;
-
-    ad.fullScreenContentCallback = FullScreenContentCallback(
-      onAdShowedFullScreenContent: (a) {
-        debugPrint('[AdService] AppOpenAd displayed full screen');
-      },
-      onAdImpression: (a) {
-        debugPrint('[AdService] AppOpenAd impression recorded');
-      },
-      onAdClicked: (a) {
-        debugPrint('[AdService] AppOpenAd clicked');
-      },
-      onAdDismissedFullScreenContent: (a) {
-        debugPrint('[AdService] AppOpenAd dismissed');
-        a.dispose();
-        _isShowingFullScreenAd = false;
-        _appOpenState = AdState.idle;
-        onClosed?.call();
-      },
-      onAdFailedToShowFullScreenContent: (a, error) {
-        _logAdError('AppOpen', AdUnits.appOpen, error, action: 'show');
-        a.dispose();
-        _isShowingFullScreenAd = false;
-        _appOpenState = AdState.idle;
-        onClosed?.call();
-      },
-    );
-
-    try {
-      await ad.show();
-    } catch (e) {
-      debugPrint('[AdService] AppOpen show exception: $e');
-      _isShowingFullScreenAd = false;
-      _appOpenState = AdState.idle;
-      ad.dispose();
-      onClosed?.call();
-    }
-  }
-
-  /// Backwards-compatible signature for `showAppOpen`.
-  Future<void> showAppOpen({void Function()? onClosed}) =>
-      showAppOpenIfAvailable(onClosed: onClosed);
-
   /// Application-wide teardown (only when the whole application process terminates).
   /// Individual widgets MUST NOT call this method on the singleton.
   void dispose() {
@@ -1252,10 +1077,6 @@ class AdService {
     _inter?.dispose();
     _inter = null;
     _interState = AdState.idle;
-
-    _appOpen?.dispose();
-    _appOpen = null;
-    _appOpenState = AdState.idle;
 
     _isShowingFullScreenAd = false;
   }

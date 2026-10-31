@@ -1,6 +1,23 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- Required for advertising ID. -->
     <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
+    <!-- Pulled in by open_filex but never used: every file the app opens lives
+         in its own files dir, which the FileProvider hands out with no storage
+         permission. Removed for both flavors so the sideloaded build does not
+         ask for the whole media library either. -->
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_IMAGES"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_VIDEO"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_AUDIO"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        tools:node="remove" />
     <!-- Network access (Appwrite, AdMob, product images, YouTube player). -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>

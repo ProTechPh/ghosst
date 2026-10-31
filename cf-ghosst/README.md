@@ -49,11 +49,13 @@ npx wrangler secret put JWT_SECRET     # openssl rand -base64 48
 npx wrangler secret put R2_ACCESS_KEY_ID
 npx wrangler secret put R2_SECRET_ACCESS_KEY
 npx wrangler d1 execute ghosst --remote --file=migrations/0001_init.sql
+npx wrangler d1 execute ghosst --remote --file=migrations/0002_reward_email_hash_and_file_sha256.sql
 npx wrangler deploy
 ```
 
 Also set `R2_ACCOUNT_ID`, `R2_BUCKET`, `PUBLIC_CDN`, `ALLOWED_ORIGINS` in `wrangler.toml`,
-and point AdMob's SSV callback at `https://api.ghosst.app/v1/ads/ssv` (bare URL, no query).
+and point AdMob's SSV callback at `https://ghosst-api.ghosst.workers.dev/v1/ads/ssv`
+(bare URL, no query).
 
 ## Local
 

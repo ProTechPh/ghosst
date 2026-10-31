@@ -105,6 +105,7 @@ class _MyAppsScreenState extends State<MyAppsScreen> {
           preferredName: isApk ? '$name.apk' : '',
           imageUrl: Backend.productThumbUrl(app.product?.imageIds ?? const []),
           youtubeUrl: app.product?.youtubeUrl ?? '',
+          sha256: app.claim.sha256,
         ),
       ),
     );
@@ -117,7 +118,7 @@ class _MyAppsScreenState extends State<MyAppsScreen> {
       height: 44,
       decoration: BoxDecoration(
         gradient: isApk ? kNeonGradient : kGoldGradient,
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(AppRadius.input),
       ),
       child: Icon(
         isApk ? Icons.android_rounded : Icons.insert_drive_file_outlined,
@@ -128,7 +129,7 @@ class _MyAppsScreenState extends State<MyAppsScreen> {
     final url = Backend.productThumbUrl(app.product?.imageIds ?? const []);
     if (url.isEmpty) return fallback;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(13),
+      borderRadius: BorderRadius.circular(AppRadius.input),
       child: Image.network(
         url,
         width: 44,
@@ -158,7 +159,7 @@ class _MyAppsScreenState extends State<MyAppsScreen> {
         children: [
           const MeshBackground(),
           if (loading)
-            const Center(child: CircularProgressIndicator())
+            _skeleton()
           else if (error.isNotEmpty)
             SafeArea(
               child: EmptyState(
@@ -181,26 +182,20 @@ class _MyAppsScreenState extends State<MyAppsScreen> {
                 onRefresh: _load,
                 child: ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpace.lg,
+                    AppSpace.md,
+                    AppSpace.lg,
+                    AppSpace.huge,
+                  ),
                   children: [
-                    const SectionLabel('App owned'),
-                    const Text(
-                      'Purchased apps',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
+                    const Text('Purchased apps', style: AppText.headline),
+                    const SizedBox(height: AppSpace.xs + 2),
                     Text(
                       '${apps.length} app(s) ready to download',
-                      style: const TextStyle(
-                        color: AppColors.textDim,
-                        fontSize: 13.5,
-                      ),
+                      style: AppText.caption,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppSpace.xl),
                     if (apps.isEmpty)
                       const EmptyState(
                         icon: Icons.apps_outlined,
@@ -208,70 +203,18 @@ class _MyAppsScreenState extends State<MyAppsScreen> {
                         message:
                             'Buy apps and files with your coins in the Store — '
                             'they show up here to download any time.',
-                      ),
-                    for (final app in apps) ...[
-                      GlowCard(
-                        padding: const EdgeInsets.all(14),
-                        onTap: () => _open(app),
-                        child: Row(
-                          children: [
-                            _thumb(app),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _title(app),
-                                    style: const TextStyle(
-                                      fontSize: 15.5,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    _meta(app),
-                                    style: const TextStyle(
-                                      color: AppColors.textDim,
-                                      fontSize: 12.5,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              width: 36,
-                              height: 36,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: AppColors.cyan.withValues(alpha: 0.10),
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: AppColors.cyan.withValues(alpha: 0.35),
-                                ),
-                              ),
-                              child: const Icon(
-                                Icons.download_rounded,
-                                size: 17,
-                                color: AppColors.cyan,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
+                      )
+                    else
+                      for (final app in apps) _row(app),
                     if (apps.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      const Center(
+                      const SizedBox(height: AppSpace.lg),
+                      Center(
                         child: Text(
                           'PURCHASED ONCE · DOWNLOAD ANY TIME',
-                          style: TextStyle(
+                          textAlign: TextAlign.center,
+                          style: AppText.label.copyWith(
                             fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 2.4,
+                            letterSpacing: 2.2,
                             color: AppColors.textDim,
                           ),
                         ),
@@ -282,6 +225,106 @@ class _MyAppsScreenState extends State<MyAppsScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _skeleton() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.lg,
+        AppSpace.md,
+        AppSpace.lg,
+        AppSpace.huge,
+      ),
+      children: [
+        const Skeleton(width: 210, height: 28),
+        const SizedBox(height: AppSpace.xl),
+        for (var i = 0; i < 4; i++)
+          const Padding(
+            padding: EdgeInsets.only(bottom: AppSpace.md),
+            child: Row(
+              children: [
+                Skeleton(width: 44, height: 44, radius: AppRadius.input),
+                SizedBox(width: AppSpace.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Skeleton(width: 160, height: 15),
+                      SizedBox(height: AppSpace.sm),
+                      Skeleton(height: 12),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _row(_OwnedApp app) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: AppColors.border.withValues(alpha: 0.6)),
+        ),
+      ),
+      child: Pressable(
+        onTap: () => _open(app),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppSpace.md),
+          child: Row(
+            children: [
+              _thumb(app),
+              const SizedBox(width: AppSpace.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _title(app),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppText.title.copyWith(fontSize: 15.5),
+                    ),
+                    const SizedBox(height: AppSpace.xs + 2),
+                    Text(
+                      _meta(app),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: monoStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.4,
+                        color: AppColors.textDim,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpace.sm),
+              Container(
+                width: 38,
+                height: 38,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.cyan.withValues(alpha: 0.10),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppColors.cyan.withValues(alpha: 0.30),
+                  ),
+                ),
+                child: const Icon(
+                  Icons.download_rounded,
+                  size: 17,
+                  color: AppColors.cyan,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

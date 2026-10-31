@@ -360,17 +360,12 @@ class _ClaimFlowState extends State<_ClaimFlow> {
         Text(
           widget.product.name,
           textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w700,
-            color: AppColors.text,
-            height: 1.2,
-          ),
+          style: AppText.headline.copyWith(fontSize: 24),
         ),
         const SizedBox(height: 6),
         Text(
           _isApp ? 'Your download is ready' : 'Your license key is ready',
-          style: const TextStyle(color: AppColors.textDim, fontSize: 14),
+          style: AppText.caption.copyWith(fontSize: 14),
         ),
         const SizedBox(height: 28),
 
@@ -384,21 +379,17 @@ class _ClaimFlowState extends State<_ClaimFlow> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'BALANCE',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 2.2,
-                        color: AppColors.textDim,
-                      ),
+                      style: AppText.label.copyWith(color: AppColors.textDim),
                     ),
                     const SizedBox(height: 6),
                     AnimatedCounter(
                       value: after,
-                      style: const TextStyle(
+                      style: monoStyle(
                         fontSize: 30,
                         fontWeight: FontWeight.w700,
+                        letterSpacing: -1,
                         color: AppColors.gold,
                         height: 1.1,
                       ),
@@ -409,14 +400,9 @@ class _ClaimFlowState extends State<_ClaimFlow> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  const Text(
+                  Text(
                     'SPENT',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 2.2,
-                      color: AppColors.textDim,
-                    ),
+                    style: AppText.label.copyWith(color: AppColors.textDim),
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -436,101 +422,128 @@ class _ClaimFlowState extends State<_ClaimFlow> {
         // purchases — buyers go through "Download now" instead of copying
         // the file-host link themselves.
         if (!_isApp) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpace.lg),
 
-          // ---- key card ---------------------------------------------------
-          DoubleBezel(
-            padding: const EdgeInsets.fromLTRB(20, 18, 16, 14),
-            glowColor: AppColors.green,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _isApp ? 'FILE LINK' : 'YOUR KEY',
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 2.2,
-                    color: AppColors.textDim,
-                  ),
+          // ---- key card: hero surface with a gold hairline edge -----------
+          Container(
+            padding: const EdgeInsets.all(1),
+            decoration: BoxDecoration(
+              gradient: kGoldGradient,
+              borderRadius: BorderRadius.circular(AppRadius.hero),
+            ),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.xl,
+                AppSpace.lg + 2,
+                AppSpace.lg,
+                AppSpace.md,
+              ),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF0C1C22), Color(0xFF071317)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                const SizedBox(height: 12),
-                SelectableText(
-                  _key,
-                  style: monoStyle(
-                    fontSize: _isApp ? 13.5 : 15.5,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: _isApp ? 0 : 1.3,
-                    color: AppColors.text,
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  height: 1,
-                  color: Colors.white.withValues(alpha: 0.07),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    AnimatedOpacity(
-                      opacity: _copied ? 1 : 0,
-                      duration: kMotionFast,
-                      curve: kPremiumCurve,
-                      child: const Text(
-                        'COPIED',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 2,
-                          color: AppColors.green,
-                        ),
+                borderRadius: BorderRadius.circular(AppRadius.hero - 1),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.key_rounded,
+                        size: 14,
+                        color: AppColors.gold,
                       ),
+                      const SizedBox(width: AppSpace.xs + 2),
+                      Text(
+                        'YOUR KEY',
+                        style: AppText.label.copyWith(color: AppColors.textDim),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpace.lg),
+                  SelectableText(
+                    _key,
+                    style: monoStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 2.4,
+                      color: AppColors.text,
+                      height: 1.55,
                     ),
-                    PressableScale(
-                      onTap: _copy,
-                      child: AnimatedContainer(
+                  ),
+                  const SizedBox(height: AppSpace.lg),
+                  Container(
+                    height: 1,
+                    color: Colors.white.withValues(alpha: 0.07),
+                  ),
+                  const SizedBox(height: AppSpace.sm),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      AnimatedOpacity(
+                        opacity: _copied ? 1 : 0,
                         duration: kMotionFast,
                         curve: kPremiumCurve,
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: _copied
-                              ? AppColors.green.withValues(alpha: 0.16)
-                              : Colors.white.withValues(alpha: 0.07),
-                          border: Border.all(
-                            color: _copied
-                                ? AppColors.green.withValues(alpha: 0.55)
-                                : Colors.white.withValues(alpha: 0.14),
+                        child: const Text(
+                          'COPIED',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 2,
+                            color: AppColors.green,
                           ),
-                        ),
-                        child: AnimatedSwitcher(
-                          duration: kMotionFast,
-                          transitionBuilder: (child, anim) => ScaleTransition(
-                            scale: anim,
-                            child: FadeTransition(opacity: anim, child: child),
-                          ),
-                          child: _copied
-                              ? const Icon(
-                                  Icons.check_rounded,
-                                  key: ValueKey('check'),
-                                  size: 17,
-                                  color: AppColors.green,
-                                )
-                              : const Icon(
-                                  Icons.copy_outlined,
-                                  key: ValueKey('copy'),
-                                  size: 16,
-                                  color: AppColors.text,
-                                ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                      PressableScale(
+                        onTap: _copy,
+                        child: AnimatedContainer(
+                          duration: kMotionFast,
+                          curve: kPremiumCurve,
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _copied
+                                ? AppColors.green.withValues(alpha: 0.16)
+                                : Colors.white.withValues(alpha: 0.07),
+                            border: Border.all(
+                              color: _copied
+                                  ? AppColors.green.withValues(alpha: 0.55)
+                                  : Colors.white.withValues(alpha: 0.14),
+                            ),
+                          ),
+                          child: AnimatedSwitcher(
+                            duration: kMotionFast,
+                            transitionBuilder: (child, anim) => ScaleTransition(
+                              scale: anim,
+                              child: FadeTransition(
+                                opacity: anim,
+                                child: child,
+                              ),
+                            ),
+                            child: _copied
+                                ? const Icon(
+                                    Icons.check_rounded,
+                                    key: ValueKey('check'),
+                                    size: 17,
+                                    color: AppColors.green,
+                                  )
+                                : const Icon(
+                                    Icons.copy_outlined,
+                                    key: ValueKey('copy'),
+                                    size: 16,
+                                    color: AppColors.text,
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ],

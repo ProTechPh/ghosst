@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
@@ -198,9 +199,8 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
             onDone: () async {
               if (!mounted) return;
               setState(() => _splash = false);
-              // Do not present an app-open ad after revealing interactive UI.
-              // It can land under the user's first tap and cause an accidental
-              // advertiser click just as they press a navigation/earn button.
+              // No full-screen ad here: it can land under the user's first tap
+              // and cause an accidental advertiser click.
             },
           ),
       ],
@@ -226,12 +226,14 @@ class _RouterState extends State<Router> {
       return SignIn(
         onSignedIn: () => go('home'),
         onGoToSignUp: () => go('sign-up'),
+        onBack: () => go('home'),
       );
     }
     if (route == 'sign-up') {
       return SignUp(
         onSignedUp: () => go('home'),
         onGoToSignIn: () => go('sign-in'),
+        onBack: () => go('home'),
       );
     }
     return Home(
@@ -332,7 +334,7 @@ class _HomeShellState extends State<HomeShell> {
   DateTime? _lastInterstitial;
 
   /// Interstitial cadence: every other tab switch, at most once per cooldown
-  /// (and never right at launch — the app-open ad already ran).
+  /// (and never right at launch).
   static const _interCooldown = Duration(seconds: 45);
 
   @override
@@ -445,8 +447,15 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   Future<void> _refresh() async {
+    var balance = coins;
+    var failed = false;
+    try {
+      balance = await Backend.coins();
+    } catch (_) {
+      // Keep the last known balance; a blip must not read as "0 coins".
+      failed = true;
+    }
     final results = await Future.wait<Object>([
-      Backend.coins().catchError((_) => 0),
       Backend.isAdmin().catchError((_) => false),
       Backend.currentUser()
           .then(
@@ -456,11 +465,19 @@ class _HomeShellState extends State<HomeShell> {
     ]);
     if (!mounted) return;
     setState(() {
-      coins = results[0] as int;
-      isAdmin = results[1] as bool;
-      display = results[2] as String;
+      coins = balance;
+      isAdmin = results[0] as bool;
+      display = results[1] as String;
       loading = false;
     });
+    if (failed && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Could not refresh your balance.'),
+          action: SnackBarAction(label: 'Retry', onPressed: _refresh),
+        ),
+      );
+    }
   }
 
   void _openWallet() {
@@ -506,7 +523,10 @@ class _HomeShellState extends State<HomeShell> {
         onGoToEarn: () => setState(() => tab = 1),
       ),
       EarnScreen(coins: coins, onRefresh: _refresh),
-      const MyKeysScreen(),
+      MyKeysScreen(
+        active: tab == 2,
+        onGoToStore: () => setState(() => tab = 0),
+      ),
       if (isAdmin) const AdminScreen(),
     ];
 
@@ -526,23 +546,17 @@ class _HomeShellState extends State<HomeShell> {
 
     return Stack(
       children: [
-        const MeshBackground(),
+        const _ShellBackdrop(),
         Scaffold(
           backgroundColor: Colors.transparent,
           appBar: AppBar(
-            titleSpacing: 20,
-            title: Row(
+            toolbarHeight: 60,
+            titleSpacing: AppSpace.lg,
+            title: const Row(
               children: [
-                const LogoBadge(size: 34, fontSize: 17),
-                const SizedBox(width: 10),
-                const GradientText(
-                  'Ghosst',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.4,
-                  ),
-                ),
+                LogoBadge(size: 30, fontSize: 15),
+                SizedBox(width: AppSpace.md - 2),
+                GradientText('Ghosst', style: AppText.title),
               ],
             ),
             // Fading hairline — separation without a hard 1px rule.
@@ -563,36 +577,45 @@ class _HomeShellState extends State<HomeShell> {
             ),
             actions: [
               Padding(
-                padding: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.only(right: AppSpace.sm),
                 child: CoinPill(coins: coins, onTap: _openWallet),
               ),
               Padding(
-                padding: const EdgeInsets.only(right: 14),
-                child: GestureDetector(
+                padding: const EdgeInsets.only(right: AppSpace.lg),
+                child: Pressable(
                   onTap: _openProfile,
-                  behavior: HitTestBehavior.opaque,
+                  scale: 0.92,
                   child: Container(
-                    padding: const EdgeInsets.all(2.5),
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
+                    width: 36,
+                    height: 36,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
                       gradient: kNeonGradient,
+                      borderRadius: BorderRadius.circular(AppRadius.input),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primary.withValues(alpha: 0.22),
+                          blurRadius: 16,
+                          spreadRadius: -4,
+                        ),
+                      ],
                     ),
                     child: Container(
-                      width: 34,
-                      height: 34,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: AppColors.surfaceHigh,
-                      ),
+                      width: 33,
+                      height: 33,
                       alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: AppColors.bg,
+                        borderRadius: BorderRadius.circular(
+                          AppRadius.input - 2,
+                        ),
+                      ),
                       child: Text(
                         display.trim().isEmpty
                             ? 'G'
                             : display.trim()[0].toUpperCase(),
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.text,
+                        style: AppText.subtitle.copyWith(
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                     ),
@@ -622,6 +645,9 @@ class _HomeShellState extends State<HomeShell> {
                 index: safeIndex,
                 items: destinations,
                 onSelected: (i) {
+                  // Re-tapping the current tab is not a tab switch — it must
+                  // not count towards (or fire) the interstitial.
+                  if (i == safeIndex) return;
                   setState(() => tab = i);
                   _maybeShowInterstitial();
                 },
@@ -642,7 +668,55 @@ class _NavItem {
   final String label;
 }
 
-/// Floating, backdrop-blurred pill navigation with an animated indicator.
+/// One light source: the mesh's cyan bloom stays at the top, and everything
+/// past the first third falls off to near-black so content owns the frame.
+class _ShellBackdrop extends StatelessWidget {
+  const _ShellBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        const MeshBackground(),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: const Alignment(0, -1.05),
+                  radius: 1.15,
+                  colors: [
+                    AppColors.primary.withValues(alpha: 0.20),
+                    AppColors.primary.withValues(alpha: 0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: const Alignment(0, -0.2),
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    AppColors.bg.withValues(alpha: 0),
+                    AppColors.bg.withValues(alpha: 0.92),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Floating, backdrop-blurred pill navigation. Active tab widens into a
+/// tinted pill with its label; inactive tabs stay icon-only.
 class _GlassNavBar extends StatelessWidget {
   const _GlassNavBar({
     required this.index,
@@ -654,43 +728,68 @@ class _GlassNavBar extends StatelessWidget {
   final List<_NavItem> items;
   final ValueChanged<int> onSelected;
 
+  /// Width of an icon-only slot; the active tab takes what is left over.
+  static const double _slot = 56;
+
   @override
   Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(AppRadius.pill);
+
     return SafeArea(
       top: false,
-      minimum: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      minimum: const EdgeInsets.fromLTRB(
+        AppSpace.lg,
+        0,
+        AppSpace.lg,
+        AppSpace.md,
+      ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(30),
+        borderRadius: radius,
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
           child: Container(
-            padding: const EdgeInsets.all(6),
+            padding: const EdgeInsets.all(AppSpace.sm - 2),
             decoration: BoxDecoration(
-              color: AppColors.surface.withValues(alpha: 0.72),
-              borderRadius: BorderRadius.circular(30),
+              // True glass: the blurred page shows through, never a flat bar.
+              color: AppColors.bgSoft.withValues(alpha: 0.62),
+              borderRadius: radius,
               border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
               boxShadow: [
+                // 1px inner top highlight — the pill is lit from above.
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.35),
-                  blurRadius: 30,
+                  color: Colors.white.withValues(alpha: 0.12),
+                  offset: const Offset(0, 1),
+                  blurRadius: 1,
+                  blurStyle: BlurStyle.inner,
+                ),
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.40),
+                  blurRadius: 28,
                   offset: const Offset(0, 12),
                 ),
               ],
             ),
-            child: Row(
-              children: [
-                for (var i = 0; i < items.length; i++)
-                  Expanded(
-                    child: _GlassNavItem(
-                      item: items[i],
-                      selected: i == index,
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        onSelected(i);
-                      },
-                    ),
-                  ),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final activeWidth = math.max(
+                  _slot,
+                  constraints.maxWidth - _slot * (items.length - 1),
+                );
+                return Row(
+                  children: [
+                    for (var i = 0; i < items.length; i++)
+                      _GlassNavItem(
+                        item: items[i],
+                        selected: i == index,
+                        width: i == index ? activeWidth : _slot,
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          onSelected(i);
+                        },
+                      ),
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -703,66 +802,65 @@ class _GlassNavItem extends StatelessWidget {
   const _GlassNavItem({
     required this.item,
     required this.selected,
+    required this.width,
     required this.onTap,
   });
 
   final _NavItem item;
   final bool selected;
+  final double width;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final color = selected ? AppColors.primary : AppColors.textDim;
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: kMotionFast,
-        curve: kPremiumCurve,
-        padding: const EdgeInsets.symmetric(vertical: 11),
-        decoration: BoxDecoration(
+    return AnimatedContainer(
+      duration: kMotionStandard,
+      curve: kPremiumCurve,
+      width: width,
+      decoration: BoxDecoration(
+        color: selected
+            ? AppColors.primary.withValues(alpha: 0.14)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(
           color: selected
-              ? AppColors.primary.withValues(alpha: 0.16)
+              ? AppColors.primary.withValues(alpha: 0.34)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: selected
-                ? AppColors.primary.withValues(alpha: 0.35)
-                : Colors.transparent,
-          ),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedSwitcher(
-              duration: kMotionFast,
-              switchInCurve: kPremiumCurve,
-              switchOutCurve: kPremiumCurve,
-              transitionBuilder: (child, animation) => ScaleTransition(
-                scale: animation,
-                child: FadeTransition(opacity: animation, child: child),
-              ),
-              child: Icon(
+      ),
+      child: Pressable(
+        onTap: onTap,
+        scale: 0.90,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppSpace.md + 2),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
                 selected ? item.selectedIcon : item.icon,
-                key: ValueKey(selected),
                 size: 21,
                 color: color,
               ),
-            ),
-            const SizedBox(height: 4),
-            AnimatedDefaultTextStyle(
-              duration: kMotionFast,
-              curve: kPremiumCurve,
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                color: color,
-                letterSpacing: 0.1,
-              ),
-              child: Text(item.label),
-            ),
-          ],
+              if (selected) ...[
+                const SizedBox(width: AppSpace.sm - 2),
+                Flexible(
+                  child: Text(
+                    item.label,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.clip,
+                    style: AppText.caption.copyWith(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: color,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

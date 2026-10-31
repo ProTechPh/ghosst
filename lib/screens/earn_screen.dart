@@ -2,9 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../premium.dart';
 import '../services/ad_service.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
+
+/// Coins per rewarded ad. The Worker owns the real value
+/// (`COINS_PER_REWARD`, default 10) and exposes no endpoint for it.
+/// shortcut: update this mirror when the operator changes the Worker var.
+const int _rewardCoins = 10;
 
 class EarnScreen extends StatefulWidget {
   const EarnScreen({super.key, required this.coins, required this.onRefresh});
@@ -25,6 +31,10 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
   static DateTime? _cooldownUntil;
   Timer? _ticker;
   int _remainingCooldown = 0;
+
+  /// Length of the cooldown that started [_remainingCooldown] — drives the
+  /// countdown bar's fill. Purely a display mirror of `_cooldownUntil`.
+  int _cooldownSpan = 30;
 
   /// Server-poll verification state — drives the determinate progress bar
   /// so the waiting screen visibly moves instead of sitting on a dead line.
@@ -78,9 +88,13 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
 
   void _startCooldown([int seconds = 30]) {
     _cooldownUntil = DateTime.now().add(Duration(seconds: seconds));
+    _cooldownSpan = seconds;
+    // _checkCooldown may create its own ticker; drop this one first so it is
+    // never orphaned.
     _ticker?.cancel();
+    _ticker = null;
     _checkCooldown();
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+    _ticker ??= Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       _checkCooldown();
     });
@@ -234,6 +248,13 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
             'Verification is taking longer than usual. Your coins will be added automatically once your reward is confirmed.';
       });
       _startCooldown(30);
+      // A late SSV credit must become visible without waiting for the next
+      // ad — re-read the balance once after giving up.
+      try {
+        await widget.onRefresh();
+      } catch (_) {
+        // Balance stays on its last known value; Retry lives in the shell.
+      }
     }
   }
 
@@ -254,285 +275,426 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
     final success = status == 'Coins added!' || _lastActionSucceeded;
     final statusColor = success ? AppColors.green : AppColors.cyan;
     final inCooldown = _remainingCooldown > 0;
+    final cooldownFill = _cooldownSpan <= 0
+        ? 0.0
+        : (_remainingCooldown / _cooldownSpan).clamp(0.0, 1.0);
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.lg,
+        AppSpace.sm,
+        AppSpace.lg,
+        AppSpace.huge,
+      ),
       children: [
-        // ---- Balance hero card ----
-        GlowCard(
-          glow: true,
-          padding: const EdgeInsets.all(20),
-          gradient: const LinearGradient(
-            colors: [Color(0xFF0B242C), Color(0xFF051216)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 58,
-                height: 58,
-                decoration: const BoxDecoration(
-                  gradient: kGoldGradient,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.monetization_on_rounded,
-                  color: Color(0xFF422006),
-                  size: 30,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'YOUR BALANCE',
-                      style: TextStyle(
-                        color: AppColors.textDim,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${widget.coins} coins',
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const NeonPill(
-                icon: Icons.bolt_rounded,
-                label: 'LIVE',
-                color: AppColors.cyan,
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 22),
-
-        // ---- How it works ----
-        const SectionLabel('How it works'),
-        Row(
-          children: [
-            _step('1', 'Watch an ad'),
-            const SizedBox(width: 8),
-            _step('2', 'Earn coins'),
-            const SizedBox(width: 8),
-            _step('3', 'Claim keys'),
-          ],
-        ),
-
-        const SizedBox(height: 22),
-
-        // ---- Status ----
+        _hero(inCooldown),
+        const SizedBox(height: AppSpace.lg),
+        _statsRow(success),
+        const SizedBox(height: AppSpace.xl),
         if (status.isNotEmpty) ...[
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            margin: const EdgeInsets.only(bottom: 14),
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: statusColor.withValues(alpha: 0.35)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    if (busy)
-                      SizedBox(
-                        width: 17,
-                        height: 17,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.1,
-                          color: statusColor,
-                        ),
-                      )
-                    else
-                      Icon(
-                        success
-                            ? Icons.check_circle_rounded
-                            : Icons.info_outline_rounded,
-                        size: 18,
-                        color: statusColor,
-                      ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        status,
-                        style: TextStyle(
-                          color: statusColor,
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w600,
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                if (verifying) ...[
-                  const SizedBox(height: 12),
-                  // Determinate bar (attempt n of 23) — the waiting state
-                  // visibly moves instead of freezing on one line of text.
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(99),
-                    child: LinearProgressIndicator(
-                      value: verifyProgress,
-                      minHeight: 6,
-                      backgroundColor: AppColors.surfaceHigh,
-                      valueColor: AlwaysStoppedAnimation<Color>(statusColor),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Hang tight — verifying your reward, usually under a minute.',
-                    style: TextStyle(
-                      color: statusColor.withValues(alpha: 0.8),
-                      fontSize: 11.5,
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
+          _statusPanel(statusColor, success),
+          const SizedBox(height: AppSpace.md),
         ],
-
-        // ---- CTA ----
-        NeonButton(
-          expand: true,
-          onPressed: (busy || inCooldown) ? null : () => _watchAd(),
-          child: busy
-              ? Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.2,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      status == 'Loading ad…'
-                          ? 'Loading ad…'
-                          : 'Verifying reward…',
-                    ),
-                  ],
-                )
-              : inCooldown
-              ? Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.timer_outlined,
-                      size: 19,
-                      color: AppColors.textDim,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Next ad in ${_remainingCooldown}s',
-                      style: const TextStyle(
-                        color: AppColors.textDim,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                )
-              : const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.play_circle_rounded,
-                      size: 20,
-                      color: Colors.white,
-                    ),
-                    SizedBox(width: 8),
-                    Text('Watch ad & earn coins'),
-                  ],
-                ),
-        ),
-        const SizedBox(height: 12),
-        // Second earn method — rewarded interstitial (same SSV payout).
-        NeonButton(
-          expand: true,
-          outline: true,
-          glow: false,
-          onPressed: (busy || inCooldown)
-              ? null
-              : () => _watchAd(instant: true),
-          child: inCooldown
-              ? Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.hourglass_empty_rounded,
-                      size: 17,
-                      color: AppColors.textDim,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Cooldown active (${_remainingCooldown}s)',
-                      style: const TextStyle(
-                        color: AppColors.textDim,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                )
-              : const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.flash_on_rounded,
-                      size: 18,
-                      color: AppColors.cyan,
-                    ),
-                    SizedBox(width: 8),
-                    Text('Instant ad & earn coins'),
-                  ],
-                ),
-        ),
-        const SizedBox(height: 14),
+        _primaryAction(inCooldown, cooldownFill),
+        const SizedBox(height: AppSpace.md),
+        _secondAction(inCooldown),
+        const SizedBox(height: AppSpace.lg),
         Text(
           inCooldown
               ? 'Short cooldown between ads protects your reward eligibility and prevents traffic limits.'
               : 'Rewards are verified before crediting. During beta, a small once-daily server bonus is used only when both ad formats have no inventory.',
           textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: AppColors.textDim,
-            fontSize: 12.5,
-            height: 1.5,
-          ),
+          style: AppText.caption.copyWith(height: 1.55),
+        ),
+        const SizedBox(height: AppSpace.xxl),
+        const SectionHeader(title: 'How it works'),
+        const SizedBox(height: AppSpace.md),
+        Row(
+          children: [
+            _step('1', 'Watch an ad'),
+            const SizedBox(width: AppSpace.sm),
+            _step('2', 'Earn coins'),
+            const SizedBox(width: AppSpace.sm),
+            _step('3', 'Claim keys'),
+          ],
         ),
       ],
+    );
+  }
+
+  // ---- hero -------------------------------------------------------------
+
+  Widget _hero(bool inCooldown) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0B242C), Color(0xFF051216)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.hero),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.16),
+            blurRadius: 32,
+            spreadRadius: -8,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.hero),
+        child: Stack(
+          children: [
+            // Ambient cyan light pooling behind the balance figure.
+            Positioned(
+              top: -70,
+              left: -40,
+              child: IgnorePointer(
+                child: Container(
+                  width: 300,
+                  height: 300,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        AppColors.primary.withValues(alpha: 0.20),
+                        AppColors.primary.withValues(alpha: 0),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.xl,
+                AppSpace.lg,
+                AppSpace.xl,
+                AppSpace.xl,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.monetization_on_rounded,
+                        size: 15,
+                        color: AppColors.gold,
+                      ),
+                      const SizedBox(width: AppSpace.xs + 2),
+                      Text(
+                        'YOUR BALANCE',
+                        style: AppText.label.copyWith(color: AppColors.textDim),
+                      ),
+                      const Spacer(),
+                      if (!inCooldown)
+                        const NeonPill(
+                          icon: Icons.bolt_rounded,
+                          label: 'LIVE',
+                          color: AppColors.cyan,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpace.lg),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      groupDigits(widget.coins),
+                      maxLines: 1,
+                      style: AppText.figure.copyWith(
+                        fontSize: 54,
+                        fontWeight: FontWeight.w800,
+                        height: 1,
+                        letterSpacing: -2.4,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpace.sm),
+                  Text('coins ready to spend', style: AppText.caption),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---- live stats -------------------------------------------------------
+
+  Widget _statsRow(bool success) {
+    final inCooldown = _remainingCooldown > 0;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.lg,
+        vertical: AppSpace.md,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: StatCell(
+              label: 'Cooldown',
+              value: inCooldown ? '${_remainingCooldown}s' : 'ready',
+              icon: Icons.timer_outlined,
+              color: inCooldown ? AppColors.textDim : AppColors.green,
+            ),
+          ),
+          Container(width: 1, height: 30, color: AppColors.border),
+          const SizedBox(width: AppSpace.lg),
+          Expanded(
+            child: StatCell(
+              label: 'Verification',
+              value: verifying
+                  ? '${(verifyProgress * 100).round()}%'
+                  : (success ? 'done' : '—'),
+              icon: Icons.verified_outlined,
+              color: verifying
+                  ? AppColors.cyan
+                  : (success ? AppColors.green : AppColors.textDim),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---- status -----------------------------------------------------------
+
+  Widget _statusPanel(Color statusColor, bool success) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.lg,
+        AppSpace.md,
+        AppSpace.lg,
+        AppSpace.md,
+      ),
+      decoration: BoxDecoration(
+        color: statusColor.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: statusColor.withValues(alpha: 0.24)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (!verifying)
+                Icon(
+                  success
+                      ? Icons.check_circle_rounded
+                      : (busy
+                            ? Icons.hourglass_top_rounded
+                            : Icons.info_outline_rounded),
+                  size: 17,
+                  color: statusColor,
+                ),
+              if (!verifying) const SizedBox(width: AppSpace.sm + 2),
+              Expanded(
+                child: Text(
+                  status,
+                  style: AppText.body.copyWith(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    height: 1.45,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (verifying) ...[
+            const SizedBox(height: AppSpace.md),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+              child: LinearProgressIndicator(
+                value: verifyProgress,
+                minHeight: 3,
+                backgroundColor: AppColors.border,
+                valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+              ),
+            ),
+            const SizedBox(height: AppSpace.sm + 2),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Your coins will be added automatically once your reward is confirmed.',
+                    style: AppText.caption.copyWith(
+                      fontSize: 11.5,
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpace.sm),
+                Text(
+                  '${(verifyProgress * 100).round()}%',
+                  style: monoStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: statusColor.withValues(alpha: 0.8),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ---- actions ----------------------------------------------------------
+
+  Widget _primaryAction(bool inCooldown, double cooldownFill) {
+    return NeonButton(
+      expand: true,
+      onPressed: (busy || inCooldown) ? null : () => _watchAd(),
+      child: busy
+          ? Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.2,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: AppSpace.sm + 2),
+                Text(
+                  status == 'Loading ad…' ? 'Loading ad…' : 'Verifying reward…',
+                ),
+              ],
+            )
+          : inCooldown
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.timer_outlined,
+                      size: 17,
+                      color: AppColors.textDim,
+                    ),
+                    const SizedBox(width: AppSpace.sm),
+                    const Text('Next ad in'),
+                    const SizedBox(width: AppSpace.xs + 2),
+                    Text(
+                      '${_remainingCooldown}s',
+                      style: monoStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpace.sm + 2),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                  child: LinearProgressIndicator(
+                    value: cooldownFill,
+                    minHeight: 3,
+                    backgroundColor: AppColors.border,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      AppColors.primary.withValues(alpha: 0.55),
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.play_circle_fill_rounded,
+                  size: 19,
+                  color: AppColors.bg,
+                ),
+                const SizedBox(width: AppSpace.sm),
+                const Text('Watch ad'),
+                const SizedBox(width: AppSpace.xs + 2),
+                Text(
+                  '· +$_rewardCoins coins',
+                  style: monoStyle(fontWeight: FontWeight.w800),
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _secondAction(bool inCooldown) {
+    final enabled = !busy && !inCooldown;
+    return NeonButton(
+      expand: true,
+      outline: true,
+      glow: false,
+      onPressed: enabled ? () => _watchAd(instant: true) : null,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            inCooldown ? Icons.hourglass_empty_rounded : Icons.flash_on_rounded,
+            size: 17,
+            color: enabled ? AppColors.cyan : AppColors.textDim,
+          ),
+          const SizedBox(width: AppSpace.sm),
+          if (inCooldown) ...[
+            const Text('Cooldown'),
+            const SizedBox(width: AppSpace.xs + 2),
+            Text(
+              '${_remainingCooldown}s',
+              style: monoStyle(
+                fontWeight: FontWeight.w700,
+                color: AppColors.textDim,
+              ),
+            ),
+          ] else ...[
+            Text(
+              'Instant ad',
+              style: TextStyle(
+                color: enabled ? AppColors.cyan : AppColors.textDim,
+              ),
+            ),
+            const SizedBox(width: AppSpace.xs + 2),
+            Text(
+              '· +$_rewardCoins coins',
+              style: monoStyle(
+                fontWeight: FontWeight.w700,
+                color: enabled ? AppColors.cyan : AppColors.textDim,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
   Widget _step(String n, String label) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        padding: const EdgeInsets.symmetric(
+          vertical: AppSpace.md + 2,
+          horizontal: AppSpace.sm,
+        ),
         decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
+          color: AppColors.surface.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(AppRadius.input),
           border: Border.all(color: AppColors.border),
         ),
         child: Column(
@@ -542,27 +704,26 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
               height: 26,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.18),
+                color: AppColors.primary.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.45),
+                  color: AppColors.primary.withValues(alpha: 0.35),
                 ),
               ),
               child: Text(
                 n,
-                style: const TextStyle(
+                style: monoStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
                   color: AppColors.primary,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 13,
                 ),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpace.sm),
             Text(
               label,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: AppColors.textDim,
+              style: AppText.caption.copyWith(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
               ),
