@@ -153,7 +153,16 @@ class Backend {
 
   static Future<int> availableCount(String productId) async {
     try {
-      return (await _apiBackend.product(productId)).availableCount;
+      // `availableCount` sa /products ay laging 0 (inilipat sa admin endpoint).
+      final res = await _api.get(
+        '/admin/keys',
+        query: {
+          'productId': productId,
+          'status': 'available',
+          'count': '1',
+        },
+      );
+      return (res['total'] as num?)?.toInt() ?? 0;
     } on ApiException {
       return -1;
     }
