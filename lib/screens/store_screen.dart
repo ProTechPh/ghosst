@@ -491,7 +491,13 @@ class _StoreScreenState extends State<StoreScreen> {
             const SectionHeader(title: 'Sponsored'),
             ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 350, maxHeight: 400),
-              child: AdWidget(ad: _nativeAd!),
+              // Stable key: the shelf above adds/removes siblings on tab
+              // switch and reload, and a re-matched AdWidget element would
+              // mount the same ad twice ("already in the Widget tree").
+              child: AdWidget(
+                key: const ValueKey('store-native-ad'),
+                ad: _nativeAd!,
+              ),
             ),
             const SizedBox(height: AppSpace.xl),
           ],
