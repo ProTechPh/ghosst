@@ -1687,7 +1687,7 @@ class _AdminScreenState extends State<AdminScreen> {
               Icon(
                 showNewForm ? Icons.close_rounded : Icons.add_rounded,
                 size: 17,
-                color: showNewForm ? AppColors.cyan : const Color(0xFF141210),
+                color: showNewForm ? AppColors.cyan : const Color(0xFF04212A),
               ),
               const SizedBox(width: 7),
               Text(showNewForm ? 'Close' : 'New product'),

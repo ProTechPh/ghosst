@@ -4,7 +4,8 @@ import '../arcade.dart';
 import '../premium.dart';
 import '../theme.dart';
 
-/// Signed-out landing page: emblem, one promise, and a three-point list.
+/// Signed-out landing: small brand row, one oversized promise, a numbered
+/// steps card, and the action pinned to the bottom so it never scrolls away.
 class LandingScreen extends StatelessWidget {
   const LandingScreen({
     super.key,
@@ -22,52 +23,91 @@ class LandingScreen extends StatelessWidget {
         const _LandingBackdrop(),
         Positioned.fill(
           child: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpace.xl,
-                AppSpace.xxl,
-                AppSpace.xl,
-                AppSpace.xxl,
-              ),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 540),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const ScrollReveal(
-                        child: _HeroCard(),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 540),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        AppSpace.xl,
+                        AppSpace.lg,
+                        AppSpace.xl,
+                        0,
                       ),
-                      const SizedBox(height: AppSpace.xxl),
-
-                      const ScrollReveal(
-                        delay: Duration(milliseconds: 200),
-                        child: _ValueList(),
-                      ),
-                      const SizedBox(height: AppSpace.xxl),
-
-                      ScrollReveal(
-                        delay: const Duration(milliseconds: 260),
+                      child: _BrandRow(),
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpace.xl,
+                          AppSpace.xxl,
+                          AppSpace.xl,
+                          AppSpace.xl,
+                        ),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            NeonButton(
-                              expand: true,
-                              onPressed: onSignUp,
-                              child: const Text('Create account'),
-                            ),
-                            const SizedBox(height: AppSpace.sm),
-                            Center(
-                              child: TextButton(
-                                onPressed: onSignIn,
-                                child: const Text('I already have an account'),
+                            ScrollReveal(
+                              child: Text(
+                                'Watch ads.',
+                                style: AppText.display.copyWith(fontSize: 46),
                               ),
+                            ),
+                            ScrollReveal(
+                              delay: const Duration(milliseconds: 70),
+                              child: GradientText(
+                                'Unlock keys.',
+                                style: AppText.display.copyWith(fontSize: 46),
+                              ),
+                            ),
+                            const SizedBox(height: AppSpace.lg),
+                            const ScrollReveal(
+                              delay: Duration(milliseconds: 140),
+                              child: Text(
+                                'One rewarded ad pays coins. Trade them for a license key or a verified app download.',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  height: 1.5,
+                                  color: AppColors.textDim,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: AppSpace.xxl),
+                            const ScrollReveal(
+                              delay: Duration(milliseconds: 200),
+                              child: _StepsCard(),
                             ),
                           ],
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpace.xl,
+                        AppSpace.sm,
+                        AppSpace.xl,
+                        AppSpace.xl,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          NeonButton(
+                            expand: true,
+                            onPressed: onSignUp,
+                            child: const Text('Create account'),
+                          ),
+                          Center(
+                            child: TextButton(
+                              onPressed: onSignIn,
+                              child: const Text('I already have an account'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -78,135 +118,103 @@ class LandingScreen extends StatelessWidget {
   }
 }
 
-/// The first thing anyone sees: the brand as a card on the table.
-class _HeroCard extends StatelessWidget {
-  const _HeroCard();
+/// Quiet brand row at the top — the headline below carries the screen.
+class _BrandRow extends StatelessWidget {
+  const _BrandRow();
 
   @override
   Widget build(BuildContext context) {
-    return CardFrame(
-      tier: RarityTier.vault,
-      radius: AppRadius.hero,
-      holo: true,
-      glow: true,
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpace.xl),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Center(
-              child: CoinMedallion(size: 104, child: LogoBadge(size: 54)),
-            ),
-            const SizedBox(height: AppSpace.xl),
-            GradientText(
-              'Ghosst',
-              style: AppText.display.copyWith(fontSize: 52),
-            ),
-            const SizedBox(height: AppSpace.sm),
-            Text(
-              'Watch an ad, get coins. Spend them on keys.',
-              style: TextStyle(
-                fontSize: 16.5,
-                height: 1.45,
-                color: AppColors.textDim,
-              ),
-            ),
-            const SizedBox(height: AppSpace.lg),
-            Container(height: 1, width: 96, decoration: BoxDecoration(
-              gradient: rarityEdge(RarityTier.vault),
-            )),
-          ],
+    return Row(
+      children: [
+        const LogoBadge(size: 32),
+        const SizedBox(width: AppSpace.sm + 2),
+        Text(
+          'GHOSST',
+          style: AppText.label.copyWith(
+            color: AppColors.textDim,
+            letterSpacing: 3.2,
+          ),
         ),
-      ),
+        const Spacer(),
+        Text(
+          'COIN ARCADE',
+          style: monoStyle(
+            fontSize: 10,
+            letterSpacing: 1.6,
+            color: AppColors.primary.withValues(alpha: 0.7),
+          ),
+        ),
+      ],
     );
   }
 }
-/// The three promises, one list rather than three equal tiles.
-class _ValueList extends StatelessWidget {
-  const _ValueList();
 
-  static const _points = <({IconData icon, String title, String body})>[
-    (
-      icon: Icons.play_circle_outline,
-      title: 'Watch',
-      body: 'One rewarded ad pays coins straight into your wallet.',
-    ),
-    (
-      icon: Icons.key_outlined,
-      title: 'Spend',
-      body: 'Trade coins for a license key or a verified app download.',
-    ),
-    (
-      icon: Icons.inventory_2_outlined,
-      title: 'Keep',
-      body: 'Every key and purchase stays listed in your account.',
-    ),
+/// The three promises as numbered steps in one framed card, not an icon list.
+class _StepsCard extends StatelessWidget {
+  const _StepsCard();
+
+  static const _steps = <(String, String)>[
+    ('Watch', 'One rewarded ad pays coins straight into your wallet.'),
+    ('Spend', 'Trade coins for a license key or a verified app download.'),
+    ('Keep', 'Every key and purchase stays listed in your account.'),
   ];
 
   @override
   Widget build(BuildContext context) {
     final hairline = Colors.white.withValues(alpha: 0.08);
-    return Column(
-      children: [
-        for (var i = 0; i < _points.length; i++) ...[
-          if (i > 0) Divider(height: 1, thickness: 1, color: hairline),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpace.lg),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '0${i + 1}',
-                  style: monoStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.2,
-                    color: AppColors.primary.withValues(alpha: 0.55),
-                  ),
-                ),
-                const SizedBox(width: AppSpace.md),
-                Container(
-                  width: 38,
-                  height: 38,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(AppRadius.input),
-                    border: Border.all(
-                      color: AppColors.primary.withValues(alpha: 0.22),
+    return CardFrame(
+      tier: RarityTier.standard,
+      radius: AppRadius.hero,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.lg,
+          vertical: AppSpace.xs,
+        ),
+        child: Column(
+          children: [
+            for (var i = 0; i < _steps.length; i++) ...[
+              if (i > 0) Divider(height: 1, thickness: 1, color: hairline),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppSpace.lg),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '0${i + 1}',
+                      style: monoStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        height: 1.1,
+                        color: AppColors.primary.withValues(alpha: 0.75),
+                      ),
                     ),
-                  ),
-                  child: Icon(
-                    _points[i].icon,
-                    size: 18,
-                    color: AppColors.primary,
-                  ),
-                ),
-                const SizedBox(width: AppSpace.md + 2),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _points[i].title,
-                        style: AppText.subtitle.copyWith(fontSize: 15),
+                    const SizedBox(width: AppSpace.lg),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _steps[i].$1,
+                            style: AppText.subtitle.copyWith(fontSize: 16),
+                          ),
+                          const SizedBox(height: AppSpace.xs),
+                          Text(
+                            _steps[i].$2,
+                            style: AppText.caption.copyWith(
+                              height: 1.45,
+                              color: AppColors.textDim,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: AppSpace.xs),
-                      Text(
-                        _points[i].body,
-                        style: AppText.caption.copyWith(
-                          height: 1.45,
-                          color: AppColors.textDim,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-        ],
-      ],
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

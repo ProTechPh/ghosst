@@ -93,7 +93,7 @@ class CardFrame extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFF1D1E24), Color(0xFF121317)],
+              colors: [Color(0xFF0C1C22), Color(0xFF071317)],
             ),
           ),
           child: Stack(
@@ -503,8 +503,8 @@ class CoinMedallion extends StatelessWidget {
               shape: BoxShape.circle,
               gradient: RadialGradient(
                 colors: [
-                  AppColors.gold.withValues(alpha: 0.30),
-                  AppColors.gold.withValues(alpha: 0),
+                  AppColors.primary.withValues(alpha: 0.30),
+                  AppColors.primary.withValues(alpha: 0),
                 ],
               ),
             ),
@@ -516,12 +516,12 @@ class CoinMedallion extends StatelessWidget {
               shape: BoxShape.circle,
               color: AppColors.surface,
               border: Border.all(
-                color: AppColors.gold.withValues(alpha: 0.35),
+                color: AppColors.primary.withValues(alpha: 0.35),
                 width: 1.5,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.gold.withValues(alpha: 0.25),
+                  color: AppColors.primary.withValues(alpha: 0.25),
                   blurRadius: 40,
                   spreadRadius: -6,
                 ),

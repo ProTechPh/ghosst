@@ -391,7 +391,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF1F2026), Color(0xFF131417)],
+          colors: [Color(0xFF0B242C), Color(0xFF051216)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -410,7 +410,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
         borderRadius: BorderRadius.circular(AppRadius.hero),
         child: Stack(
           children: [
-            // Ambient gold light pooling behind the balance figure.
+            // Ambient cyan light pooling behind the balance figure.
             Positioned(
               top: -70,
               left: -40,

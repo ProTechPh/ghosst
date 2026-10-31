@@ -10,35 +10,35 @@ const kMotionPress = Duration(milliseconds: 120);
 /// Standard state transition (expands, fades, swaps).
 const kMotionStandard = Duration(milliseconds: 220);
 
-/// Dark-gold ("arcade coin") design system for Ghosst.
+/// Dark-neon ("gamer") design system for Ghosst.
 class AppColors {
   AppColors._();
 
-  // Charcoal canvas, brushed gold, warm white — the Hamster-Kombat-style
-  // coin arcade: black table, gold light, no purple anywhere.
-  static const Color bg = Color(0xFF0E0F12);
-  static const Color bgSoft = Color(0xFF141519);
-  static const Color surface = Color(0xFF1B1C21);
-  static const Color surfaceHigh = Color(0xFF232529);
-  static const Color border = Color(0xFF32333B);
-  static const Color primary = Color(0xFFFFC533);
-  static const Color primaryDeep = Color(0xFFC98A12);
+  // Palette derived from the Ghosst emblem: teal-black canvas, glowing cyan,
+  // brushed steel — no purple anywhere.
+  static const Color bg = Color(0xFF050B0E);
+  static const Color bgSoft = Color(0xFF08151A);
+  static const Color surface = Color(0xFF0C1D23);
+  static const Color surfaceHigh = Color(0xFF122A31);
+  static const Color border = Color(0xFF1A3740);
+  static const Color primary = Color(0xFF22D3EE);
+  static const Color primaryDeep = Color(0xFF0E7490);
   static const Color cyan = Color(0xFF67E8F9);
   static const Color gold = Color(0xFFFBBF24);
   static const Color green = Color(0xFF34D399);
   static const Color red = Color(0xFFF43F5E);
-  static const Color text = Color(0xFFF4F4F1);
-  static const Color textDim = Color(0xFF9A9CA6);
+  static const Color text = Color(0xFFF1FAFC);
+  static const Color textDim = Color(0xFF8DA6AF);
 }
 
 const Gradient kNeonGradient = LinearGradient(
-  colors: [Color(0xFFFFE08A), Color(0xFFFFB020)],
+  colors: [Color(0xFF67E8F9), Color(0xFF22D3EE)],
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
 );
 
 const Gradient kTealGradient = LinearGradient(
-  colors: [Color(0xFF2A2B31), Color(0xFF1B1C21)],
+  colors: [Color(0xFF0E7490), Color(0xFF164E63)],
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
 );
@@ -389,7 +389,7 @@ class LogoBadge extends StatelessWidget {
             child: Text(
               'G',
               style: TextStyle(
-                color: const Color(0xFF141210),
+                color: const Color(0xFF04212A),
                 fontSize: fontSize,
                 fontWeight: FontWeight.w900,
                 height: 1,
@@ -518,7 +518,7 @@ class _NeonButtonState extends State<NeonButton> {
               letterSpacing: 0.2,
               color: outline
                   ? (enabled ? AppColors.cyan : AppColors.textDim)
-                  : (enabled ? const Color(0xFF141210) : AppColors.textDim),
+                  : (enabled ? const Color(0xFF04212A) : AppColors.textDim),
             ),
             textAlign: TextAlign.center,
             child: widget.child,
@@ -571,7 +571,7 @@ class GlowCard extends StatelessWidget {
         gradient:
             gradient ??
             const LinearGradient(
-              colors: [Color(0xFF1D1E24), Color(0xFF121317)],
+              colors: [Color(0xFF0C1C22), Color(0xFF071317)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),

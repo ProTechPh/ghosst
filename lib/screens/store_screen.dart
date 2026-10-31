@@ -152,7 +152,7 @@ class _StoreScreenState extends State<StoreScreen> {
           textColor: AppColors.textDim,
         ),
         callToActionTextStyle: NativeTemplateTextStyle(
-          textColor: const Color(0xFF141210),
+          textColor: const Color(0xFF04212A),
           backgroundColor: AppColors.cyan,
         ),
       ),
@@ -317,7 +317,7 @@ class _StoreScreenState extends State<StoreScreen> {
                 gradient: const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xFF1F2026), Color(0xFF131417)],
+                  colors: [Color(0xFF0E2229), Color(0xFF07161B)],
                 ),
                 glowColor: AppColors.gold,
                 child: Row(
@@ -530,7 +530,7 @@ class _StoreScreenState extends State<StoreScreen> {
                 Icon(
                   icon,
                   size: 15,
-                  color: on ? const Color(0xFF141210) : AppColors.textDim,
+                  color: on ? const Color(0xFF04212A) : AppColors.textDim,
                 ),
                 const SizedBox(width: AppSpace.sm - 1),
                 Text(
@@ -538,7 +538,7 @@ class _StoreScreenState extends State<StoreScreen> {
                   style: AppText.subtitle.copyWith(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w700,
-                    color: on ? const Color(0xFF141210) : AppColors.textDim,
+                    color: on ? const Color(0xFF04212A) : AppColors.textDim,
                   ),
                 ),
               ],
