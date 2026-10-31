@@ -13,13 +13,14 @@ interface ProductRow {
   type: string;
   version: string;
   file_size: string;
-  available: number;
 }
 
+// No stock count here: counting `keys` per product made every store read cost
+// one row read per key in stock (D1 counts index scans), which is what burned
+// the daily budget. Admins read real counts from /v1/admin/keys?count=1.
 const SELECT_PRODUCTS = `
   SELECT p.id, p.name, p.cost, p.active, p.description, p.youtube_url, p.type,
-         p.version, p.file_size,
-         (SELECT COUNT(*) FROM keys k WHERE k.product_id = p.id AND k.status = 'available') AS available
+         p.version, p.file_size
     FROM products p`;
 
 function toProduct(
@@ -43,7 +44,8 @@ function toProduct(
     version: row.version,
     fileSize: row.file_size,
     durations,
-    availableCount: row.available,
+    // Kept for the response shape; the count moved to the admin endpoint.
+    availableCount: 0,
   };
 }
 

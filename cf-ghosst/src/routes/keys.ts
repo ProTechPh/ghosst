@@ -60,22 +60,54 @@ export async function add(ctx: Ctx): Promise<Response> {
   });
 }
 
-/** GET /v1/admin/keys?productId=&status=available&limit=500 */
+/**
+ * GET /v1/admin/keys?productId=&status=available&limit=500
+ * GET /v1/admin/keys?productId=&status=available&count=1 -> { total }
+ *
+ * Filters are concatenated, not written as `(?1 = '' OR col = ?1)`: that shape
+ * makes SQLite scan the whole table, and rows read is the D1 free-plan budget.
+ */
 export async function list(ctx: Ctx): Promise<Response> {
   requireAdmin(ctx);
   const productId = ctx.url.searchParams.get("productId") ?? "";
   const status = ctx.url.searchParams.get("status") ?? "";
   const limit = Math.min(Number(ctx.url.searchParams.get("limit") ?? 500) || 500, 5000);
 
+  const filters: string[] = [];
+  const params: string[] = [];
+  if (productId) {
+    params.push(productId);
+    filters.push(`product_id = ?${params.length}`);
+  }
+  if (status) {
+    params.push(status);
+    filters.push(`status = ?${params.length}`);
+  }
+  // Count-only: how many keys sit in one duration pool.
+  if (ctx.url.searchParams.get("count") === "1") {
+    const duration = ctx.url.searchParams.get("duration") ?? "";
+    if (duration) {
+      params.push(duration);
+      filters.push(`duration = ?${params.length}`);
+    }
+  }
+  const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+
+  if (ctx.url.searchParams.get("count") === "1") {
+    const row = await ctx.env.DB.prepare(`SELECT COUNT(*) AS n FROM keys ${where}`)
+      .bind(...params)
+      .first<{ n: number }>();
+    return json({ ok: true, total: row?.n ?? 0 });
+  }
+
   const rows = await ctx.env.DB.prepare(
     `SELECT id, product_id, key_value, status, duration, claimed_by, claimed_at, created_at
        FROM keys
-      WHERE (?1 = '' OR product_id = ?1)
-        AND (?2 = '' OR status = ?2)
+       ${where}
       ORDER BY created_at
-      LIMIT ?3`,
+      LIMIT ?${params.length + 1}`,
   )
-    .bind(productId, status, limit)
+    .bind(...params, limit)
     .all<{
       id: string;
       product_id: string;
@@ -112,10 +144,13 @@ export async function remove(ctx: Ctx): Promise<Response> {
 export async function clearForProduct(ctx: Ctx): Promise<Response> {
   requireAdmin(ctx);
   const status = ctx.url.searchParams.get("status") ?? "";
-  const res = await ctx.env.DB.prepare(
-    `DELETE FROM keys WHERE product_id = ?1 AND (?2 = '' OR status = ?2)`,
-  )
-    .bind(ctx.params.id, status)
-    .run();
+  // Same reason as list(): an `OR` on a bound param turns this into a full scan.
+  const res = status
+    ? await ctx.env.DB.prepare(`DELETE FROM keys WHERE product_id = ?1 AND status = ?2`)
+        .bind(ctx.params.id, status)
+        .run()
+    : await ctx.env.DB.prepare(`DELETE FROM keys WHERE product_id = ?1`)
+        .bind(ctx.params.id)
+        .run();
   return json({ ok: true, deleted: res.meta.changes ?? 0 });
 }

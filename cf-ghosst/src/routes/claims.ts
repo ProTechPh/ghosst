@@ -93,13 +93,26 @@ async function claimLicense(
 
   // Pre-pick a candidate so the batch below can claim one exact row; the
   // guarded UPDATE, not this read, decides a race.
-  const candidate = await ctx.env.DB.prepare(
-    `SELECT id, key_value FROM keys
-      WHERE product_id = ?1 AND status = 'available' AND (?2 = '' OR duration = ?2)
-      ORDER BY created_at LIMIT 1`,
-  )
-    .bind(product.id, durationLabel)
-    .first<{ id: string; key_value: string }>();
+  // Two statements on purpose: with a bound `(?2 = '' OR duration = ?2)` SQLite
+  // walks every available key of the product looking for a match, so a pool
+  // that has run dry cost one row read per key in stock on every claim.
+  const candidate = (
+    durationLabel
+      ? await ctx.env.DB.prepare(
+          `SELECT id, key_value FROM keys
+            WHERE product_id = ?1 AND status = 'available' AND duration = ?2
+            ORDER BY created_at LIMIT 1`,
+        )
+          .bind(product.id, durationLabel)
+          .first<{ id: string; key_value: string }>()
+      : await ctx.env.DB.prepare(
+          `SELECT id, key_value FROM keys
+            WHERE product_id = ?1 AND status = 'available'
+            ORDER BY created_at LIMIT 1`,
+        )
+          .bind(product.id)
+          .first<{ id: string; key_value: string }>()
+  ) as { id: string; key_value: string } | null;
 
   if (!candidate) throw outOfStock(durationLabel);
 
