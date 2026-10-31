@@ -19,10 +19,7 @@ class AuthScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        const MeshBackground(),
-        const Positioned.fill(
-          child: IgnorePointer(child: TableSurface()),
-        ),
+        const ArcadeBackdrop(),
         SafeArea(
           child: Column(
             children: [
@@ -89,46 +86,84 @@ class AuthHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        CardFrame(
-          tier: RarityTier.standard,
-          radius: AppRadius.button,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpace.md,
-              vertical: AppSpace.sm + 2,
-            ),
-            child: Row(
-              children: [
-                const LogoBadge(size: 28),
-                const SizedBox(width: AppSpace.sm + 2),
-                Text(
-                  'GHOSST',
-                  style: AppText.label.copyWith(
-                    color: AppColors.textDim,
-                    letterSpacing: 3.2,
-                  ),
+        Row(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              padding: const EdgeInsets.all(9),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.surface,
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.35),
                 ),
-                const Spacer(),
-                Text(
-                  'ARCADE',
-                  style: monoStyle(
-                    fontSize: 10,
-                    letterSpacing: 1.6,
-                    color: AppColors.primary.withValues(alpha: 0.7),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.22),
+                    blurRadius: 30,
+                    spreadRadius: -6,
                   ),
-                ),
-              ],
+                ],
+              ),
+              child: const LogoBadge(size: 34),
             ),
-          ),
+            const SizedBox(width: AppSpace.md),
+            Text(
+              'GHOSST',
+              style: AppText.label.copyWith(
+                color: AppColors.textDim,
+                letterSpacing: 3.2,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              'ARCADE',
+              style: monoStyle(
+                fontSize: 10,
+                letterSpacing: 1.6,
+                color: AppColors.primary.withValues(alpha: 0.7),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: AppSpace.xl + 4),
-        Text(title, style: AppText.display.copyWith(fontSize: 34)),
+        const SizedBox(height: AppSpace.xl + 6),
+        GradientText(title, style: AppText.display.copyWith(fontSize: 36)),
         const SizedBox(height: AppSpace.sm + 2),
         Text(
           subtitle,
           style: AppText.body.copyWith(color: AppColors.textDim, height: 1.45),
         ),
+        const SizedBox(height: AppSpace.lg),
+        Container(
+          width: 54,
+          height: 1,
+          decoration: const BoxDecoration(gradient: kNeonGradient),
+        ),
       ],
+    );
+  }
+}
+
+/// The fields sit on one framed plate so the form reads as a single object
+/// against the table backdrop.
+class AuthPanel extends StatelessWidget {
+  const AuthPanel({super.key, required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return CardFrame(
+      tier: RarityTier.standard,
+      radius: AppRadius.hero,
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpace.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: children,
+        ),
+      ),
     );
   }
 }

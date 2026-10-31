@@ -554,6 +554,54 @@ class CoinMedallion extends StatelessWidget {
   }
 }
 
+/// Signed-out backdrop: mesh, table dots, one cyan bloom up top and a
+/// near-black fade at the bottom so the pinned CTA always sits on ink.
+class ArcadeBackdrop extends StatelessWidget {
+  const ArcadeBackdrop({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        const MeshBackground(),
+        const Positioned.fill(child: IgnorePointer(child: TableSurface())),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: const Alignment(0, -1.05),
+                  radius: 1.15,
+                  colors: [
+                    AppColors.primary.withValues(alpha: 0.20),
+                    AppColors.primary.withValues(alpha: 0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: const Alignment(0, -0.2),
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    AppColors.bg.withValues(alpha: 0),
+                    AppColors.bg.withValues(alpha: 0.92),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class FloatingCoin extends StatefulWidget {
   const FloatingCoin({
     super.key,

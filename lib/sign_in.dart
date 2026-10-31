@@ -102,46 +102,50 @@ class _SignInState extends State<SignIn> {
           title: 'Sign in',
           subtitle: 'Pick up where your coins left off.',
         ),
-        const SizedBox(height: AppSpace.xxl),
-        const AuthFieldLabel('Email'),
-        TextField(
-          controller: email,
-          keyboardType: TextInputType.emailAddress,
-          textInputAction: TextInputAction.next,
-          autocorrect: false,
-          autofillHints: const [AutofillHints.email],
-          onChanged: (_) => _clearErrors(),
-          onSubmitted: (_) => FocusScope.of(context).nextFocus(),
-          decoration: authDecoration(
-            hint: 'you@example.com',
-            icon: Icons.alternate_email_rounded,
-            errorText: emailErr,
-          ),
-        ),
-        const SizedBox(height: AppSpace.lg),
-        const AuthFieldLabel('Password'),
-        TextField(
-          controller: password,
-          obscureText: obscure,
-          textInputAction: TextInputAction.done,
-          keyboardType: TextInputType.visiblePassword,
-          autofillHints: const [AutofillHints.password],
-          onChanged: (_) => _clearErrors(),
-          onSubmitted: (_) => _submit(),
-          decoration: authDecoration(
-            hint: 'Your password',
-            icon: Icons.lock_outline_rounded,
-            errorText: passErr,
-            suffixIcon: IconButton(
-              tooltip: obscure ? 'Show password' : 'Hide password',
-              icon: Icon(
-                obscure
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
+        const SizedBox(height: AppSpace.xl + 4),
+        AuthPanel(
+          children: [
+            const AuthFieldLabel('Email'),
+            TextField(
+              controller: email,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              autocorrect: false,
+              autofillHints: const [AutofillHints.email],
+              onChanged: (_) => _clearErrors(),
+              onSubmitted: (_) => FocusScope.of(context).nextFocus(),
+              decoration: authDecoration(
+                hint: 'you@example.com',
+                icon: Icons.alternate_email_rounded,
+                errorText: emailErr,
               ),
-              onPressed: () => setState(() => obscure = !obscure),
             ),
-          ),
+            const SizedBox(height: AppSpace.lg),
+            const AuthFieldLabel('Password'),
+            TextField(
+              controller: password,
+              obscureText: obscure,
+              textInputAction: TextInputAction.done,
+              keyboardType: TextInputType.visiblePassword,
+              autofillHints: const [AutofillHints.password],
+              onChanged: (_) => _clearErrors(),
+              onSubmitted: (_) => _submit(),
+              decoration: authDecoration(
+                hint: 'Your password',
+                icon: Icons.lock_outline_rounded,
+                errorText: passErr,
+                suffixIcon: IconButton(
+                  tooltip: obscure ? 'Show password' : 'Hide password',
+                  icon: Icon(
+                    obscure
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                  ),
+                  onPressed: () => setState(() => obscure = !obscure),
+                ),
+              ),
+            ),
+          ],
         ),
         AuthErrorBox(message: error),
         const SizedBox(height: AppSpace.xl),

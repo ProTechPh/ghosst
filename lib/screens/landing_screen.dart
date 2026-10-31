@@ -4,8 +4,8 @@ import '../arcade.dart';
 import '../premium.dart';
 import '../theme.dart';
 
-/// Signed-out landing: small brand row, one oversized promise, a numbered
-/// steps card, and the action pinned to the bottom so it never scrolls away.
+/// Signed-out landing: brand row, one oversized promise, a small table of
+/// cards for the product, three moves, and the action pinned to the bottom.
 class LandingScreen extends StatelessWidget {
   const LandingScreen({
     super.key,
@@ -20,7 +20,7 @@ class LandingScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        const _LandingBackdrop(),
+        const ArcadeBackdrop(),
         Positioned.fill(
           child: SafeArea(
             child: Center(
@@ -44,7 +44,7 @@ class LandingScreen extends StatelessWidget {
                           AppSpace.xl,
                           AppSpace.xxl,
                           AppSpace.xl,
-                          AppSpace.xl,
+                          AppSpace.lg,
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -52,31 +52,36 @@ class LandingScreen extends StatelessWidget {
                             ScrollReveal(
                               child: Text(
                                 'Watch ads.',
-                                style: AppText.display.copyWith(fontSize: 46),
+                                style: AppText.display.copyWith(fontSize: 44),
                               ),
                             ),
                             ScrollReveal(
                               delay: const Duration(milliseconds: 70),
                               child: GradientText(
                                 'Unlock keys.',
-                                style: AppText.display.copyWith(fontSize: 46),
+                                style: AppText.display.copyWith(fontSize: 44),
                               ),
                             ),
-                            const SizedBox(height: AppSpace.lg),
+                            const SizedBox(height: AppSpace.md),
                             const ScrollReveal(
                               delay: Duration(milliseconds: 140),
                               child: Text(
                                 'One rewarded ad pays coins. Trade them for a license key or a verified app download.',
                                 style: TextStyle(
-                                  fontSize: 16,
+                                  fontSize: 15.5,
                                   height: 1.5,
                                   color: AppColors.textDim,
                                 ),
                               ),
                             ),
-                            const SizedBox(height: AppSpace.xxl),
+                            const SizedBox(height: AppSpace.xl),
                             const ScrollReveal(
                               delay: Duration(milliseconds: 200),
+                              child: _HeroTable(),
+                            ),
+                            const SizedBox(height: AppSpace.xl),
+                            const ScrollReveal(
+                              delay: Duration(milliseconds: 260),
                               child: _StepsCard(),
                             ),
                           ],
@@ -149,14 +154,108 @@ class _BrandRow extends StatelessWidget {
   }
 }
 
+/// Two cards fanned on the table with a coin medallion sitting on the corner:
+/// the product itself as the hero image, without inventing a screenshot.
+class _HeroTable extends StatelessWidget {
+  const _HeroTable();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 238,
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            top: 30,
+            child: Transform.rotate(
+              angle: -0.13,
+              child: const _TableCard(
+                tier: RarityTier.plus,
+                label: 'LICENSE KEY',
+              ),
+            ),
+          ),
+          Positioned(
+            top: 12,
+            child: Transform.rotate(
+              angle: 0.07,
+              child: const _TableCard(
+                tier: RarityTier.vault,
+                label: 'PRIME KEY',
+                holo: true,
+              ),
+            ),
+          ),
+          const Positioned(right: 0, bottom: 2, child: CoinMedallion(size: 78)),
+        ],
+      ),
+    );
+  }
+}
+
+class _TableCard extends StatelessWidget {
+  const _TableCard({
+    required this.tier,
+    required this.label,
+    this.holo = false,
+  });
+
+  final RarityTier tier;
+  final String label;
+  final bool holo;
+
+  @override
+  Widget build(BuildContext context) {
+    return CardFrame(
+      tier: tier,
+      holo: holo,
+      radius: AppRadius.card,
+      child: SizedBox(
+        width: 132,
+        height: 170,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpace.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: monoStyle(
+                  fontSize: 9,
+                  letterSpacing: 1.4,
+                  color: AppColors.textDim,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '•••• ••••',
+                style: monoStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5,
+                  color: AppColors.text,
+                ),
+              ),
+              const Spacer(),
+              const ChipStack(count: 3, size: 18),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// The three promises as numbered steps in one framed card, not an icon list.
 class _StepsCard extends StatelessWidget {
   const _StepsCard();
 
   static const _steps = <(String, String)>[
-    ('Watch', 'One rewarded ad pays coins straight into your wallet.'),
-    ('Spend', 'Trade coins for a license key or a verified app download.'),
-    ('Keep', 'Every key and purchase stays listed in your account.'),
+    ('Watch', 'One rewarded ad pays 10 coins.'),
+    ('Spend', 'Trade them for a license key or an app download.'),
+    ('Keep', 'Every purchase stays saved in your account.'),
   ];
 
   @override
@@ -175,27 +274,27 @@ class _StepsCard extends StatelessWidget {
             for (var i = 0; i < _steps.length; i++) ...[
               if (i > 0) Divider(height: 1, thickness: 1, color: hairline),
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: AppSpace.lg),
+                padding: const EdgeInsets.symmetric(vertical: AppSpace.md + 2),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       '0${i + 1}',
                       style: monoStyle(
-                        fontSize: 22,
+                        fontSize: 20,
                         fontWeight: FontWeight.w800,
-                        height: 1.1,
+                        height: 1.3,
                         color: AppColors.primary.withValues(alpha: 0.75),
                       ),
                     ),
-                    const SizedBox(width: AppSpace.lg),
+                    const SizedBox(width: AppSpace.md + 2),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             _steps[i].$1,
-                            style: AppText.subtitle.copyWith(fontSize: 16),
+                            style: AppText.subtitle.copyWith(fontSize: 15.5),
                           ),
                           const SizedBox(height: AppSpace.xs),
                           Text(
@@ -215,55 +314,6 @@ class _StepsCard extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// One light source: cyan bloom up top, near-black past the first third.
-class _LandingBackdrop extends StatelessWidget {
-  const _LandingBackdrop();
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        const MeshBackground(),
-        const Positioned.fill(
-          child: IgnorePointer(child: TableSurface()),
-        ),
-        Positioned.fill(
-          child: IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: const Alignment(0, -1.05),
-                  radius: 1.15,
-                  colors: [
-                    AppColors.primary.withValues(alpha: 0.20),
-                    AppColors.primary.withValues(alpha: 0),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-        Positioned.fill(
-          child: IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: const Alignment(0, -0.2),
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    AppColors.bg.withValues(alpha: 0),
-                    AppColors.bg.withValues(alpha: 0.92),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
