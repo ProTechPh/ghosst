@@ -309,31 +309,29 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           : 'License key · delivered instantly',
                       style: AppText.caption,
                     ),
-                    const SizedBox(height: AppSpace.lg),
 
-                    // ---- price / stock / type --------------------------
-                    _stats(cost: cost, outOfStock: outOfStock, isApp: isApp),
+                    // ---- version / file size ---------------------------
                     if (p.version.isNotEmpty || p.fileSize.isNotEmpty) ...[
-                      const SizedBox(height: AppSpace.md),
+                      const SizedBox(height: AppSpace.sm + 2),
                       Wrap(
-                        spacing: AppSpace.sm,
+                        spacing: AppSpace.lg,
                         runSpacing: AppSpace.xs,
                         children: [
                           if (p.version.isNotEmpty)
-                            NeonPill(
-                              icon: Icons.tag_rounded,
-                              label: p.version,
-                              color: AppColors.textDim,
-                            ),
+                            _meta(Icons.tag_rounded, p.version),
                           if (p.fileSize.isNotEmpty)
-                            NeonPill(
-                              icon: Icons.data_usage_rounded,
-                              label: p.fileSize,
+                            _meta(
+                              Icons.data_usage_rounded,
+                              p.fileSize,
                               color: AppColors.cyan,
                             ),
                         ],
                       ),
                     ],
+                    const SizedBox(height: AppSpace.lg),
+
+                    // ---- price / stock / type --------------------------
+                    _stats(cost: cost, outOfStock: outOfStock, isApp: isApp),
 
                     // ---- description -----------------------------------
                     const SizedBox(height: AppSpace.xl),
@@ -457,10 +455,31 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     // ---- purchase note --------------------------------
                     if (isApp && !isOwned) ...[
                       const SizedBox(height: AppSpace.xl),
-                      Text(
-                        'One purchase — you can re-download it any time from '
-                        'My Purchases.',
-                        style: AppText.caption,
+                      Container(
+                        padding: const EdgeInsets.only(top: AppSpace.md),
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            top: BorderSide(color: Color(0x0FFFFFFF)),
+                          ),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.lock_outline_rounded,
+                              size: 15,
+                              color: AppColors.textDim,
+                            ),
+                            const SizedBox(width: AppSpace.sm),
+                            Expanded(
+                              child: Text(
+                                'One purchase — you can re-download it any time from '
+                                'My Purchases.',
+                                style: AppText.caption,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                     const SizedBox(height: AppSpace.xl),
@@ -511,7 +530,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
-  /// Price / stock / type — mono figures, never body text.
+  /// Price / stock / type — mono figures between hairline rules.
   Widget _stats({
     required int cost,
     required bool outOfStock,
@@ -522,33 +541,66 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         : widget.product.isFile
         ? 'FILE'
         : 'KEY';
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: StatCell(
-            label: 'Price',
-            value: groupDigits(cost),
-            icon: Icons.monetization_on_rounded,
-            color: AppColors.gold,
-          ),
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.sm,
+        vertical: AppSpace.md,
+      ),
+      decoration: const BoxDecoration(
+        border: Border(
+          top: BorderSide(color: Color(0x0FFFFFFF)),
+          bottom: BorderSide(color: Color(0x0FFFFFFF)),
         ),
-        if (widget.product.isKey && widget.stock >= 0) ...[
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: StatCell(
+              label: 'Price',
+              value: groupDigits(cost),
+              icon: Icons.monetization_on_rounded,
+              color: AppColors.gold,
+            ),
+          ),
+          if (widget.product.isKey && widget.stock >= 0) ...[
+            _statDivider(),
+            Expanded(
+              child: StatCell(
+                label: 'In stock',
+                value: groupDigits(widget.stock),
+                color: outOfStock ? AppColors.red : AppColors.green,
+              ),
+            ),
+          ],
           _statDivider(),
           Expanded(
             child: StatCell(
-              label: 'In stock',
-              value: groupDigits(widget.stock),
-              color: outOfStock ? AppColors.red : AppColors.green,
+              label: 'Type',
+              value: type,
+              color: isApp ? AppColors.cyan : AppColors.text,
             ),
           ),
         ],
-        _statDivider(),
-        Expanded(
-          child: StatCell(
-            label: 'Type',
-            value: type,
-            color: isApp ? AppColors.cyan : AppColors.text,
+      ),
+    );
+  }
+
+  /// Version / file size — technical metadata, mono, never body copy.
+  Widget _meta(IconData icon, String value, {Color? color}) {
+    final tone = color ?? AppColors.textDim;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: tone.withValues(alpha: 0.85)),
+        const SizedBox(width: AppSpace.xs + 1),
+        Text(
+          value,
+          style: monoStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: tone,
+            letterSpacing: 0.2,
           ),
         ),
       ],
@@ -558,9 +610,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   Widget _statDivider() {
     return Container(
       width: 1,
-      height: 34,
+      height: 30,
       margin: const EdgeInsets.symmetric(horizontal: AppSpace.md),
-      color: AppColors.border,
+      color: Colors.white.withValues(alpha: 0.06),
     );
   }
 
@@ -869,7 +921,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ),
           Positioned(
             // clears the 44 px glass back button above it
-            top: MediaQuery.paddingOf(context).top + AppSpace.xs + 44 + AppSpace.sm,
+            top:
+                MediaQuery.paddingOf(context).top +
+                AppSpace.xs +
+                44 +
+                AppSpace.sm,
             left: AppSpace.lg,
             right: AppSpace.lg,
             child: CardIndex(cost: entryCost(product), type: cardType(product)),
