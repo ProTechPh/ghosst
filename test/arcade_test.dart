@@ -1,6 +1,8 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/arcade.dart';
 import 'package:ghosst/services/models.dart';
+import 'package:ghosst/theme.dart';
 
 Product _p({
   int cost = 100,
@@ -67,4 +69,47 @@ void main() {
     expect(cardType(_p(type: 'apk')), 'APK');
     expect(cardType(_p(type: 'file')), 'FILE');
   });
+
+  testWidgets('CardFrame renders its child and the price index', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: const Scaffold(
+          body: CardFrame(
+            tier: RarityTier.vault,
+            holo: true,
+            child: CardIndex(cost: 1200, type: 'KEY'),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('1,200'), findsOneWidget);
+    expect(find.text('KEY'), findsOneWidget);
+    expect(find.byType(CardFrame), findsOneWidget);
+  });
+
+  testWidgets('CardIndex renders a free price', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: const Scaffold(body: CardIndex(cost: 0, type: 'FILE')),
+      ),
+    );
+    expect(find.text('0'), findsOneWidget);
+  });
+
+  test('rarityEdge differs per tier', () {
+    expect(rarityEdge(RarityTier.vault), isA<LinearGradient>());
+    expect(
+      (rarityEdge(RarityTier.vault) as LinearGradient).colors,
+      kGoldGradient.colors,
+    );
+    expect(
+      (rarityEdge(RarityTier.standard) as LinearGradient).colors,
+      isNot(kGoldGradient.colors),
+    );
+  });
 }
+
