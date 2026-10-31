@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import '../arcade.dart';
 import '../premium.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
@@ -115,6 +116,7 @@ class _WalletScreenState extends State<WalletScreen> {
       body: Stack(
         children: [
           const MeshBackground(),
+          const Positioned.fill(child: IgnorePointer(child: TableSurface())),
           if (_loading)
             _loadingView()
           else
@@ -198,7 +200,7 @@ class _WalletScreenState extends State<WalletScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Skeleton(height: 158, radius: AppRadius.hero),
+          const Skeleton(height: 176, radius: AppRadius.hero),
           const SizedBox(height: AppSpace.lg),
           const Skeleton(height: 54, radius: AppRadius.card),
           const SizedBox(height: AppSpace.xl),
@@ -262,105 +264,107 @@ class _WalletScreenState extends State<WalletScreen> {
   // ---- hero -------------------------------------------------------------
 
   Widget _hero() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0B242C), Color(0xFF051216)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(AppRadius.hero),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.14),
-            blurRadius: 30,
-            spreadRadius: -10,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppRadius.hero),
-        child: Stack(
-          children: [
-            Positioned(
-              top: -90,
-              left: -60,
-              child: IgnorePointer(
-                child: Container(
-                  width: 280,
-                  height: 280,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: RadialGradient(
-                      colors: [
-                        AppColors.primary.withValues(alpha: 0.18),
-                        AppColors.primary.withValues(alpha: 0),
-                      ],
-                    ),
+    return CardFrame(
+      radius: AppRadius.hero,
+      glow: true,
+      child: Stack(
+        children: [
+          // Ambient cyan light pooling behind the balance figure.
+          Positioned(
+            top: -90,
+            left: -60,
+            child: IgnorePointer(
+              child: Container(
+                width: 280,
+                height: 280,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      AppColors.primary.withValues(alpha: 0.18),
+                      AppColors.primary.withValues(alpha: 0),
+                    ],
                   ),
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpace.xl,
-                AppSpace.xl,
-                AppSpace.xl,
-                AppSpace.lg,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.monetization_on_rounded,
-                        size: 14,
-                        color: AppColors.gold,
-                      ),
-                      const SizedBox(width: AppSpace.xs + 2),
-                      Text(
-                        'BALANCE',
-                        style: AppText.label.copyWith(color: AppColors.textDim),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpace.md),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Expanded(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: AnimatedCounter(
-                            value: _balance,
-                            style: AppText.figure.copyWith(
-                              fontSize: 44,
-                              fontWeight: FontWeight.w800,
-                              height: 1,
-                              letterSpacing: -2,
-                            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpace.xl,
+              AppSpace.xl,
+              AppSpace.xl,
+              AppSpace.lg,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.monetization_on_rounded,
+                      size: 14,
+                      color: AppColors.gold,
+                    ),
+                    const SizedBox(width: AppSpace.xs + 2),
+                    Text(
+                      'BALANCE',
+                      style: AppText.label.copyWith(color: AppColors.textDim),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpace.md),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: AnimatedCounter(
+                          value: _balance,
+                          style: monoStyle(
+                            fontSize: 56,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.gold,
+                            height: 1,
+                            letterSpacing: -2,
                           ),
                         ),
                       ),
-                      const SizedBox(width: AppSpace.md),
-                      StatCell(
-                        label: 'Spent',
-                        value: groupDigits(_spent),
-                        color: AppColors.textDim,
-                      ),
-                    ],
+                    ),
+                    const SizedBox(width: AppSpace.md),
+                    StatCell(
+                      label: 'Spent',
+                      value: groupDigits(_spent),
+                      color: AppColors.textDim,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpace.xs + 2),
+                Text('coins', style: AppText.caption),
+                const SizedBox(height: AppSpace.lg),
+                Container(
+                  height: 1,
+                  width: 54,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        AppColors.gold.withValues(alpha: 0.5),
+                        AppColors.gold.withValues(alpha: 0),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: AppSpace.xs + 2),
-                  Text('coins', style: AppText.caption),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+          const Positioned(
+            right: AppSpace.xl,
+            bottom: AppSpace.lg,
+            child: ChipStack(count: 5, size: 36),
+          ),
+        ],
       ),
     );
   }
@@ -404,13 +408,14 @@ class _WalletScreenState extends State<WalletScreen> {
   Widget _metrics() {
     return Container(
       padding: const EdgeInsets.symmetric(
-        horizontal: AppSpace.lg,
-        vertical: AppSpace.md,
+        horizontal: AppSpace.sm,
+        vertical: AppSpace.lg,
       ),
-      decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.border),
+      decoration: const BoxDecoration(
+        border: Border(
+          top: BorderSide(color: Color(0x0FFFFFFF)),
+          bottom: BorderSide(color: Color(0x0FFFFFFF)),
+        ),
       ),
       child: Row(
         children: [
@@ -447,7 +452,7 @@ class _WalletScreenState extends State<WalletScreen> {
     width: 1,
     height: 30,
     margin: const EdgeInsets.symmetric(horizontal: AppSpace.md),
-    color: AppColors.border,
+    color: Colors.white.withValues(alpha: 0.06),
   );
 
   // ---- activity ---------------------------------------------------------

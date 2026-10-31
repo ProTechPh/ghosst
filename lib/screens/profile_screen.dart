@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../arcade.dart';
 import '../premium.dart';
 import '../services/ad_service.dart';
 import '../services/worker_backend.dart';
@@ -241,22 +242,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: AppColors.bg,
-        body: Center(child: CircularProgressIndicator()),
+        body: Stack(
+          children: [
+            const ArcadeBackdrop(),
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CoinMedallion(size: 64),
+                  const SizedBox(height: AppSpace.lg),
+                  Text(
+                    'LOADING PROFILE',
+                    style: AppText.label.copyWith(
+                      fontSize: 10,
+                      letterSpacing: 2.6,
+                      color: AppColors.textDim,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       );
     }
 
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
-        toolbarHeight: 56,
+        toolbarHeight: 64,
         titleSpacing: AppSpace.lg,
-        title: const Text('Profile', style: AppText.title),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('Profile', style: AppText.title),
+            const SizedBox(height: 1),
+            Text(
+              'ACCOUNT',
+              style: AppText.label.copyWith(
+                fontSize: 9.5,
+                letterSpacing: 2.2,
+                color: AppColors.textDim.withValues(alpha: 0.85),
+              ),
+            ),
+          ],
+        ),
       ),
       body: Stack(
         children: [
           const MeshBackground(),
+          const Positioned.fill(child: IgnorePointer(child: TableSurface())),
           SafeArea(
             top: false,
             child: ListView(
@@ -271,7 +309,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _coinsBanner(),
                   const SizedBox(height: AppSpace.lg),
                 ],
-                ScrollReveal(child: _header()),
+                ScrollReveal(
+                  child: CardFrame(
+                    tier: RarityTier.standard,
+                    radius: AppRadius.hero,
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpace.lg),
+                      child: _header(),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: AppSpace.xl),
                 ScrollReveal(
                   delay: const Duration(milliseconds: 100),
@@ -458,13 +505,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _stats() {
     return Container(
       padding: const EdgeInsets.symmetric(
-        horizontal: AppSpace.lg,
+        horizontal: AppSpace.sm,
         vertical: AppSpace.lg,
       ),
-      decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.border),
+      decoration: const BoxDecoration(
+        border: Border(
+          top: BorderSide(color: Color(0x0FFFFFFF)),
+          bottom: BorderSide(color: Color(0x0FFFFFFF)),
+        ),
       ),
       child: Row(
         children: [
@@ -504,7 +552,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       width: 1,
       height: 34,
       margin: const EdgeInsets.symmetric(horizontal: AppSpace.md),
-      color: AppColors.border,
+      color: Colors.white.withValues(alpha: 0.06),
     );
   }
 

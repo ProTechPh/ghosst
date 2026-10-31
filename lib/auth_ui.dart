@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'arcade.dart';
 import 'premium.dart';
 import 'theme.dart';
 
@@ -18,7 +19,12 @@ class AuthScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        const MeshBackground(),
+        const ArcadeBackdrop(),
+        const Positioned(
+          top: 24,
+          right: -70,
+          child: KeyMark(size: 330, angle: -0.72, opacity: 0.09),
+        ),
         SafeArea(
           child: Column(
             children: [
@@ -39,8 +45,11 @@ class AuthScaffold extends StatelessWidget {
                   builder: (context, constraints) {
                     const padTop = AppSpace.lg;
                     const padBottom = AppSpace.xxl;
-                    final minHeight = (constraints.maxHeight - padTop - padBottom)
-                        .clamp(0.0, double.infinity);
+                    final minHeight =
+                        (constraints.maxHeight - padTop - padBottom).clamp(
+                          0.0,
+                          double.infinity,
+                        );
                     return SingleChildScrollView(
                       padding: const EdgeInsets.fromLTRB(
                         AppSpace.xl,
@@ -75,10 +84,16 @@ class AuthScaffold extends StatelessWidget {
 
 /// Brand lockup, page title and one line of context.
 class AuthHeader extends StatelessWidget {
-  const AuthHeader({super.key, required this.title, required this.subtitle});
+  const AuthHeader({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.eyebrow,
+  });
 
   final String title;
   final String subtitle;
+  final String eyebrow;
 
   @override
   Widget build(BuildContext context) {
@@ -87,7 +102,26 @@ class AuthHeader extends StatelessWidget {
       children: [
         Row(
           children: [
-            const LogoBadge(size: 44),
+            Container(
+              width: 52,
+              height: 52,
+              padding: const EdgeInsets.all(9),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.surface,
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.35),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.22),
+                    blurRadius: 30,
+                    spreadRadius: -6,
+                  ),
+                ],
+              ),
+              child: const LogoBadge(size: 34),
+            ),
             const SizedBox(width: AppSpace.md),
             Text(
               'GHOSST',
@@ -96,16 +130,89 @@ class AuthHeader extends StatelessWidget {
                 letterSpacing: 3.2,
               ),
             ),
+            const Spacer(),
+            Flexible(
+              child: Text(
+                eyebrow,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: monoStyle(
+                  fontSize: 10,
+                  letterSpacing: 1.6,
+                  color: AppColors.primary.withValues(alpha: 0.7),
+                ),
+              ),
+            ),
           ],
         ),
-        const SizedBox(height: AppSpace.xl + 4),
-        Text(title, style: AppText.display.copyWith(fontSize: 34)),
+        const SizedBox(height: AppSpace.xl + 6),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: GradientText(
+            title,
+            style: AppText.display.copyWith(
+              fontSize: 42,
+              height: 1,
+              letterSpacing: -1.2,
+            ),
+          ),
+        ),
         const SizedBox(height: AppSpace.sm + 2),
         Text(
           subtitle,
           style: AppText.body.copyWith(color: AppColors.textDim, height: 1.45),
         ),
+        const SizedBox(height: AppSpace.lg),
+        Container(
+          width: 54,
+          height: 1,
+          decoration: const BoxDecoration(gradient: kNeonGradient),
+        ),
       ],
+    );
+  }
+}
+
+/// The fields sit on one framed plate so the form reads as a single object
+/// against the table backdrop.
+class AuthPanel extends StatelessWidget {
+  const AuthPanel({super.key, required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return CardFrame(
+      tier: RarityTier.standard,
+      radius: AppRadius.hero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // A lit top edge, so the plate catches the bloom above it.
+          Container(
+            height: 1,
+            margin: const EdgeInsets.symmetric(horizontal: AppSpace.xl),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.transparent,
+                  AppColors.cyan.withValues(alpha: 0.35),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(AppSpace.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -229,7 +336,17 @@ class AuthSubmit extends StatelessWidget {
                 color: AppColors.textDim,
               ),
             )
-          : Text(label),
+          : FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(label),
+                  const SizedBox(width: AppSpace.sm),
+                  const Icon(Icons.arrow_forward_rounded, size: 18),
+                ],
+              ),
+            ),
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../arcade.dart';
 import '../premium.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
@@ -283,7 +284,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           ListView(
             padding: const EdgeInsets.only(bottom: AppSpace.lg),
             children: [
-              _hero(),
+              CardFrame(
+                radius: 0,
+                tier: tierForCost(entryCost(widget.product)),
+                child: _hero(),
+              ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(
                   AppSpace.xl,
@@ -304,35 +309,29 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           : 'License key · delivered instantly',
                       style: AppText.caption,
                     ),
-                    const SizedBox(height: AppSpace.lg),
 
-                    // ---- price / stock / type --------------------------
-                    _stats(
-                      cost: cost,
-                      outOfStock: outOfStock,
-                      isApp: isApp,
-                    ),
+                    // ---- version / file size ---------------------------
                     if (p.version.isNotEmpty || p.fileSize.isNotEmpty) ...[
-                      const SizedBox(height: AppSpace.md),
+                      const SizedBox(height: AppSpace.sm + 2),
                       Wrap(
-                        spacing: AppSpace.sm,
+                        spacing: AppSpace.lg,
                         runSpacing: AppSpace.xs,
                         children: [
                           if (p.version.isNotEmpty)
-                            NeonPill(
-                              icon: Icons.tag_rounded,
-                              label: p.version,
-                              color: AppColors.textDim,
-                            ),
+                            _meta(Icons.tag_rounded, p.version),
                           if (p.fileSize.isNotEmpty)
-                            NeonPill(
-                              icon: Icons.data_usage_rounded,
-                              label: p.fileSize,
+                            _meta(
+                              Icons.data_usage_rounded,
+                              p.fileSize,
                               color: AppColors.cyan,
                             ),
                         ],
                       ),
                     ],
+                    const SizedBox(height: AppSpace.lg),
+
+                    // ---- price / stock / type --------------------------
+                    _stats(cost: cost, outOfStock: outOfStock, isApp: isApp),
 
                     // ---- description -----------------------------------
                     const SizedBox(height: AppSpace.xl),
@@ -456,10 +455,31 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     // ---- purchase note --------------------------------
                     if (isApp && !isOwned) ...[
                       const SizedBox(height: AppSpace.xl),
-                      Text(
-                        'One purchase — you can re-download it any time from '
-                        'My Purchases.',
-                        style: AppText.caption,
+                      Container(
+                        padding: const EdgeInsets.only(top: AppSpace.md),
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            top: BorderSide(color: Color(0x0FFFFFFF)),
+                          ),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.lock_outline_rounded,
+                              size: 15,
+                              color: AppColors.textDim,
+                            ),
+                            const SizedBox(width: AppSpace.sm),
+                            Expanded(
+                              child: Text(
+                                'One purchase — you can re-download it any time from '
+                                'My Purchases.',
+                                style: AppText.caption,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                     const SizedBox(height: AppSpace.xl),
@@ -510,7 +530,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
-  /// Price / stock / type — mono figures, never body text.
+  /// Price / stock / type — mono figures between hairline rules.
   Widget _stats({
     required int cost,
     required bool outOfStock,
@@ -521,33 +541,66 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         : widget.product.isFile
         ? 'FILE'
         : 'KEY';
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: StatCell(
-            label: 'Price',
-            value: groupDigits(cost),
-            icon: Icons.monetization_on_rounded,
-            color: AppColors.gold,
-          ),
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.sm,
+        vertical: AppSpace.md,
+      ),
+      decoration: const BoxDecoration(
+        border: Border(
+          top: BorderSide(color: Color(0x0FFFFFFF)),
+          bottom: BorderSide(color: Color(0x0FFFFFFF)),
         ),
-        if (widget.product.isKey && widget.stock >= 0) ...[
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: StatCell(
+              label: 'Price',
+              value: groupDigits(cost),
+              icon: Icons.monetization_on_rounded,
+              color: AppColors.gold,
+            ),
+          ),
+          if (widget.product.isKey && widget.stock >= 0) ...[
+            _statDivider(),
+            Expanded(
+              child: StatCell(
+                label: 'In stock',
+                value: groupDigits(widget.stock),
+                color: outOfStock ? AppColors.red : AppColors.green,
+              ),
+            ),
+          ],
           _statDivider(),
           Expanded(
             child: StatCell(
-              label: 'In stock',
-              value: groupDigits(widget.stock),
-              color: outOfStock ? AppColors.red : AppColors.green,
+              label: 'Type',
+              value: type,
+              color: isApp ? AppColors.cyan : AppColors.text,
             ),
           ),
         ],
-        _statDivider(),
-        Expanded(
-          child: StatCell(
-            label: 'Type',
-            value: type,
-            color: isApp ? AppColors.cyan : AppColors.text,
+      ),
+    );
+  }
+
+  /// Version / file size — technical metadata, mono, never body copy.
+  Widget _meta(IconData icon, String value, {Color? color}) {
+    final tone = color ?? AppColors.textDim;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: tone.withValues(alpha: 0.85)),
+        const SizedBox(width: AppSpace.xs + 1),
+        Text(
+          value,
+          style: monoStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: tone,
+            letterSpacing: 0.2,
           ),
         ),
       ],
@@ -557,9 +610,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   Widget _statDivider() {
     return Container(
       width: 1,
-      height: 34,
+      height: 30,
       margin: const EdgeInsets.symmetric(horizontal: AppSpace.md),
-      color: AppColors.border,
+      color: Colors.white.withValues(alpha: 0.06),
     );
   }
 
@@ -572,120 +625,137 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     required bool canClaim,
     required String label,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.bg.withValues(alpha: 0.96),
-        border: const Border(top: BorderSide(color: AppColors.border)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpace.xl,
-            AppSpace.md,
-            AppSpace.xl,
-            AppSpace.md,
+    return Stack(
+      children: [
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: Container(
+            height: 1,
+            decoration: BoxDecoration(
+              gradient: rarityEdge(tierForCost(entryCost(widget.product))),
+            ),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (!isOwned && !affordable && !outOfStock) ...[
-                Text(
-                  'Watch ads on the Earn tab to get ${cost - coins} more coins.',
-                  style: AppText.caption,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: AppSpace.sm),
-              ],
-              Row(
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.bg.withValues(alpha: 0.96),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.xl,
+                AppSpace.md,
+                AppSpace.xl,
+                AppSpace.md,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
+                  if (!isOwned && !affordable && !outOfStock) ...[
+                    Text(
+                      'Watch ads on the Earn tab to get ${cost - coins} more coins.',
+                      style: AppText.caption,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: AppSpace.sm),
+                  ],
+                  Row(
                     children: [
-                      Text(
-                        isOwned ? 'OWNED' : 'PRICE',
-                        style: AppText.caption.copyWith(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpace.xs),
-                      if (isOwned)
-                        Text(
-                          'Ready',
-                          style: AppText.subtitle.copyWith(
-                            color: AppColors.cyan,
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            isOwned ? 'OWNED' : 'PRICE',
+                            style: AppText.caption.copyWith(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 2,
+                            ),
                           ),
-                        )
-                      else
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.monetization_on_rounded,
-                              size: 17,
-                              color: AppColors.gold,
-                            ),
-                            const SizedBox(width: AppSpace.xs),
+                          const SizedBox(height: AppSpace.xs),
+                          if (isOwned)
                             Text(
-                              groupDigits(cost),
-                              style: AppText.figure.copyWith(
-                                fontSize: 19,
-                                color: AppColors.gold,
-                              ),
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
-                  const SizedBox(width: AppSpace.lg),
-                  Expanded(
-                    child: NeonButton(
-                      expand: true,
-                      onPressed: canClaim || isOwned
-                          ? () {
-                              if (isOwned) {
-                                _openDownload();
-                              } else {
-                                _claim();
-                              }
-                            }
-                          : null,
-                      child: claiming
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.4,
-                                color: Colors.white,
+                              'Ready',
+                              style: AppText.subtitle.copyWith(
+                                color: AppColors.cyan,
                               ),
                             )
-                          : Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                          else
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (isOwned) ...[
-                                  const Icon(Icons.download_rounded, size: 17),
-                                  const SizedBox(width: AppSpace.sm - 1),
-                                ],
-                                Flexible(
-                                  child: Text(
-                                    label,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                const Icon(
+                                  Icons.monetization_on_rounded,
+                                  size: 17,
+                                  color: AppColors.gold,
+                                ),
+                                const SizedBox(width: AppSpace.xs),
+                                Text(
+                                  groupDigits(cost),
+                                  style: AppText.figure.copyWith(
+                                    fontSize: 19,
+                                    color: AppColors.gold,
                                   ),
                                 ),
                               ],
                             ),
-                    ),
+                        ],
+                      ),
+                      const SizedBox(width: AppSpace.lg),
+                      Expanded(
+                        child: NeonButton(
+                          expand: true,
+                          onPressed: canClaim || isOwned
+                              ? () {
+                                  if (isOwned) {
+                                    _openDownload();
+                                  } else {
+                                    _claim();
+                                  }
+                                }
+                              : null,
+                          child: claiming
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.4,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    if (isOwned) ...[
+                                      const Icon(
+                                        Icons.download_rounded,
+                                        size: 17,
+                                      ),
+                                      const SizedBox(width: AppSpace.sm - 1),
+                                    ],
+                                    Flexible(
+                                      child: Text(
+                                        label,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 
@@ -818,10 +888,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 stops: const [0.55, 1],
-                colors: [
-                  AppColors.bg.withValues(alpha: 0),
-                  AppColors.bg,
-                ],
+                colors: [AppColors.bg.withValues(alpha: 0), AppColors.bg],
               ),
             ),
           ),
@@ -837,7 +904,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   for (var i = 0; i < ids.length; i++)
                     AnimatedContainer(
                       duration: kMotionStandard,
-                      margin: const EdgeInsets.symmetric(horizontal: AppSpace.xs - 1),
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: AppSpace.xs - 1,
+                      ),
                       width: i == _pageIdx ? 20 : 7,
                       height: 7,
                       decoration: BoxDecoration(
@@ -850,6 +919,17 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 ],
               ),
             ),
+          Positioned(
+            // clears the 44 px glass back button above it
+            top:
+                MediaQuery.paddingOf(context).top +
+                AppSpace.xs +
+                44 +
+                AppSpace.sm,
+            left: AppSpace.lg,
+            right: AppSpace.lg,
+            child: CardIndex(cost: entryCost(product), type: cardType(product)),
+          ),
         ],
       ),
     );

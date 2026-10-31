@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import '../premium.dart';
+import '../arcade.dart';
 import '../services/ad_service.dart';
 import '../services/worker_backend.dart';
 import '../services/distribution.dart';
@@ -257,9 +258,12 @@ class _StoreScreenState extends State<StoreScreen> {
     final shelf = _shelf;
     final rest = shelf.length > 1 ? shelf.sublist(1) : const <Product>[];
 
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(
+    return Stack(
+      children: [
+        const Positioned.fill(child: IgnorePointer(child: TableSurface())),
+        RefreshIndicator(
+          onRefresh: _load,
+          child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(
           AppSpace.xl,
@@ -275,12 +279,18 @@ class _StoreScreenState extends State<StoreScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Eyebrow(text: _tab == 'key' ? 'License store' : 'App store'),
-                const SizedBox(height: AppSpace.lg),
+                const SizedBox(height: AppSpace.md),
                 Text(
-                  _tab == 'key'
-                      ? 'Spend coins,\nclaim keys'
-                      : 'Spend coins,\ndownload apps',
-                  style: AppText.display,
+                  'Spend coins,',
+                  style: AppText.display.copyWith(fontSize: 38, height: 1.02),
+                ),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: GradientText(
+                    _tab == 'key' ? 'claim keys.' : 'download apps.',
+                    style: AppText.display.copyWith(fontSize: 38, height: 1.02),
+                  ),
                 ),
                 const SizedBox(height: AppSpace.md),
                 Text(
@@ -303,93 +313,115 @@ class _StoreScreenState extends State<StoreScreen> {
             const SizedBox(height: AppSpace.xl),
           ],
 
-          // ---- balance hero --------------------------------------------
+          // ---- balance strip -------------------------------------------
           ScrollReveal(
             delay: const Duration(milliseconds: 110),
-            child: Pressable(
-              onTap: widget.onOpenWallet,
-              child: DoubleBezel(
-                padding: const EdgeInsets.all(AppSpace.lg),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF0E2229), Color(0xFF07161B)],
-                ),
-                glowColor: AppColors.gold,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+            child: CardFrame(
+              radius: AppRadius.hero,
+              glow: true,
+              child: Column(
+                children: [
+                  Pressable(
+                    onTap: widget.onOpenWallet,
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpace.lg),
+                      child: Row(
                         children: [
-                          Text(
-                            'YOUR BALANCE',
-                            style: AppText.caption.copyWith(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 2.2,
+                          const CoinMedallion(size: 56),
+                          const SizedBox(width: AppSpace.md + 2),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'YOUR BALANCE',
+                                  style: AppText.caption.copyWith(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 2.2,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.baseline,
+                                  textBaseline: TextBaseline.alphabetic,
+                                  children: [
+                                    AnimatedCounter(
+                                      value: widget.coins,
+                                      style: monoStyle(
+                                        fontSize: 34,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.gold,
+                                        height: 1.05,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text('coins', style: AppText.caption),
+                                  ],
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: AppSpace.sm),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.baseline,
-                            textBaseline: TextBaseline.alphabetic,
-                            children: [
-                              AnimatedCounter(
-                                value: widget.coins,
-                                style: monoStyle(
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.gold,
-                                  height: 1.05,
-                                ),
-                              ),
-                              const SizedBox(width: AppSpace.sm),
-                              Text('coins', style: AppText.caption),
-                            ],
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 20,
+                            color: AppColors.textDim.withValues(alpha: 0.7),
                           ),
                         ],
                       ),
                     ),
+                  ),
+                  // Top-up lives inside the balance card: one object, two taps.
+                  if (widget.onGoToEarn != null) ...[
                     Container(
-                      width: 54,
-                      height: 54,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: kGoldGradient,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.gold.withValues(alpha: 0.35),
-                            blurRadius: 24,
-                            spreadRadius: -6,
-                          ),
-                        ],
+                      height: 1,
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: AppSpace.lg,
                       ),
-                      child: const Icon(
-                        Icons.monetization_on_outlined,
-                        size: 24,
-                        color: Color(0xFF422006),
+                      color: Colors.white.withValues(alpha: 0.06),
+                    ),
+                    Pressable(
+                      onTap: widget.onGoToEarn,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpace.lg,
+                          AppSpace.md,
+                          AppSpace.lg,
+                          AppSpace.md,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.play_circle_outline_rounded,
+                              size: 16,
+                              color: AppColors.primary,
+                            ),
+                            const SizedBox(width: AppSpace.sm),
+                            Text(
+                              'Watch an ad to top up',
+                              style: AppText.caption.copyWith(
+                                color: AppColors.text,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              'EARN',
+                              style: AppText.label.copyWith(
+                                fontSize: 9.5,
+                                letterSpacing: 2,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
-                ),
+                ],
               ),
             ),
           ),
-          if (widget.onGoToEarn != null) ...[
-            const SizedBox(height: AppSpace.md),
-            ScrollReveal(
-              delay: const Duration(milliseconds: 170),
-              child: IslandButton(
-                dense: true,
-                outline: true,
-                glow: false,
-                label: 'Watch ads to top up',
-                icon: CupertinoIcons.play_rectangle,
-                onPressed: widget.onGoToEarn,
-              ),
-            ),
-          ],
           const SizedBox(height: AppSpace.xxl),
 
           // ---- products -------------------------------------------------
@@ -445,10 +477,10 @@ class _StoreScreenState extends State<StoreScreen> {
                 ),
               ),
               _switchedShelf
-                  ? _grid(rest)
+                  ? _cardShelf(rest)
                   : ScrollReveal(
                       delay: const Duration(milliseconds: 120),
-                      child: _grid(rest),
+                      child: _cardShelf(rest),
                     ),
             ],
           ],
@@ -459,7 +491,13 @@ class _StoreScreenState extends State<StoreScreen> {
             const SectionHeader(title: 'Sponsored'),
             ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 350, maxHeight: 400),
-              child: AdWidget(ad: _nativeAd!),
+              // Stable key: the shelf above adds/removes siblings on tab
+              // switch and reload, and a re-matched AdWidget element would
+              // mount the same ad twice ("already in the Widget tree").
+              child: AdWidget(
+                key: const ValueKey('store-native-ad'),
+                ad: _nativeAd!,
+              ),
             ),
             const SizedBox(height: AppSpace.xl),
           ],
@@ -477,7 +515,9 @@ class _StoreScreenState extends State<StoreScreen> {
             ),
           ),
         ],
-      ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -671,11 +711,6 @@ class _StoreScreenState extends State<StoreScreen> {
     );
   }
 
-  /// Lowest selectable price (duration products advertise their entry tier).
-  int _entryCost(Product p) => p.hasDurations
-      ? p.durations.map((d) => d.cost).reduce((a, b) => a < b ? a : b)
-      : p.cost;
-
   // ---- featured hero panel --------------------------------------------
   Widget _featuredCard(Product p) {
     final count = _stockOf(p);
@@ -684,10 +719,11 @@ class _StoreScreenState extends State<StoreScreen> {
     final desc = p.description.trim();
 
     return Pressable(
-      scale: 0.99,
+      scale: 1.01,
       onTap: soldOut ? null : () => _openDetail(p),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppRadius.hero),
+      child: CardFrame(
+        radius: AppRadius.hero,
+        tier: tierForCost(entryCost(p)),
         child: SizedBox(
           height: 286,
           child: Stack(
@@ -712,6 +748,12 @@ class _StoreScreenState extends State<StoreScreen> {
               ),
               if (soldOut)
                 ColoredBox(color: AppColors.bg.withValues(alpha: 0.45)),
+              Positioned(
+                top: AppSpace.md,
+                left: AppSpace.md,
+                right: AppSpace.md,
+                child: CardIndex(cost: entryCost(p), type: cardType(p)),
+              ),
               Positioned(
                 left: AppSpace.lg,
                 right: AppSpace.lg,
@@ -755,11 +797,22 @@ class _StoreScreenState extends State<StoreScreen> {
                             Text('from', style: AppText.caption),
                             const SizedBox(width: AppSpace.xs + 2),
                           ],
-                          _priceTag(_entryCost(p), size: 17),
+                          _priceTag(entryCost(p), size: 17),
                           const SizedBox(width: AppSpace.xs + 2),
                           Text('coins', style: AppText.caption),
                         ],
                         const Spacer(),
+                        if (!isOwned && !soldOut) ...[
+                          Text(
+                            count >= 0 ? '$count left' : 'Fresh drop',
+                            style: AppText.label.copyWith(
+                              fontSize: 10,
+                              letterSpacing: 1.6,
+                              color: AppColors.textDim,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpace.sm),
+                        ],
                         Container(
                           width: 38,
                           height: 38,
@@ -790,15 +843,15 @@ class _StoreScreenState extends State<StoreScreen> {
     );
   }
 
-  // ---- 2-column staggered grid ----------------------------------------
-  Widget _grid(List<Product> items) {
+  // ---- 5:7 card shelf --------------------------------------------------
+  Widget _cardShelf(List<Product> items) {
     final left = <Widget>[];
     final right = <Widget>[];
     for (var i = 0; i < items.length; i++) {
       (i.isEven ? left : right).add(
         Padding(
           padding: const EdgeInsets.only(bottom: AppSpace.md),
-          child: _gridCard(items[i]),
+          child: _shelfCard(items[i]),
         ),
       );
     }
@@ -807,7 +860,7 @@ class _StoreScreenState extends State<StoreScreen> {
       children: [
         Expanded(child: Column(children: left)),
         const SizedBox(width: AppSpace.md),
-        // Dropping the right column gives the grid its editorial stagger.
+        // Dropping the right column gives the shelf its editorial stagger.
         Expanded(
           child: Padding(
             padding: EdgeInsets.only(top: items.length > 1 ? AppSpace.lg : 0),
@@ -818,94 +871,142 @@ class _StoreScreenState extends State<StoreScreen> {
     );
   }
 
-  Widget _gridCard(Product p) {
+  Widget _shelfCard(Product p) {
     final count = _stockOf(p);
     final isOwned = owned.contains(p.id);
-    final soldOut = p.isKey && count == 0;
-    final meta = p.isDownloadable
-        ? (p.isApk
-              ? (p.version.isEmpty ? 'APK' : 'APK ${p.version}')
-              : (p.fileSize.isEmpty ? 'FILE' : 'FILE · ${p.fileSize}'))
-        : 'License key';
+    final soldOut = isSoldOutCard(isKey: p.isKey, stock: count);
+    final tier = tierForCost(entryCost(p));
 
-    final card = Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF0C1C22), Color(0xFF071317)],
-        ),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          AspectRatio(
-            aspectRatio: 1,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                _cover(p, width: 400),
-                if (soldOut)
-                  ColoredBox(color: AppColors.bg.withValues(alpha: 0.55)),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(AppSpace.md),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  p.name,
-                  style: AppText.subtitle.copyWith(fontSize: 14.5),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: AppSpace.xs),
-                Text(meta, style: AppText.caption.copyWith(fontSize: 11.5)),
-                const SizedBox(height: AppSpace.sm + 2),
-                if (isOwned)
-                  const NeonPill(
-                    icon: Icons.check_circle_rounded,
-                    label: 'Owned',
-                    color: AppColors.cyan,
-                  )
-                else if (soldOut)
-                  NeonPill(
-                    icon: Icons.remove_shopping_cart_outlined,
-                    label: 'Sold out',
-                    color: AppColors.textDim,
-                  )
-                else
-                  Row(
+    return Pressable(
+      onTap: soldOut ? null : () => _openDetail(p),
+      child: CardFrame(
+        tier: tier,
+        holo: tier == RarityTier.vault,
+        child: AspectRatio(
+          aspectRatio: 5 / 7,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(10),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.card - 11),
+                  child: Stack(
+                    fit: StackFit.expand,
                     children: [
-                      if (p.hasDurations) ...[
-                        Text('from', style: AppText.caption),
-                        const SizedBox(width: AppSpace.xs),
-                      ],
-                      _priceTag(_entryCost(p)),
+                      _cover(p, width: 400),
+                      if (soldOut)
+                        ColoredBox(color: AppColors.bg.withValues(alpha: .55)),
+                      Align(
+                        alignment: Alignment.bottomCenter,
+                        child: FractionallySizedBox(
+                          heightFactor: .55,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  AppColors.bg.withValues(alpha: 0),
+                                  AppColors.bg.withValues(alpha: .94),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 10,
+                        right: 10,
+                        bottom: 10,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              p.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppText.subtitle.copyWith(fontSize: 14),
+                            ),
+                            const SizedBox(height: AppSpace.xs),
+                            Text(
+                              cardMeta(p),
+                              style: AppText.caption.copyWith(fontSize: 11),
+                            ),
+                            if (!isOwned && !soldOut && count >= 0) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                '$count left',
+                                style: AppText.caption.copyWith(
+                                  fontSize: 11,
+                                  color: AppColors.green,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                     ],
                   ),
-                if (!isOwned && !soldOut && count > 0) ...[
-                  const SizedBox(height: AppSpace.xs),
-                  Text(
-                    '$count in stock',
-                    style: AppText.caption.copyWith(
-                      fontSize: 11.5,
-                      color: AppColors.green,
-                    ),
-                  ),
-                ],
-              ],
-            ),
+                ),
+              ),
+              Positioned(
+                top: 12,
+                left: 12,
+                right: 12,
+                child: CardIndex(cost: entryCost(p), type: cardType(p)),
+              ),
+              if (isOwned)
+                const Positioned(top: 44, right: 12, child: _OwnedSeal()),
+              if (soldOut) const Center(child: _SoldOutStamp()),
+            ],
           ),
-        ],
+        ),
       ),
     );
+  }
+}
 
-    return Pressable(onTap: soldOut ? null : () => _openDetail(p), child: card);
+class _OwnedSeal extends StatelessWidget {
+  const _OwnedSeal();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AppColors.cyan.withValues(alpha: .18),
+      ),
+      child: const Icon(Icons.check_rounded, size: 13, color: AppColors.cyan),
+    );
+  }
+}
+
+class _SoldOutStamp extends StatelessWidget {
+  const _SoldOutStamp();
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.rotate(
+      angle: -0.06,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.textDim.withValues(alpha: .6)),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          'SOLD OUT',
+          style: AppText.label.copyWith(
+            fontSize: 10,
+            letterSpacing: 3,
+            color: AppColors.textDim,
+          ),
+        ),
+      ),
+    );
   }
 }
