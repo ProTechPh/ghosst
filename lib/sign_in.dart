@@ -100,6 +100,7 @@ class _SignInState extends State<SignIn> {
       children: [
         const AuthHeader(
           title: 'Sign in',
+          eyebrow: 'RETURNING PLAYER',
           subtitle: 'Pick up where your coins left off.',
         ),
         const SizedBox(height: AppSpace.xl + 4),

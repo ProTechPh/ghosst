@@ -281,6 +281,7 @@ class _TablePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter old) => false;
 }
+
 /// Enters by flipping on the Y axis; lands once, then a short glow pulse.
 class CardFlip extends StatefulWidget {
   const CardFlip({
@@ -556,6 +557,113 @@ class CoinMedallion extends StatelessWidget {
 
 /// Signed-out backdrop: mesh, table dots, one cyan bloom up top and a
 /// near-black fade at the bottom so the pinned CTA always sits on ink.
+/// The product drawn as itself: a gold key on a gradient core, bowed and
+/// toothed, for the signed-out hero and as an auth watermark.
+class KeyMark extends StatelessWidget {
+  const KeyMark({
+    super.key,
+    this.size = 220,
+    this.angle = -0.5,
+    this.opacity = 1,
+    this.glow = true,
+  });
+
+  final double size;
+  final double angle;
+  final double opacity;
+  final bool glow;
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.rotate(
+      angle: angle,
+      child: Opacity(
+        opacity: opacity,
+        child: SizedBox(
+          width: size,
+          height: size * 0.62,
+          child: CustomPaint(painter: _KeyPainter(glow: glow)),
+        ),
+      ),
+    );
+  }
+}
+
+class _KeyPainter extends CustomPainter {
+  const _KeyPainter({required this.glow});
+
+  final bool glow;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final bow = Offset(w * 0.22, h * 0.5);
+    final radius = w * 0.16;
+    final shaftTop = h * 0.455;
+    final shaftHeight = h * 0.09;
+
+    var body = Path()..addOval(Rect.fromCircle(center: bow, radius: radius));
+    body = Path.combine(
+      PathOperation.union,
+      body,
+      Path()..addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTRB(bow.dx, shaftTop, w * 0.9, shaftTop + shaftHeight),
+          Radius.circular(shaftHeight / 2),
+        ),
+      ),
+    );
+    for (final x in const [0.62, 0.73, 0.84]) {
+      body = Path.combine(
+        PathOperation.union,
+        body,
+        Path()..addRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTRB(
+              w * x,
+              shaftTop + shaftHeight - 1,
+              w * x + w * 0.035,
+              shaftTop + shaftHeight + h * 0.12,
+            ),
+            Radius.circular(w * 0.014),
+          ),
+        ),
+      );
+    }
+
+    canvas.saveLayer(Offset.zero & size, Paint());
+    if (glow) {
+      canvas.drawPath(
+        body,
+        Paint()
+          ..color = AppColors.gold.withValues(alpha: 0.35)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14),
+      );
+    }
+    canvas.drawPath(
+      body,
+      Paint()
+        ..shader = kGoldGradient.createShader(
+          Rect.fromLTWH(0, shaftTop, w, shaftTop + shaftHeight),
+        ),
+    );
+    canvas.drawPath(
+      body,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = Colors.white.withValues(alpha: 0.45),
+    );
+    // Punch the bow's hole through so the backdrop shows inside the key.
+    canvas.drawCircle(bow, radius * 0.5, Paint()..blendMode = BlendMode.clear);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_KeyPainter old) => old.glow != glow;
+}
+
 class ArcadeBackdrop extends StatelessWidget {
   const ArcadeBackdrop({super.key});
 
@@ -683,9 +791,7 @@ class _FloatingCoinState extends State<FloatingCoin>
           builder: (context, _) {
             final t = _c.value;
             final p = _position(t);
-            final opacity = t < .15
-                ? t / .15
-                : (t > .8 ? (1 - t) / .2 : 1.0);
+            final opacity = t < .15 ? t / .15 : (t > .8 ? (1 - t) / .2 : 1.0);
             return Stack(
               children: [
                 Positioned(

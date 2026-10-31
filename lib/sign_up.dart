@@ -106,6 +106,7 @@ class _SignUpState extends State<SignUp> {
       children: [
         const AuthHeader(
           title: 'Create account',
+          eyebrow: 'NEW PLAYER',
           subtitle: 'Watch an ad, get coins. Spend them on keys.',
         ),
         const SizedBox(height: AppSpace.xl + 4),
