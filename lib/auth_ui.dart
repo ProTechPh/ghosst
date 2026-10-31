@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'arcade.dart';
 import 'premium.dart';
 import 'theme.dart';
 
@@ -19,6 +20,9 @@ class AuthScaffold extends StatelessWidget {
     return Stack(
       children: [
         const MeshBackground(),
+        const Positioned.fill(
+          child: IgnorePointer(child: TableSurface()),
+        ),
         SafeArea(
           child: Column(
             children: [
@@ -85,18 +89,37 @@ class AuthHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            const LogoBadge(size: 44),
-            const SizedBox(width: AppSpace.md),
-            Text(
-              'GHOSST',
-              style: AppText.label.copyWith(
-                color: AppColors.textDim,
-                letterSpacing: 3.2,
-              ),
+        CardFrame(
+          tier: RarityTier.standard,
+          radius: AppRadius.button,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpace.md,
+              vertical: AppSpace.sm + 2,
             ),
-          ],
+            child: Row(
+              children: [
+                const LogoBadge(size: 28),
+                const SizedBox(width: AppSpace.sm + 2),
+                Text(
+                  'GHOSST',
+                  style: AppText.label.copyWith(
+                    color: AppColors.textDim,
+                    letterSpacing: 3.2,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  'ARCADE',
+                  style: monoStyle(
+                    fontSize: 10,
+                    letterSpacing: 1.6,
+                    color: AppColors.primary.withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
         const SizedBox(height: AppSpace.xl + 4),
         Text(title, style: AppText.display.copyWith(fontSize: 34)),

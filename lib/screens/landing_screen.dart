@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../arcade.dart';
 import '../premium.dart';
 import '../theme.dart';
 
@@ -34,26 +35,8 @@ class LandingScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const ScrollReveal(child: LogoBadge(size: 84)),
-                      const SizedBox(height: AppSpace.xl),
-                      ScrollReveal(
-                        delay: const Duration(milliseconds: 80),
-                        child: GradientText(
-                          'Ghosst',
-                          style: AppText.display.copyWith(fontSize: 44),
-                        ),
-                      ),
-                      const SizedBox(height: AppSpace.md),
                       const ScrollReveal(
-                        delay: Duration(milliseconds: 140),
-                        child: Text(
-                          'Watch an ad, get coins. Spend them on keys.',
-                          style: TextStyle(
-                            fontSize: 16.5,
-                            height: 1.45,
-                            color: AppColors.textDim,
-                          ),
-                        ),
+                        child: _HeroCard(),
                       ),
                       const SizedBox(height: AppSpace.xxl),
 
@@ -95,6 +78,53 @@ class LandingScreen extends StatelessWidget {
   }
 }
 
+/// The first thing anyone sees: the brand as a card on the table.
+class _HeroCard extends StatelessWidget {
+  const _HeroCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return CardFrame(
+      tier: RarityTier.vault,
+      radius: AppRadius.hero,
+      holo: true,
+      glow: true,
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpace.xl),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const LogoBadge(size: 52),
+                const Spacer(),
+                const ChipStack(count: 5, size: 30),
+              ],
+            ),
+            const SizedBox(height: AppSpace.xl),
+            GradientText(
+              'Ghosst',
+              style: AppText.display.copyWith(fontSize: 52),
+            ),
+            const SizedBox(height: AppSpace.sm),
+            Text(
+              'Watch an ad, get coins. Spend them on keys.',
+              style: TextStyle(
+                fontSize: 16.5,
+                height: 1.45,
+                color: AppColors.textDim,
+              ),
+            ),
+            const SizedBox(height: AppSpace.lg),
+            Container(height: 1, width: 96, decoration: BoxDecoration(
+              gradient: rarityEdge(RarityTier.vault),
+            )),
+          ],
+        ),
+      ),
+    );
+  }
+}
 /// The three promises, one list rather than three equal tiles.
 class _ValueList extends StatelessWidget {
   const _ValueList();
@@ -129,6 +159,16 @@ class _ValueList extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Text(
+                  '0${i + 1}',
+                  style: monoStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.2,
+                    color: AppColors.primary.withValues(alpha: 0.55),
+                  ),
+                ),
+                const SizedBox(width: AppSpace.md),
                 Container(
                   width: 38,
                   height: 38,
@@ -184,6 +224,9 @@ class _LandingBackdrop extends StatelessWidget {
     return Stack(
       children: [
         const MeshBackground(),
+        const Positioned.fill(
+          child: IgnorePointer(child: TableSurface()),
+        ),
         Positioned.fill(
           child: IgnorePointer(
             child: DecoratedBox(
