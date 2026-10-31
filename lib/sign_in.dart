@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'api/api_exception.dart';
-import 'premium.dart';
+import 'auth_ui.dart';
 import 'services/worker_backend.dart';
 import 'theme.dart';
 import 'validation.dart';
@@ -11,10 +11,15 @@ class SignIn extends StatefulWidget {
     super.key,
     required this.onSignedIn,
     required this.onGoToSignUp,
+    this.onBack,
   });
 
   final VoidCallback onSignedIn;
   final VoidCallback onGoToSignUp;
+
+  /// Returns to the signed-out landing page. Null pops when this route was
+  /// pushed; either way the screen is never a dead end.
+  final VoidCallback? onBack;
 
   @override
   State<SignIn> createState() => _SignInState();
@@ -69,262 +74,83 @@ class _SignInState extends State<SignIn> {
     }
   }
 
-  Widget _errorBox() {
-    return AnimatedSize(
-      duration: kMotionBase,
-      curve: kPremiumCurve,
-      alignment: Alignment.topCenter,
-      child: error.isEmpty
-          ? const SizedBox(width: double.infinity)
-          : AnimatedOpacity(
-              duration: kMotionFast,
-              curve: kPremiumCurve,
-              opacity: 1,
-              child: Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(top: 16),
-                padding: const EdgeInsets.all(13),
-                decoration: BoxDecoration(
-                  color: AppColors.red.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(16),
-                  border:
-                      Border.all(color: AppColors.red.withValues(alpha: 0.35)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.error_outline,
-                        size: 18, color: AppColors.red),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        error,
-                        style: const TextStyle(
-                            color: AppColors.red, fontSize: 13.5),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-    );
+  void _back() {
+    final back = widget.onBack;
+    if (back != null) {
+      back();
+    } else {
+      Navigator.maybePop(context);
+    }
   }
 
-  /// Inline validation message under a field (animated reveal).
-  Widget _fieldError(String? message) {
-    return AnimatedSize(
-      duration: kMotionBase,
-      curve: kPremiumCurve,
-      alignment: Alignment.topCenter,
-      child: message == null
-          ? const SizedBox(width: double.infinity)
-          : Padding(
-              padding: const EdgeInsets.only(top: 8, left: 4),
-              child: Row(
-                children: [
-                  const Icon(Icons.error_outline,
-                      size: 14, color: AppColors.red),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      message,
-                      style:
-                          const TextStyle(color: AppColors.red, fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-    );
+  void _clearErrors() {
+    if (emailErr != null || passErr != null || error.isNotEmpty) {
+      setState(() {
+        emailErr = null;
+        passErr = null;
+        error = '';
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
+    return AuthScaffold(
+      onBack: _back,
       children: [
-        const MeshBackground(),
-        Positioned.fill(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(24, 56, 24, 40),
-            children: [
-              const Center(child: LogoBadge(size: 76, fontSize: 38)),
-              const SizedBox(height: 30),
-              const Center(
-                child: ScrollReveal(
-                  child: Eyebrow(text: 'Welcome back'),
-                ),
+        const AuthHeader(
+          title: 'Sign in',
+          subtitle: 'Pick up where your coins left off.',
+        ),
+        const SizedBox(height: AppSpace.xxl),
+        const AuthFieldLabel('Email'),
+        TextField(
+          controller: email,
+          keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.next,
+          autocorrect: false,
+          autofillHints: const [AutofillHints.email],
+          onChanged: (_) => _clearErrors(),
+          onSubmitted: (_) => FocusScope.of(context).nextFocus(),
+          decoration: authDecoration(
+            hint: 'you@example.com',
+            icon: Icons.alternate_email_rounded,
+            errorText: emailErr,
+          ),
+        ),
+        const SizedBox(height: AppSpace.lg),
+        const AuthFieldLabel('Password'),
+        TextField(
+          controller: password,
+          obscureText: obscure,
+          textInputAction: TextInputAction.done,
+          keyboardType: TextInputType.visiblePassword,
+          autofillHints: const [AutofillHints.password],
+          onChanged: (_) => _clearErrors(),
+          onSubmitted: (_) => _submit(),
+          decoration: authDecoration(
+            hint: 'Your password',
+            icon: Icons.lock_outline_rounded,
+            errorText: passErr,
+            suffixIcon: IconButton(
+              tooltip: obscure ? 'Show password' : 'Hide password',
+              icon: Icon(
+                obscure
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
               ),
-              const SizedBox(height: 18),
-              const ScrollReveal(
-                delay: Duration(milliseconds: 120),
-                child: Center(
-                  child: GradientText(
-                    'Sign in',
-                    style: TextStyle(
-                      fontSize: 40,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const ScrollReveal(
-                delay: Duration(milliseconds: 200),
-                child: Center(
-                  child: Text(
-                    'Sign in to keep claiming keys',
-                    style: TextStyle(color: AppColors.textDim, fontSize: 14.5),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 44),
-              ScrollReveal(
-                delay: const Duration(milliseconds: 260),
-                child: DoubleBezel(
-                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      TextField(
-                        controller: email,
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                        autocorrect: false,
-                        autofillHints: const [AutofillHints.email],
-                        onChanged: (_) {
-                          if (emailErr != null || error.isNotEmpty) {
-                            setState(() {
-                              emailErr = null;
-                              error = '';
-                            });
-                          }
-                        },
-                        onSubmitted: (_) =>
-                            FocusScope.of(context).nextFocus(),
-                        decoration: InputDecoration(
-                          hintText: 'Email',
-                          prefixIcon: Icon(
-                            Icons.mail_outline,
-                            color: emailErr == null
-                                ? AppColors.textDim
-                                : AppColors.red,
-                          ),
-                          enabledBorder: emailErr == null
-                              ? null
-                              : OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: BorderSide(
-                                    color:
-                                        AppColors.red.withValues(alpha: 0.55),
-                                  ),
-                                ),
-                          focusedBorder: emailErr == null
-                              ? null
-                              : OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: const BorderSide(
-                                      color: AppColors.red, width: 1.6),
-                                ),
-                        ),
-                      ),
-                      _fieldError(emailErr),
-                      const SizedBox(height: 14),
-                      TextField(
-                        controller: password,
-                        obscureText: obscure,
-                        textInputAction: TextInputAction.done,
-                        keyboardType: TextInputType.visiblePassword,
-                        autofillHints: const [AutofillHints.password],
-                        onChanged: (_) {
-                          if (passErr != null || error.isNotEmpty) {
-                            setState(() {
-                              passErr = null;
-                              error = '';
-                            });
-                          }
-                        },
-                        onSubmitted: (_) => _submit(),
-                        decoration: InputDecoration(
-                          hintText: 'Password',
-                          prefixIcon: Icon(
-                            Icons.lock_outline,
-                            color: passErr == null
-                                ? AppColors.textDim
-                                : AppColors.red,
-                          ),
-                          suffixIcon: IconButton(
-                            icon: Icon(obscure
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined),
-                            onPressed: () =>
-                                setState(() => obscure = !obscure),
-                          ),
-                          enabledBorder: passErr == null
-                              ? null
-                              : OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: BorderSide(
-                                    color:
-                                        AppColors.red.withValues(alpha: 0.55),
-                                  ),
-                                ),
-                          focusedBorder: passErr == null
-                              ? null
-                              : OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: const BorderSide(
-                                      color: AppColors.red, width: 1.6),
-                                ),
-                        ),
-                      ),
-                      _fieldError(passErr),
-                      _errorBox(),
-                      const SizedBox(height: 24),
-                      IslandButton(
-                        label: 'Sign in',
-                        busy: busy,
-                        onPressed: _submit,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 22),
-              const ScrollReveal(
-                delay: Duration(milliseconds: 340),
-                child: Center(
-                  child: Text(
-                    'KEYS DELIVERED INSTANTLY',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 2.4,
-                      color: AppColors.textDim,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 30),
-              ScrollReveal(
-                delay: const Duration(milliseconds: 400),
-                child: Center(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        "Don't have an account? ",
-                        style:
-                            TextStyle(color: AppColors.textDim, fontSize: 14),
-                      ),
-                      TextButton(
-                        onPressed: widget.onGoToSignUp,
-                        child: const Text('Sign up'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+              onPressed: () => setState(() => obscure = !obscure),
+            ),
+          ),
+        ),
+        AuthErrorBox(message: error),
+        const SizedBox(height: AppSpace.xl),
+        AuthSubmit(label: 'Sign in', busy: busy, onPressed: _submit),
+        const SizedBox(height: AppSpace.md),
+        Center(
+          child: TextButton(
+            onPressed: widget.onGoToSignUp,
+            child: const Text('Create an account'),
           ),
         ),
       ],

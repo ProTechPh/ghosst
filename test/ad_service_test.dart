@@ -11,14 +11,12 @@ void main() {
       expect(AdUnits.prodRewardedInterstitial, isNotEmpty);
       expect(AdUnits.prodBanner, isNotEmpty);
       expect(AdUnits.prodInterstitial, isNotEmpty);
-      expect(AdUnits.prodAppOpen, isNotEmpty);
       expect(AdUnits.prodNative, isNotEmpty);
 
       expect(AdUnits.testRewarded, isNotEmpty);
       expect(AdUnits.testRewardedInterstitial, isNotEmpty);
       expect(AdUnits.testBanner, isNotEmpty);
       expect(AdUnits.testInterstitial, isNotEmpty);
-      expect(AdUnits.testAppOpen, isNotEmpty);
       expect(AdUnits.testNative, isNotEmpty);
 
       // Verify separation between test and prod
@@ -29,7 +27,6 @@ void main() {
       );
       expect(AdUnits.testBanner, isNot(equals(AdUnits.prodBanner)));
       expect(AdUnits.testInterstitial, isNot(equals(AdUnits.prodInterstitial)));
-      expect(AdUnits.testAppOpen, isNot(equals(AdUnits.prodAppOpen)));
       expect(AdUnits.testNative, isNot(equals(AdUnits.prodNative)));
     });
 
@@ -42,7 +39,6 @@ void main() {
       );
       expect(AdUnits.banner, equals(AdUnits.testBanner));
       expect(AdUnits.interstitial, equals(AdUnits.testInterstitial));
-      expect(AdUnits.appOpen, equals(AdUnits.testAppOpen));
       expect(AdUnits.native, equals(AdUnits.testNative));
 
       AdUnits.useTestAds = false;
@@ -53,7 +49,6 @@ void main() {
       );
       expect(AdUnits.banner, equals(AdUnits.prodBanner));
       expect(AdUnits.interstitial, equals(AdUnits.prodInterstitial));
-      expect(AdUnits.appOpen, equals(AdUnits.prodAppOpen));
       expect(AdUnits.native, equals(AdUnits.prodNative));
 
       // Reset
@@ -116,13 +111,11 @@ void main() {
       expect(service.ready, isFalse);
       expect(service.riReady, isFalse);
       expect(service.interReady, isFalse);
-      expect(service.appOpenReady, isFalse);
       expect(service.isShowingFullScreenAd, isFalse);
 
       expect(service.rewardedState, equals(AdState.idle));
       expect(service.riState, equals(AdState.idle));
       expect(service.interState, equals(AdState.idle));
-      expect(service.appOpenState, equals(AdState.idle));
     });
 
     test(

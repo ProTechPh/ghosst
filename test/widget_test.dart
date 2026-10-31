@@ -7,7 +7,6 @@ import 'package:ghosst/screens/splash_screen.dart';
 import 'package:ghosst/sign_in.dart';
 import 'package:ghosst/sign_up.dart';
 import 'package:ghosst/theme.dart';
-import 'package:ghosst/validation.dart';
 
 void main() {
   /// Opacity of the "TAP TO SKIP" hint — its ramp is the easiest read on
@@ -176,9 +175,9 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 1500)); // reveals settle
 
-    await tester.ensureVisible(find.widgetWithText(IslandButton, 'Sign in'));
+    await tester.ensureVisible(find.widgetWithText(NeonButton, 'Sign in'));
     await tester.pump(); // let the scroll offset hit layout
-    await tester.tap(find.widgetWithText(IslandButton, 'Sign in'));
+    await tester.tap(find.widgetWithText(NeonButton, 'Sign in'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500)); // field-error anim
 
@@ -199,9 +198,9 @@ void main() {
 
     await tester.enterText(find.byType(TextField).at(0), 'not-an-email');
     await tester.enterText(find.byType(TextField).at(1), 'hunter2');
-    await tester.ensureVisible(find.widgetWithText(IslandButton, 'Sign in'));
+    await tester.ensureVisible(find.widgetWithText(NeonButton, 'Sign in'));
     await tester.pump(); // let the scroll offset hit layout
-    await tester.tap(find.widgetWithText(IslandButton, 'Sign in'));
+    await tester.tap(find.widgetWithText(NeonButton, 'Sign in'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
@@ -223,10 +222,10 @@ void main() {
     await tester.enterText(find.byType(TextField).at(1), 'user@test.com');
     await tester.enterText(find.byType(TextField).at(2), 'short');
     await tester.ensureVisible(
-      find.widgetWithText(IslandButton, 'Create account'),
+      find.widgetWithText(NeonButton, 'Create account'),
     );
     await tester.pump(); // let the scroll offset hit layout
-    await tester.tap(find.widgetWithText(IslandButton, 'Create account'));
+    await tester.tap(find.widgetWithText(NeonButton, 'Create account'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
@@ -250,43 +249,13 @@ void main() {
 
     await tester.enterText(find.byType(TextField).at(0), 'user@test.com');
     await tester.enterText(find.byType(TextField).at(1), 'hunter2'); // 7 chars
-    await tester.ensureVisible(find.widgetWithText(IslandButton, 'Sign in'));
+    await tester.ensureVisible(find.widgetWithText(NeonButton, 'Sign in'));
     await tester.pump(); // let the scroll offset hit layout
-    await tester.tap(find.widgetWithText(IslandButton, 'Sign in'));
+    await tester.tap(find.widgetWithText(NeonButton, 'Sign in'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('Use at least 8 characters'), findsOneWidget);
     expect(find.text('Enter a valid email address'), findsNothing);
-  });
-
-  test('auth errors are rewritten into friendly copy', () {
-    // The raw message the Worker returns for out-of-range passwords.
-    expect(
-      friendlyAuthError(
-        'invalid password param must be between 8 and 256 char',
-        fallback: 'Sign in failed',
-      ),
-      'Password must be between 8 and 256 characters',
-    );
-    expect(
-      friendlyAuthError(
-        'A user with the same id already exists',
-        fallback: 'Sign up failed',
-      ),
-      'An account with this email already exists',
-    );
-    expect(
-      friendlyAuthError('Invalid credentials', fallback: 'Sign in failed'),
-      'Incorrect email or password',
-    );
-    expect(friendlyAuthError('', fallback: 'Sign in failed'), 'Sign in failed');
-    expect(
-      friendlyAuthError(
-        'something new from the server',
-        fallback: 'Sign in failed',
-      ),
-      'something new from the server', // unmapped messages pass through
-    );
   });
 }

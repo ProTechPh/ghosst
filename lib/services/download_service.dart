@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:path_provider/path_provider.dart';
 
 import 'mediafire.dart';
@@ -62,6 +63,7 @@ class DownloadService {
   static DownloadTask start({
     required String pageUrl,
     String? preferredName,
+    String? sha256,
     required void Function(DownloadProgress) onProgress,
     required void Function(File file) onDone,
     required void Function(Object error) onError,
@@ -69,6 +71,7 @@ class DownloadService {
     final task = DownloadTask._(
       pageUrl: pageUrl,
       preferredName: preferredName,
+      sha256: sha256,
       onProgress: onProgress,
       onDone: onDone,
       onError: onError,
@@ -102,6 +105,7 @@ class DownloadTask {
   DownloadTask._({
     required this.pageUrl,
     required this.preferredName,
+    required this.sha256,
     required this.onProgress,
     required this.onDone,
     required this.onError,
@@ -109,6 +113,10 @@ class DownloadTask {
 
   final String pageUrl;
   final String? preferredName;
+
+  /// Expected lowercase hex SHA-256 of the finished file. Null ⇒ unverified.
+  final String? sha256;
+
   final void Function(DownloadProgress) onProgress;
   final void Function(File file) onDone;
   final void Function(Object error) onError;
@@ -158,6 +166,10 @@ class DownloadTask {
       if (partial.existsSync()) partial.deleteSync();
 
       final out = partial.openWrite();
+      final digest = _DigestSink();
+      final hasher = sha256 == null
+          ? null
+          : crypto.sha256.startChunkedConversion(digest);
       var received = 0;
       var total = res.contentLength; // -1 when unknown
       if (total < 0) total = 0;
@@ -172,6 +184,7 @@ class DownloadTask {
           throw const DownloadException('Cancelled');
         }
         out.add(chunk);
+        hasher?.add(chunk);
         received += chunk.length;
         windowBytes += chunk.length;
         if (watch.elapsedMilliseconds >= 500) {
@@ -187,6 +200,18 @@ class DownloadTask {
       if (_cancelled) {
         if (partial.existsSync()) partial.deleteSync();
         throw const DownloadException('Cancelled');
+      }
+
+      // Verify before the rename: a mismatched file must never be offered for
+      // install or save.
+      if (sha256 != null) {
+        hasher?.close();
+        if (digest.value?.toString() != sha256!.toLowerCase()) {
+          throw const DownloadException(
+            'Download was tampered with — the file did not match its '
+            'checksum. Nothing was saved.',
+          );
+        }
       }
 
       final file = File(
@@ -217,4 +242,15 @@ class DownloadTask {
       label: label,
     ));
   }
+}
+
+/// Collects the single digest a chunked [crypto.Hash] conversion emits.
+class _DigestSink implements Sink<crypto.Digest> {
+  crypto.Digest? value;
+
+  @override
+  void add(crypto.Digest data) => value = data;
+
+  @override
+  void close() {}
 }

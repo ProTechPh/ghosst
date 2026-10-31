@@ -10,7 +10,7 @@ this file is the app-side setup.
 | Live API | `https://ghosst-api.ghosst.workers.dev/v1` |
 | Worker source | `cf-ghosst/src/` (TypeScript, `wrangler.toml`) |
 | Database | D1 `ghosst` = `c51682ac-01b9-4799-8638-cf0de063895a` (APAC) |
-| Schema | `cf-ghosst/migrations/0001_init.sql` |
+| Schema | `cf-ghosst/migrations/` (`0001_init`, `0002_reward_email_hash_and_file_sha256`) |
 | Cloudflare account | `951f13d0a78bf4d0a6b2594b936c6f45` |
 | Flutter client | `lib/api/` (Dio) + `lib/services/worker_backend.dart` |
 | Images | Cloudinary (unsigned upload preset `ghosst`) |
@@ -30,6 +30,7 @@ Apply it with:
 ```powershell
 cd cf-ghosst
 npx wrangler d1 execute ghosst --remote --file=migrations/0001_init.sql
+npx wrangler d1 execute ghosst --remote --file=migrations/0002_reward_email_hash_and_file_sha256.sql
 ```
 
 ## 2. Admin
@@ -60,7 +61,6 @@ Every unit ID lives in `lib/services/ad_service.dart` (`class AdUnits`).
 | Rewarded | coins (SSV) | Earn tab — "Watch ad & earn coins" |
 | Rewarded interstitial | coins (SSV) | Earn tab — "Instant ad & earn coins" |
 | Interstitial | revenue only | every other tab switch, ≥45 s cooldown |
-| App open | revenue only | once, right after the splash |
 | Banner | revenue only | strip above the bottom nav |
 | Native (medium) | revenue only | "Sponsored" card at the end of the Store |
 
@@ -84,6 +84,18 @@ App ID (already in the manifest): `ca-app-pub-7791552060229072~1855578469`.
    blocked while the control answers = gate (`lib/screens/adblock_screen.dart`,
    third gate in `main.dart`, re-checked on resume). Fails open when offline or
    inconclusive; Private DNS is shown as context, never a standalone trigger.
+5. **Coin-farm guards** (`cf-ghosst/src/lib/rewards.ts`, enforced in `ads.ts`
+   after the signature check, before the credit):
+   - `ad_unit` must sit under our publisher id `ca-app-pub-7791552060229072/`.
+     A callback signed for anyone else's ad unit is their ad, not ours.
+   - 40 paid rewards per account per rolling 24 h, minimum 15 s apart. The
+     30 s cooldown in the app is client-side and dies with an APK patch.
+   - One reward per `transaction_id`; callbacks without one are keyed by their
+     signed payload hash, so a replay cannot create a second credit.
+   - A single reward is capped at 1000 coins, so a wrong AdMob reward setting
+     cannot mint a balance.
+   Each rejection logs `SSV blocked: <reason>` — check `wrangler tail` before
+   assuming the callback URL is wrong.
 
 ## 4. Run & test
 
@@ -125,7 +137,7 @@ The API base URL can be pointed elsewhere with
 
 ## 5. Release checklist
 
-- [ ] Real AdMob app ID in the manifest, real unit IDs for **all six formats**
+- [ ] Real AdMob app ID in the manifest and real unit IDs for all five formats
       in `AdUnits`, and SSV enabled on **both rewarded units** pointing at
       `https://ghosst-api.ghosst.workers.dev/v1/ads/ssv`.
 - [ ] Worker deployed (`cd cf-ghosst && npx wrangler deploy`) and the schema
@@ -140,11 +152,12 @@ The API base URL can be pointed elsewhere with
       `x.y.z` by hand only when the feature version changes.
 - [ ] Use the right GitHub Release asset: `live-ads.aab` for production Play,
       `closed-beta-test-ads.aab` for closed testing, `release-live-ads.apk` /
-      `release-test-ads.apk` for sideload QA, `debug-test-ads.apk` for
-      development. Never promote a `test-ads` bundle to Production.
-- [ ] Upload `mapping.txt` from the matching release's `mapping.txt.gz` to Play
-      (App bundle explorer → version code → Upload deobfuscation file). R8 is
-      on for release builds.
+      `release-test-ads.apk` for sideload QA. Never promote a `test-ads` bundle
+      to Production. QA builds carry a `versionCode` 500 higher than the live
+      one, and CI refuses to publish if an AAB is missing its expected ad unit.
+- [ ] Upload `mapping.txt` from the run's **Actions artifact** (never the
+      release page — it is private on purpose) to Play (App bundle explorer →
+      version code → Upload deobfuscation file). R8 is on for release builds.
 
 ## 6. Troubleshooting
 
@@ -166,8 +179,11 @@ The API base URL can be pointed elsewhere with
 - Coins move **only** in the Worker: acquired via a signed AdMob SSV callback
   (ECDSA P-256 over the raw query string), spent via a guarded
   `UPDATE users SET coins = coins - ? WHERE coins >= ? RETURNING coins`.
-- Keys and MediaFire links are never readable by the client. `claims` and
-  `downloads/:id` hand out a link only to the user who owns that claim.
+- Keys stay server-side: only `GET /v1/claims` (owner-scoped) returns the key
+  text. Download links are different — the claim response and `downloads/:id`
+  hand the buyer the `downloadUrl` itself, and MediaFire keeps a copied link
+  valid, so deleting a claim does not revoke it. That is why APK/file products
+  are single-purchase.
 - Untrusted input is validated at the edge: JWT signature, 1 MB body cap,
   presign restricted to admins with a server-generated key prefix.
 - A modded client can only send requests faster; idempotency + the guarded

@@ -2,26 +2,9 @@
     xmlns:tools="http://schemas.android.com/tools">
     <!-- Play builds may save APKs to public Downloads, but cannot launch the
          package installer. REQUEST_INSTALL_PACKAGES and the installer query
-         exist only in src/direct, keeping this artifact policy-compliant. -->
+         exist only in src/direct, keeping this artifact policy-compliant.
+         Media/storage permissions are removed for both flavors in src/main. -->
     <uses-permission
         android:name="android.permission.REQUEST_INSTALL_PACKAGES"
-        tools:node="remove" />
-
-    <!-- Pulled in by open_filex (and file_picker) but never used here: every
-         file the app does open lives in its own external-files dir, which
-         open_filex opens via FileProvider with no storage permission. Dropping
-         them keeps Play's photo/video permission declaration out of the App
-         content form. The direct flavor keeps them. -->
-    <uses-permission
-        android:name="android.permission.READ_MEDIA_IMAGES"
-        tools:node="remove" />
-    <uses-permission
-        android:name="android.permission.READ_MEDIA_VIDEO"
-        tools:node="remove" />
-    <uses-permission
-        android:name="android.permission.READ_MEDIA_AUDIO"
-        tools:node="remove" />
-    <uses-permission
-        android:name="android.permission.READ_EXTERNAL_STORAGE"
         tools:node="remove" />
 </manifest>

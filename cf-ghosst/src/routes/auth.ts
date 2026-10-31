@@ -48,12 +48,22 @@ export async function register(ctx: Ctx): Promise<Response> {
   if (taken) throw new ApiError(409, "email_taken", "That email is already registered");
 
   const id = crypto.randomUUID();
-  await ctx.env.DB.prepare(
-    `INSERT INTO users (id, email, password_hash, display_name, created_at)
-     VALUES (?1, ?2, ?3, ?4, ?5)`,
-  )
-    .bind(id, email, await hashPassword(password), displayName, new Date().toISOString())
-    .run();
+  try {
+    await ctx.env.DB.prepare(
+      `INSERT INTO users (id, email, password_hash, display_name, created_at)
+       VALUES (?1, ?2, ?3, ?4, ?5)`,
+    )
+      .bind(id, email, await hashPassword(password), displayName, new Date().toISOString())
+      .run();
+  } catch (err) {
+    // Two simultaneous registers both pass the SELECT; the loser hits
+    // ux_users_email. That 409 still enumerates emails — there is no
+    // verification step in this app yet, so it leaks nothing new.
+    if (/unique|constraint/i.test(String((err as Error)?.message ?? err))) {
+      throw new ApiError(409, "email_taken", "That email is already registered");
+    }
+    throw err;
+  }
 
   return issueSession(ctx, { id, email, coins: 0, is_admin: 0 });
 }

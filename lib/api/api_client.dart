@@ -122,7 +122,10 @@ class _AuthInterceptor extends QueuedInterceptor {
   final Dio _refreshDio;
   final SessionStore _session;
   final void Function() _onSignedOut;
-  Future<bool>? _refreshInFlight;
+
+  /// Single-flight result: `true` = new tokens, `false` = the refresh token
+  /// itself was rejected (dead login), `null` = retryable failure.
+  Future<bool?>? _refreshInFlight;
 
   @override
   Future<void> onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
@@ -142,7 +145,21 @@ class _AuthInterceptor extends QueuedInterceptor {
       return handler.next(err);
     }
 
-    if (!await _refreshOnce()) {
+    final refreshed = await _refreshOnce();
+    if (refreshed == null) {
+      // Timeout / offline / 5xx: the tokens may still be good. Wiping them
+      // would cost the user a password re-entry over one bad signal drop, so
+      // report a retryable network failure instead of a dead login.
+      return handler.reject(
+        DioException(
+          requestOptions: options,
+          type: DioExceptionType.connectionError,
+          error: err.error,
+          message: 'Could not refresh the session — will retry',
+        ),
+      );
+    }
+    if (!refreshed) {
       await _session.clear();
       _onSignedOut();
       return handler.next(err);
@@ -159,25 +176,33 @@ class _AuthInterceptor extends QueuedInterceptor {
 
   /// Single-flight: 6 parallel 401s must trigger exactly ONE refresh, or the
   /// rotated tokens invalidate each other.
-  Future<bool> _refreshOnce() {
+  Future<bool?> _refreshOnce() {
     final pending = _refreshInFlight;
     if (pending != null) return pending;
 
-    final future = _doRefresh().catchError((Object _) => false);
+    final future = _doRefresh().catchError((Object _) => null);
     _refreshInFlight = future;
     return future.whenComplete(() {
       _refreshInFlight = null;
     });
   }
 
-  Future<bool> _doRefresh() async {
+  Future<bool?> _doRefresh() async {
     final refresh = await _session.refreshToken();
     if (refresh == null || refresh.isEmpty) return false;
 
-    final res = await _refreshDio.post<dynamic>(
-      '/auth/refresh',
-      data: {'refreshToken': refresh},
-    );
+    final Response<dynamic> res;
+    try {
+      res = await _refreshDio.post<dynamic>(
+        '/auth/refresh',
+        data: {'refreshToken': refresh},
+      );
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      // Only an explicit rejection means the login is dead; everything else
+      // (timeout, no network, 5xx) is worth retrying with the same token.
+      return status == 401 || status == 403 ? false : null;
+    }
 
     final body = res.data is Map<String, dynamic> ? res.data as Map<String, dynamic> : null;
     final access = body?['accessToken'] as String?;

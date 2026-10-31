@@ -42,6 +42,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   List<Claim> _claims = [];
   bool _loading = true;
 
+  /// Set when the coin balance could not be read; [_coins] keeps the last
+  /// known value instead of dropping to 0.
+  String _coinsError = '';
+
   @override
   void initState() {
     super.initState();
@@ -49,16 +53,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _load() async {
+    var coins = _coins;
+    var coinsError = '';
+    try {
+      coins = await Backend.coins();
+    } catch (e) {
+      coinsError = '$e';
+    }
     final results = await Future.wait<Object?>([
       Backend.currentUser().catchError((_) => null),
-      Backend.coins().catchError((_) => 0),
       Backend.myClaims().catchError((_) => <Claim>[]),
     ]);
     if (!mounted) return;
     setState(() {
       _user = results[0] as AppUser?;
-      _coins = results[1] as int;
-      _claims = results[2] as List<Claim>;
+      _coins = coins;
+      _coinsError = coinsError;
+      _claims = results[1] as List<Claim>;
       _loading = false;
     });
   }
@@ -80,36 +91,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return n.isEmpty ? 'G' : n[0].toUpperCase();
   }
 
-  String get _since {
-    final created = _user?.createdAt ?? '';
-    return created.length >= 10 ? created.substring(0, 10) : '';
-  }
-
   /// Distinct apps/files purchased — download claims grouped by product.
   int get _appsOwned =>
       _claims.where((c) => c.isDownload).map((c) => c.productId).toSet().length;
-
-  static const _tiers = [
-    (name: 'Newcomer', color: AppColors.textDim, min: 0),
-    (name: 'Key Hunter', color: AppColors.cyan, min: 1),
-    (name: 'Collector', color: AppColors.primary, min: 3),
-    (name: 'Vault Master', color: AppColors.gold, min: 6),
-  ];
-
-  int get _tierIndex {
-    var idx = 0;
-    for (var i = 0; i < _tiers.length; i++) {
-      if (_claims.length >= _tiers[i].min) idx = i;
-    }
-    return idx;
-  }
-
-  double get _tierProgress {
-    if (_tierIndex >= _tiers.length - 1) return 1;
-    final current = _tiers[_tierIndex].min;
-    final next = _tiers[_tierIndex + 1].min;
-    return ((_claims.length - current) / (next - current)).clamp(0.0, 1.0);
-  }
 
   Future<void> _signOut() async {
     Navigator.of(context).pop();
@@ -263,374 +247,103 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
-    final tier = _tiers[_tierIndex];
-    final nextTier = _tierIndex < _tiers.length - 1
-        ? _tiers[_tierIndex + 1]
-        : null;
-
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(titleSpacing: 20, title: const Text('Profile')),
+      appBar: AppBar(
+        toolbarHeight: 56,
+        titleSpacing: AppSpace.lg,
+        title: const Text('Profile', style: AppText.title),
+      ),
       body: Stack(
         children: [
           const MeshBackground(),
           SafeArea(
             top: false,
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.lg + 2,
+                AppSpace.md,
+                AppSpace.lg + 2,
+                AppSpace.huge,
+              ),
               children: [
-                // ---- editorial header ------------------------------------
+                if (_coinsError.isNotEmpty) ...[
+                  _coinsBanner(),
+                  const SizedBox(height: AppSpace.lg),
+                ],
+                ScrollReveal(child: _header()),
+                const SizedBox(height: AppSpace.xl),
                 ScrollReveal(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: kNeonGradient,
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primary.withValues(alpha: 0.35),
-                              blurRadius: 36,
-                              spreadRadius: -6,
-                            ),
-                          ],
-                        ),
-                        child: Container(
-                          width: 78,
-                          height: 78,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: AppColors.surface,
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            _initial,
-                            style: const TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.text,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 18),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 6),
-                            Text(
-                              _name,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 27,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.text,
-                                height: 1.15,
-                              ),
-                            ),
-                            if (_email.isNotEmpty) ...[
-                              const SizedBox(height: 5),
-                              Text(
-                                _email,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 13.5,
-                                  color: AppColors.textDim,
-                                ),
-                              ),
-                            ],
-                            if (_since.isNotEmpty) ...[
-                              const SizedBox(height: 12),
-                              Eyebrow(text: 'Since $_since'),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                  delay: const Duration(milliseconds: 100),
+                  child: _stats(),
                 ),
-                const SizedBox(height: 26),
+                const SizedBox(height: AppSpace.xxl),
 
-                // ---- asymmetric stats ------------------------------------
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final narrow = constraints.maxWidth < 340;
-                    final keysCard = ScrollReveal(
-                      delay: const Duration(milliseconds: 120),
-                      child: _statCard(
-                        label: 'KEYS OWNED',
-                        value: '${_claims.length}',
-                        color: AppColors.primary,
-                        icon: Icons.key_outlined,
-                      ),
-                    );
-                    final column = Column(
-                      children: [
-                        ScrollReveal(
-                          delay: const Duration(milliseconds: 200),
-                          child: _statCard(
-                            label: 'COINS',
-                            value: '$_coins',
-                            color: AppColors.gold,
-                            icon: Icons.monetization_on_outlined,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        ScrollReveal(
-                          delay: const Duration(milliseconds: 280),
-                          child: _statCard(
-                            label: 'SPENT',
-                            value: '$_spent',
-                            color: AppColors.red,
-                            icon: Icons.trending_down_outlined,
-                          ),
-                        ),
-                      ],
-                    );
-                    if (narrow) {
-                      return Column(
-                        children: [
-                          keysCard,
-                          const SizedBox(height: 12),
-                          column,
-                        ],
-                      );
-                    }
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(flex: 12, child: keysCard),
-                        const SizedBox(width: 12),
-                        Expanded(flex: 10, child: column),
-                      ],
-                    );
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // ---- collection tier -------------------------------------
-                ScrollReveal(
-                  delay: const Duration(milliseconds: 200),
-                  child: DoubleBezel(
-                    padding: const EdgeInsets.all(20),
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFF0E2229), Color(0xFF07161B)],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 42,
-                              height: 42,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: tier.color.withValues(alpha: 0.12),
-                                border: Border.all(
-                                  color: tier.color.withValues(alpha: 0.35),
-                                ),
-                              ),
-                              child: Icon(
-                                Icons.workspace_premium_outlined,
-                                size: 20,
-                                color: tier.color,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'COLLECTION TIER',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 2.2,
-                                      color: AppColors.textDim,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 5),
-                                  Text(
-                                    tier.name,
-                                    style: TextStyle(
-                                      fontSize: 19,
-                                      fontWeight: FontWeight.w700,
-                                      color: tier.color,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 18),
-                        TweenAnimationBuilder<double>(
-                          tween: Tween(begin: 0, end: _tierProgress),
-                          duration: const Duration(milliseconds: 1100),
-                          curve: kPremiumCurve,
-                          builder: (context, value, _) => ClipRRect(
-                            borderRadius: BorderRadius.circular(99),
-                            child: Stack(
-                              children: [
-                                Container(
-                                  height: 6,
-                                  color: Colors.white.withValues(alpha: 0.07),
-                                ),
-                                FractionallySizedBox(
-                                  widthFactor: value,
-                                  child: Container(
-                                    height: 6,
-                                    decoration: BoxDecoration(
-                                      gradient: kNeonGradient,
-                                      borderRadius: BorderRadius.circular(99),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          nextTier == null
-                              ? 'Top tier reached · ${_claims.length} keys collected'
-                              : '${nextTier.min - _claims.length} more '
-                                    'key${nextTier.min - _claims.length == 1 ? '' : 's'} '
-                                    'to ${nextTier.name}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textDim,
-                          ),
-                        ),
-                      ],
-                    ),
+                const SectionHeader(title: 'Account'),
+                const SizedBox(height: AppSpace.sm),
+                _group([
+                  _row(
+                    icon: Icons.account_balance_wallet_outlined,
+                    label: 'Wallet',
+                    hint: '${groupDigits(_coins)} coins',
+                    onTap: _openWallet,
                   ),
-                ),
-                const SizedBox(height: 26),
-
-                // ---- menu rows -------------------------------------------
-                const ScrollReveal(
-                  delay: Duration(milliseconds: 120),
-                  child: SectionLabel('ACCOUNT'),
-                ),
-                const SizedBox(height: 14),
-                ScrollReveal(
-                  delay: const Duration(milliseconds: 180),
-                  child: DoubleBezel(
-                    radius: 24,
-                    outerPadding: const EdgeInsets.all(5),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 6,
-                    ),
-                    child: Column(
-                      children: [
-                        _menuRow(
-                          icon: Icons.account_balance_wallet_outlined,
-                          color: AppColors.gold,
-                          label: 'Wallet',
-                          hint: '$_coins coins',
-                          onTap: _openWallet,
-                        ),
-                        Divider(
-                          height: 1,
-                          color: Colors.white.withValues(alpha: 0.06),
-                        ),
-                        _menuRow(
-                          icon: Icons.shopping_bag_outlined,
-                          color: AppColors.primary,
-                          label: 'My Purchases',
-                          hint: '${_claims.length} purchased',
-                          onTap: () => widget.onGoToTab(2),
-                        ),
-                        Divider(
-                          height: 1,
-                          color: Colors.white.withValues(alpha: 0.06),
-                        ),
-                        if (Distribution.showsDownloadStore) ...[
-                          _menuRow(
-                            icon: Icons.phone_iphone_rounded,
-                            color: AppColors.green,
-                            label: 'App Owned',
-                            hint: '$_appsOwned claimed',
-                            onTap: _openAppOwned,
-                          ),
-                          Divider(
-                            height: 1,
-                            color: Colors.white.withValues(alpha: 0.06),
-                          ),
-                        ],
-                        _menuRow(
-                          icon: Icons.privacy_tip_outlined,
-                          color: AppColors.cyan,
-                          label: 'Privacy choices',
-                          onTap: _privacyChoices,
-                        ),
-                        Divider(
-                          height: 1,
-                          color: Colors.white.withValues(alpha: 0.06),
-                        ),
-                        _menuRow(
-                          icon: Icons.star_outline_rounded,
-                          color: AppColors.gold,
-                          label: 'Rate us on Play Store',
-                          onTap: PlayStore.rate,
-                        ),
-                        Divider(
-                          height: 1,
-                          color: Colors.white.withValues(alpha: 0.06),
-                        ),
-                        _menuRow(
-                          icon: Icons.system_update_alt_rounded,
-                          color: AppColors.cyan,
-                          label: 'Check for updates',
-                          onTap: _checkForUpdate,
-                        ),
-                        Divider(
-                          height: 1,
-                          color: Colors.white.withValues(alpha: 0.06),
-                        ),
-                        _menuRow(
-                          icon: Icons.policy_outlined,
-                          color: AppColors.primary,
-                          label: 'Privacy policy',
-                          onTap: _openPrivacyPolicy,
-                        ),
-                        Divider(
-                          height: 1,
-                          color: Colors.white.withValues(alpha: 0.06),
-                        ),
-                        _menuRow(
-                          icon: Icons.logout_rounded,
-                          color: AppColors.red,
-                          label: 'Sign out',
-                          onTap: _signOut,
-                        ),
-                        Divider(
-                          height: 1,
-                          color: Colors.white.withValues(alpha: 0.06),
-                        ),
-                        _menuRow(
-                          icon: Icons.delete_forever_outlined,
-                          color: AppColors.red,
-                          label: 'Delete account',
-                          hint: 'Permanent',
-                          onTap: _deleteAccount,
-                        ),
-                      ],
-                    ),
+                  _row(
+                    icon: Icons.shopping_bag_outlined,
+                    label: 'My Purchases',
+                    hint: '${groupDigits(_claims.length)} claimed',
+                    onTap: () => widget.onGoToTab(2),
                   ),
-                ),
-                const SizedBox(height: 26),
+                  if (Distribution.showsDownloadStore)
+                    _row(
+                      icon: Icons.phone_iphone_rounded,
+                      label: 'App Owned',
+                      hint: '${groupDigits(_appsOwned)} claimed',
+                      onTap: _openAppOwned,
+                    ),
+                  _row(
+                    icon: Icons.logout_rounded,
+                    label: 'Sign out',
+                    onTap: _signOut,
+                  ),
+                ]),
+                const SizedBox(height: AppSpace.xl),
+
+                const SectionHeader(title: 'App'),
+                const SizedBox(height: AppSpace.sm),
+                _group([
+                  _row(
+                    icon: Icons.privacy_tip_outlined,
+                    label: 'Privacy choices',
+                    onTap: _privacyChoices,
+                  ),
+                  _row(
+                    icon: Icons.star_outline_rounded,
+                    label: 'Rate us on Play Store',
+                    onTap: PlayStore.rate,
+                  ),
+                  _row(
+                    icon: Icons.system_update_alt_rounded,
+                    label: 'Check for updates',
+                    onTap: _checkForUpdate,
+                  ),
+                ]),
+                const SizedBox(height: AppSpace.xl),
+
+                const SectionHeader(title: 'Legal'),
+                const SizedBox(height: AppSpace.sm),
+                _group([
+                  _row(
+                    icon: Icons.policy_outlined,
+                    label: 'Privacy policy',
+                    onTap: _openPrivacyPolicy,
+                  ),
+                ]),
+                const SizedBox(height: AppSpace.xxl),
+
+                // Destructive, kept apart from every other row.
+                _deleteBlock(),
+                const SizedBox(height: AppSpace.xl),
                 Center(
                   child: FutureBuilder<PackageInfo>(
                     future: PackageInfo.fromPlatform(),
@@ -640,10 +353,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         info == null
                             ? 'GHOSST'
                             : 'GHOSST · v${info.version}+${info.buildNumber}',
-                        style: const TextStyle(
+                        style: AppText.label.copyWith(
                           fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 2.4,
                           color: AppColors.textDim,
                         ),
                       );
@@ -658,53 +369,129 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _statCard({
-    required String label,
-    required String value,
-    required Color color,
-    required IconData icon,
-  }) {
-    return DoubleBezel(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _coinsBanner() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.lg,
+        AppSpace.md - 2,
+        AppSpace.sm,
+        AppSpace.md - 2,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.red.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppRadius.input),
+        border: Border.all(color: AppColors.red.withValues(alpha: 0.30)),
+      ),
+      child: Row(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 2.2,
-                    color: AppColors.textDim,
-                  ),
-                ),
-              ),
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: color.withValues(alpha: 0.10),
-                  border: Border.all(color: color.withValues(alpha: 0.30)),
-                ),
-                child: Icon(icon, size: 16, color: color),
+          Expanded(
+            child: Text(
+              'Coins may be out of date. $_coinsError',
+              style: AppText.caption.copyWith(color: AppColors.red),
+            ),
+          ),
+          TextButton(onPressed: _load, child: const Text('Retry')),
+        ],
+      ),
+    );
+  }
+
+  Widget _header() {
+    return Row(
+      children: [
+        Container(
+          width: 72,
+          height: 72,
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            gradient: kNeonGradient,
+            // Squircle, not a circle — it belongs to the same radius family
+            // as the cards around it.
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.30),
+                blurRadius: 30,
+                spreadRadius: -8,
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w700,
-              color: color,
-              height: 1.1,
+          child: Container(
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(AppRadius.card - 2),
+            ),
+            child: Text(
+              _initial,
+              style: AppText.headline.copyWith(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ),
+        const SizedBox(width: AppSpace.lg),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: AppText.title.copyWith(fontSize: 22),
+              ),
+              if (_email.isNotEmpty) ...[
+                const SizedBox(height: AppSpace.xs),
+                Text(
+                  _email,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.caption,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _stats() {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.lg,
+        vertical: AppSpace.lg,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: StatCell(
+              label: 'Coins',
+              value: groupDigits(_coins),
+              icon: Icons.monetization_on_rounded,
+              color: AppColors.gold,
+            ),
+          ),
+          _statDivider(),
+          Expanded(
+            child: StatCell(
+              label: 'Keys',
+              value: groupDigits(_claims.length),
+              icon: Icons.key_rounded,
+              color: AppColors.primary,
+            ),
+          ),
+          _statDivider(),
+          Expanded(
+            child: StatCell(
+              label: 'Spent',
+              value: groupDigits(_spent),
+              icon: Icons.trending_down_rounded,
+              color: AppColors.textDim,
             ),
           ),
         ],
@@ -712,57 +499,133 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _menuRow({
+  Widget _statDivider() {
+    return Container(
+      width: 1,
+      height: 34,
+      margin: const EdgeInsets.symmetric(horizontal: AppSpace.md),
+      color: AppColors.border,
+    );
+  }
+
+  /// Grouped settings: one surface, hairline separators between rows.
+  Widget _group(List<Widget> rows) {
+    final children = <Widget>[];
+    for (var i = 0; i < rows.length; i++) {
+      if (i > 0) {
+        children.add(
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: Colors.white.withValues(alpha: 0.06),
+          ),
+        );
+      }
+      children.add(rows[i]);
+    }
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(children: children),
+    );
+  }
+
+  Widget _row({
     required IconData icon,
-    required Color color,
     required String label,
     String? hint,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: color.withValues(alpha: 0.10),
-                border: Border.all(color: color.withValues(alpha: 0.28)),
-              ),
-              child: Icon(icon, size: 17, color: color),
-            ),
-            const SizedBox(width: 13),
-            Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.text,
-                ),
-              ),
-            ),
-            if (hint != null)
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpace.lg,
+            vertical: AppSpace.md + 2,
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 20, color: AppColors.textDim),
+              const SizedBox(width: AppSpace.md + 2),
+              Expanded(
                 child: Text(
-                  hint,
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    color: AppColors.textDim,
+                  label,
+                  style: AppText.subtitle.copyWith(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
-            Icon(
-              CupertinoIcons.chevron_right,
-              size: 15,
-              color: AppColors.textDim.withValues(alpha: 0.7),
+              if (hint != null) Text(hint, style: AppText.caption),
+              const SizedBox(width: AppSpace.sm),
+              Icon(
+                CupertinoIcons.chevron_right,
+                size: 14,
+                color: AppColors.textDim.withValues(alpha: 0.7),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _deleteBlock() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.red.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.red.withValues(alpha: 0.30)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: _deleteAccount,
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpace.lg),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.delete_forever_outlined,
+                  size: 20,
+                  color: AppColors.red,
+                ),
+                const SizedBox(width: AppSpace.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Delete account',
+                        style: AppText.subtitle.copyWith(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.red,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpace.xs),
+                      Text(
+                        'Permanently erases your coins, keys and history.',
+                        style: AppText.caption,
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  CupertinoIcons.chevron_right,
+                  size: 14,
+                  color: AppColors.red.withValues(alpha: 0.7),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

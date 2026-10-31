@@ -1,8 +1,17 @@
 import type { Ctx } from "../index";
+import { sha256Hex } from "../lib/auth";
+import {
+  contentId,
+  isOurRewardedUnit,
+  rewardVerdict,
+  DEFAULT_LIMITS,
+} from "../lib/rewards";
 
 const KEY_SERVER = "https://gstatic.com/admob/reward/verifier-keys.json";
 const KEY_TTL_MS = 6 * 60 * 60 * 1000;
 const MAX_AGE_MS = 48 * 60 * 60 * 1000;
+/** Ceiling on a single callback, so one bad AdMob setting cannot mint. */
+const MAX_REWARD = 1000;
 
 type VerifierKey = { keyId: string; key: CryptoKey };
 let cache: { at: number; keys: VerifierKey[] } | null = null;
@@ -139,22 +148,70 @@ export async function ssv(ctx: Ctx): Promise<Response> {
     if (Number.isFinite(t) && t > 0 && Date.now() - t > MAX_AGE_MS) return ok();
   }
 
+  // Our inventory only. A callback signed for a stranger's ad unit means they
+  // pointed their own AdMob account at this Worker — Google vouches for the
+  // signature, not for who earned the impression.
+  const adUnit = params.get("ad_unit") ?? "";
+  if (!isOurRewardedUnit(adUnit)) {
+    console.warn(`[${ctx.requestId}] SSV blocked: foreign ad_unit ${adUnit} user=${uid}`);
+    return ok();
+  }
+
   let amount = parseInt(params.get("reward_amount") ?? "", 10);
   if (!Number.isFinite(amount) || amount <= 0) {
     amount = parseInt(ctx.env.COINS_PER_REWARD ?? "10", 10) || 10;
   }
+  if (amount > MAX_REWARD) amount = MAX_REWARD;
 
-  const txId = params.get("transaction_id") ?? `${uid}-${timestamp || Date.now()}`;
+  // Google always sends transaction_id; hash the signed payload when it does
+  // not, so a replay still lands on the same primary key instead of a new one.
+  const txId = params.get("transaction_id") || (await contentId(content));
+  const now = new Date();
+
+  // Pacing identity: the email hash survives account deletion (see
+  // account.remove), so a delete + re-register cannot restart the daily budget.
+  const account = await ctx.env.DB.prepare(`SELECT email FROM users WHERE id = ?1`)
+    .bind(uid)
+    .first<{ email: string }>();
+  const emailHash = account?.email ? await sha256Hex(account.email.trim().toLowerCase()) : null;
 
   // Dedupe first: the primary key IS the transaction id.
   const fresh = await ctx.env.DB.prepare(
-    `INSERT INTO ad_rewards (id, user_id, reward, ad_unit, event_time, created_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT DO NOTHING RETURNING id`,
+    `INSERT INTO ad_rewards (id, user_id, reward, ad_unit, event_time, created_at, email_hash)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT DO NOTHING RETURNING id`,
   )
-    .bind(txId, uid, amount, params.get("ad_unit") ?? "", timestamp, new Date().toISOString())
+    .bind(txId, uid, amount, adUnit, timestamp, now.toISOString(), emailHash)
     .first<{ id: string }>();
 
   if (!fresh) return ok(); // duplicate callback — already credited
+
+  // Pace per account, enforced server-side: the cooldown in the app lives in
+  // a file the farmer can patch. The row just inserted counts itself, so the
+  // insert (serialised by its primary key) is what decides a race.
+  const windowStart = new Date(now.getTime() - DEFAULT_LIMITS.windowMs).toISOString();
+  const state = await ctx.env.DB.prepare(
+    `SELECT COUNT(*) AS n, MAX(CASE WHEN id <> ?2 THEN created_at END) AS last
+       FROM ad_rewards
+      WHERE created_at >= ?3
+        AND ((?4 IS NOT NULL AND email_hash = ?4)
+             OR (email_hash IS NULL AND user_id = ?1))`,
+  )
+    .bind(uid, txId, windowStart, emailHash)
+    .first<{ n: number; last: string | null }>();
+
+  const verdict = rewardVerdict(
+    { count: state?.n ?? 0, lastAt: state?.last ?? null },
+    now,
+  );
+  if (!verdict.ok) {
+    // Drop the ledger row: nothing was paid, so it must not count against the
+    // cap or appear in the wallet history. Google already got its 200.
+    await ctx.env.DB.prepare(`DELETE FROM ad_rewards WHERE id = ?1`).bind(txId).run();
+    console.warn(
+      `[${ctx.requestId}] SSV blocked: ${verdict.reason} user=${uid} ad_unit=${adUnit}`,
+    );
+    return ok();
+  }
 
   try {
     const credited = await ctx.env.DB.prepare(

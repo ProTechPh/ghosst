@@ -28,8 +28,9 @@ The Worker is deployed by hand from `cf-ghosst/`:
 ```powershell
 cd cf-ghosst
 npm run typecheck                       # tsc --noEmit
-npm test                                # node --test (pure helpers)
+npm test                                # node --test (helpers + D1 shim)
 npx wrangler d1 execute ghosst --remote --file=migrations/0001_init.sql
+npx wrangler d1 execute ghosst --remote --file=migrations/0002_reward_email_hash_and_file_sha256.sql
 npx wrangler deploy
 npx wrangler tail ghosst-api            # live logs — the SSV debugger
 ```
@@ -57,6 +58,9 @@ through `wrangler secret put`; never into `wrangler.toml`.
   r2, idempotency, cloudinary).
 - `cf-ghosst/migrations/` — D1 schema. `cf-ghosst/test/` — `node --test` units.
 - `docs/*.html` — Play-required privacy policy / account-deletion pages.
+  `DELETE /v1/account` deletes claims/rewards/idempotency and **anonymises** the
+  user row (email, display name, password hash blanked) so the tombstone id
+  survives without the PII. Keep it that way — the page promises real deletion.
 - `tool/generate_brand_images.ps1` — regenerates launcher and splash PNGs from
   `assets/images/logo.jpg`.
 
@@ -71,6 +75,10 @@ through `wrangler secret put`; never into `wrangler.toml`.
 - Both rewarded units must keep their AdMob **server-side verification** URL
   pointed at `/v1/ads/ssv`. If coins never land, `wrangler tail ghosst-api`: no
   request at all means the URL in AdMob is wrong, and the code cannot fix that.
+  The handler also rejects foreign ad units and paces rewards by a keyed hash
+  of the account email (`cf-ghosst/src/lib/rewards.ts`), so deleting and
+  re-registering the same address does not reset the daily cap; a logged
+  `SSV blocked:` is that guard, not the URL.
 - Coins/stock are mutated only inside the Worker. A claim deducts with a guarded
   `UPDATE ... WHERE coins >= ? RETURNING` then picks the oldest available key,
   refunding if stock ran out. `POST /v1/claims` requires an `Idempotency-Key`

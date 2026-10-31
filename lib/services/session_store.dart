@@ -26,9 +26,4 @@ class SessionStore {
     await _storage.delete(key: _kAccess);
     await _storage.delete(key: _kRefresh);
   }
-
-  Future<bool> get isSignedIn async {
-    final token = await refreshToken();
-    return token != null && token.isNotEmpty;
-  }
 }
