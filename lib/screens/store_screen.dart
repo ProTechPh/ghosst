@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import '../premium.dart';
+import '../arcade.dart';
 import '../services/ad_service.dart';
 import '../services/worker_backend.dart';
 import '../services/distribution.dart';
@@ -671,11 +672,6 @@ class _StoreScreenState extends State<StoreScreen> {
     );
   }
 
-  /// Lowest selectable price (duration products advertise their entry tier).
-  int _entryCost(Product p) => p.hasDurations
-      ? p.durations.map((d) => d.cost).reduce((a, b) => a < b ? a : b)
-      : p.cost;
-
   // ---- featured hero panel --------------------------------------------
   Widget _featuredCard(Product p) {
     final count = _stockOf(p);
@@ -684,10 +680,11 @@ class _StoreScreenState extends State<StoreScreen> {
     final desc = p.description.trim();
 
     return Pressable(
-      scale: 0.99,
+      scale: 1.01,
       onTap: soldOut ? null : () => _openDetail(p),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppRadius.hero),
+      child: CardFrame(
+        radius: AppRadius.hero,
+        tier: tierForCost(entryCost(p)),
         child: SizedBox(
           height: 286,
           child: Stack(
@@ -712,6 +709,12 @@ class _StoreScreenState extends State<StoreScreen> {
               ),
               if (soldOut)
                 ColoredBox(color: AppColors.bg.withValues(alpha: 0.45)),
+              Positioned(
+                top: AppSpace.md,
+                left: AppSpace.md,
+                right: AppSpace.md,
+                child: CardIndex(cost: entryCost(p), type: cardType(p)),
+              ),
               Positioned(
                 left: AppSpace.lg,
                 right: AppSpace.lg,
@@ -755,11 +758,22 @@ class _StoreScreenState extends State<StoreScreen> {
                             Text('from', style: AppText.caption),
                             const SizedBox(width: AppSpace.xs + 2),
                           ],
-                          _priceTag(_entryCost(p), size: 17),
+                          _priceTag(entryCost(p), size: 17),
                           const SizedBox(width: AppSpace.xs + 2),
                           Text('coins', style: AppText.caption),
                         ],
                         const Spacer(),
+                        if (!isOwned && !soldOut) ...[
+                          Text(
+                            count >= 0 ? '$count left' : 'Fresh drop',
+                            style: AppText.label.copyWith(
+                              fontSize: 10,
+                              letterSpacing: 1.6,
+                              color: AppColors.textDim,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpace.sm),
+                        ],
                         Container(
                           width: 38,
                           height: 38,
@@ -886,7 +900,7 @@ class _StoreScreenState extends State<StoreScreen> {
                         Text('from', style: AppText.caption),
                         const SizedBox(width: AppSpace.xs),
                       ],
-                      _priceTag(_entryCost(p)),
+                      _priceTag(entryCost(p)),
                     ],
                   ),
                 if (!isOwned && !soldOut && count > 0) ...[
