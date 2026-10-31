@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../arcade.dart';
 import '../premium.dart';
 import '../services/ad_service.dart';
 import '../services/worker_backend.dart';
@@ -257,6 +258,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: Stack(
         children: [
           const MeshBackground(),
+          const Positioned.fill(
+            child: IgnorePointer(child: TableSurface()),
+          ),
           SafeArea(
             top: false,
             child: ListView(
@@ -271,7 +275,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _coinsBanner(),
                   const SizedBox(height: AppSpace.lg),
                 ],
-                ScrollReveal(child: _header()),
+                ScrollReveal(
+                  child: CardFrame(
+                    tier: RarityTier.standard,
+                    radius: AppRadius.hero,
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpace.lg),
+                      child: _header(),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: AppSpace.xl),
                 ScrollReveal(
                   delay: const Duration(milliseconds: 100),

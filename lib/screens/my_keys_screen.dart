@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../arcade.dart';
 import '../premium.dart';
 import '../services/worker_backend.dart';
 import '../services/distribution.dart';
@@ -285,42 +286,51 @@ class _MyKeysScreenState extends State<MyKeysScreen> {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(
-          AppSpace.lg,
-          AppSpace.md,
-          AppSpace.lg,
-          AppSpace.huge,
+    return Stack(
+      children: [
+        const Positioned.fill(
+          child: IgnorePointer(child: TableSurface()),
         ),
-        children: [
-          const Text('My purchases', style: AppText.headline),
-          const SizedBox(height: AppSpace.xs + 2),
-          Text(
-            '${claims.length} purchase(s) in your collection',
-            style: AppText.caption,
+        RefreshIndicator(
+          onRefresh: _load,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpace.lg,
+              AppSpace.md,
+              AppSpace.lg,
+              AppSpace.huge,
+            ),
+            children: [
+              const Eyebrow(text: 'Collection'),
+              const SizedBox(height: AppSpace.sm),
+              const Text('My purchases', style: AppText.headline),
+              const SizedBox(height: AppSpace.xs + 2),
+              Text(
+                '${claims.length} purchase(s) in your collection',
+                style: AppText.caption,
+              ),
+              const SizedBox(height: AppSpace.xl),
+              if (claims.isEmpty)
+                EmptyState(
+                  icon: Icons.shopping_bag_outlined,
+                  title: 'No purchases yet',
+                  message:
+                      'Watch ads to earn coins, then claim your first key or app in the Store.',
+                  action: widget.onGoToStore == null
+                      ? null
+                      : NeonButton(
+                          dense: true,
+                          onPressed: widget.onGoToStore,
+                          child: const Text('Browse the Store'),
+                        ),
+                )
+              else
+                for (final c in claims) _row(c),
+            ],
           ),
-          const SizedBox(height: AppSpace.xl),
-          if (claims.isEmpty)
-            EmptyState(
-              icon: Icons.shopping_bag_outlined,
-              title: 'No purchases yet',
-              message:
-                  'Watch ads to earn coins, then claim your first key or app in the Store.',
-              action: widget.onGoToStore == null
-                  ? null
-                  : NeonButton(
-                      dense: true,
-                      onPressed: widget.onGoToStore,
-                      child: const Text('Browse the Store'),
-                    ),
-            )
-          else
-            for (final c in claims) _row(c),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

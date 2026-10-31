@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../arcade.dart';
 import '../premium.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
@@ -158,6 +159,9 @@ class _MyAppsScreenState extends State<MyAppsScreen> {
       body: Stack(
         children: [
           const MeshBackground(),
+          const Positioned.fill(
+            child: IgnorePointer(child: TableSurface()),
+          ),
           if (loading)
             _skeleton()
           else if (error.isNotEmpty)

@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import '../arcade.dart';
 import '../premium.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
@@ -115,6 +116,9 @@ class _WalletScreenState extends State<WalletScreen> {
       body: Stack(
         children: [
           const MeshBackground(),
+          const Positioned.fill(
+            child: IgnorePointer(child: TableSurface()),
+          ),
           if (_loading)
             _loadingView()
           else
@@ -356,8 +360,26 @@ class _WalletScreenState extends State<WalletScreen> {
                   ),
                   const SizedBox(height: AppSpace.xs + 2),
                   Text('coins', style: AppText.caption),
+                  const SizedBox(height: AppSpace.lg),
+                  Container(
+                    height: 1,
+                    width: 54,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppColors.gold.withValues(alpha: 0.5),
+                          AppColors.gold.withValues(alpha: 0),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
+            ),
+            const Positioned(
+              right: AppSpace.xl,
+              bottom: AppSpace.lg,
+              child: ChipStack(count: 5, size: 36),
             ),
           ],
         ),

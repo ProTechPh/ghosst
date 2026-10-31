@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../arcade.dart';
 import '../premium.dart';
 import '../services/apk_download.dart';
 import '../services/distribution.dart';
@@ -289,7 +290,13 @@ class _DownloadScreenState extends State<DownloadScreen> {
 
     return Scaffold(
       appBar: AppBar(title: Text(_isApk ? 'Install app' : 'Download file')),
-      body: ListView(
+      body: Stack(
+        children: [
+          const MeshBackground(),
+          const Positioned.fill(
+            child: IgnorePointer(child: TableSurface()),
+          ),
+          ListView(
         padding: const EdgeInsets.fromLTRB(16, 6, 16, 32),
         children: [
           // ---- product header ------------------------------------------
@@ -352,6 +359,8 @@ class _DownloadScreenState extends State<DownloadScreen> {
           if (_state == _State.running) _progressView(p, pct),
           if (_state == _State.done) _doneView(),
           if (_state == _State.failed) _failedView(),
+        ],
+      ),
         ],
       ),
     );
