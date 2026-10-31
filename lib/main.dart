@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
+import 'arcade.dart';
 import 'premium.dart';
 import 'screens/adblock_screen.dart';
 import 'screens/admin_screen.dart';
@@ -511,7 +512,28 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     if (loading) {
-      return const Center(child: CircularProgressIndicator());
+      return Stack(
+        children: [
+          const ArcadeBackdrop(),
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CoinMedallion(size: 64),
+                const SizedBox(height: AppSpace.lg),
+                Text(
+                  'SETTING THE TABLE',
+                  style: AppText.label.copyWith(
+                    fontSize: 10,
+                    letterSpacing: 2.6,
+                    color: AppColors.textDim,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
     }
 
     final pages = <Widget>[
@@ -546,17 +568,38 @@ class _HomeShellState extends State<HomeShell> {
 
     return Stack(
       children: [
-        const _ShellBackdrop(),
+        const ArcadeBackdrop(),
         Scaffold(
           backgroundColor: Colors.transparent,
           appBar: AppBar(
-            toolbarHeight: 60,
+            toolbarHeight: 74,
             titleSpacing: AppSpace.lg,
-            title: const Row(
+            title: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                LogoBadge(size: 30, fontSize: 15),
-                SizedBox(width: AppSpace.md - 2),
-                GradientText('Ghosst', style: AppText.title),
+                const Row(
+                  children: [
+                    LogoBadge(size: 28, fontSize: 14),
+                    SizedBox(width: AppSpace.sm + 2),
+                    GradientText('Ghosst', style: AppText.title),
+                  ],
+                ),
+                // Which table you are at — the shell's own breadcrumb.
+                Padding(
+                  padding: const EdgeInsets.only(
+                    left: 28 + AppSpace.sm + 2,
+                    top: 1,
+                  ),
+                  child: Text(
+                    destinations[safeIndex].label.toUpperCase(),
+                    style: AppText.label.copyWith(
+                      fontSize: 9.5,
+                      letterSpacing: 2.2,
+                      color: AppColors.textDim.withValues(alpha: 0.85),
+                    ),
+                  ),
+                ),
               ],
             ),
             // Fading hairline — separation without a hard 1px rule.
@@ -568,7 +611,7 @@ class _HomeShellState extends State<HomeShell> {
                   gradient: LinearGradient(
                     colors: [
                       Colors.transparent,
-                      Colors.white.withValues(alpha: 0.14),
+                      AppColors.primary.withValues(alpha: 0.22),
                       Colors.transparent,
                     ],
                   ),
@@ -666,53 +709,6 @@ class _NavItem {
   final IconData icon;
   final IconData selectedIcon;
   final String label;
-}
-
-/// One light source: the mesh's cyan bloom stays at the top, and everything
-/// past the first third falls off to near-black so content owns the frame.
-class _ShellBackdrop extends StatelessWidget {
-  const _ShellBackdrop();
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        const MeshBackground(),
-        Positioned.fill(
-          child: IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: const Alignment(0, -1.05),
-                  radius: 1.15,
-                  colors: [
-                    AppColors.primary.withValues(alpha: 0.20),
-                    AppColors.primary.withValues(alpha: 0),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-        Positioned.fill(
-          child: IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: const Alignment(0, -0.2),
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    AppColors.bg.withValues(alpha: 0),
-                    AppColors.bg.withValues(alpha: 0.92),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 /// Floating, backdrop-blurred pill navigation. Active tab widens into a
@@ -829,6 +825,15 @@ class _GlassNavItem extends StatelessWidget {
               ? AppColors.primary.withValues(alpha: 0.34)
               : Colors.transparent,
         ),
+        boxShadow: selected
+            ? [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.16),
+                  blurRadius: 18,
+                  spreadRadius: -6,
+                ),
+              ]
+            : null,
       ),
       child: Pressable(
         onTap: onTap,
