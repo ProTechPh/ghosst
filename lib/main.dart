@@ -739,53 +739,68 @@ class _GlassNavBar extends StatelessWidget {
         AppSpace.lg,
         AppSpace.md,
       ),
-      child: ClipRRect(
-        borderRadius: radius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-          child: Container(
-            padding: const EdgeInsets.all(AppSpace.sm - 2),
-            decoration: BoxDecoration(
-              // True glass: the blurred page shows through, never a flat bar.
-              color: AppColors.bgSoft.withValues(alpha: 0.62),
-              borderRadius: radius,
-              border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-              boxShadow: [
-                // 1px inner top highlight — the pill is lit from above.
-                BoxShadow(
-                  color: Colors.white.withValues(alpha: 0.12),
-                  offset: const Offset(0, 1),
-                  blurRadius: 1,
-                  blurStyle: BlurStyle.inner,
-                ),
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.40),
-                  blurRadius: 28,
-                  offset: const Offset(0, 12),
-                ),
-              ],
-            ),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final activeWidth = math.max(
-                  _slot,
-                  constraints.maxWidth - _slot * (items.length - 1),
-                );
-                return Row(
-                  children: [
-                    for (var i = 0; i < items.length; i++)
-                      _GlassNavItem(
-                        item: items[i],
-                        selected: i == index,
-                        width: i == index ? activeWidth : _slot,
-                        onTap: () {
-                          HapticFeedback.selectionClick();
-                          onSelected(i);
-                        },
-                      ),
-                  ],
-                );
-              },
+      child: Container(
+        // 1 px lit rim: cyan at the top-left, fading out along the pill.
+        padding: const EdgeInsets.all(1),
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppColors.primary.withValues(alpha: 0.45),
+              Colors.white.withValues(alpha: 0.10),
+              AppColors.primary.withValues(alpha: 0.18),
+            ],
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.pill - 1),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+            child: Container(
+              padding: const EdgeInsets.all(AppSpace.sm - 2),
+              decoration: BoxDecoration(
+                // True glass: the blurred page shows through, never a flat bar.
+                color: AppColors.bgSoft.withValues(alpha: 0.66),
+                borderRadius: BorderRadius.circular(AppRadius.pill - 1),
+                boxShadow: [
+                  // 1px inner top highlight — the pill is lit from above.
+                  BoxShadow(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    offset: const Offset(0, 1),
+                    blurRadius: 1,
+                    blurStyle: BlurStyle.inner,
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.40),
+                    blurRadius: 28,
+                    offset: const Offset(0, 12),
+                  ),
+                ],
+              ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final activeWidth = math.max(
+                    _slot,
+                    constraints.maxWidth - _slot * (items.length - 1),
+                  );
+                  return Row(
+                    children: [
+                      for (var i = 0; i < items.length; i++)
+                        _GlassNavItem(
+                          item: items[i],
+                          selected: i == index,
+                          width: i == index ? activeWidth : _slot,
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            onSelected(i);
+                          },
+                        ),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -816,9 +831,17 @@ class _GlassNavItem extends StatelessWidget {
       curve: kPremiumCurve,
       width: width,
       decoration: BoxDecoration(
-        color: selected
-            ? AppColors.primary.withValues(alpha: 0.14)
-            : Colors.transparent,
+        // Active slot is lit from the top, not flatly tinted.
+        gradient: selected
+            ? LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  AppColors.primary.withValues(alpha: 0.24),
+                  AppColors.primary.withValues(alpha: 0.07),
+                ],
+              )
+            : null,
         borderRadius: BorderRadius.circular(AppRadius.pill),
         border: Border.all(
           color: selected
@@ -835,36 +858,41 @@ class _GlassNavItem extends StatelessWidget {
               ]
             : null,
       ),
-      child: Pressable(
-        onTap: onTap,
-        scale: 0.90,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: AppSpace.md + 2),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                selected ? item.selectedIcon : item.icon,
-                size: 21,
-                color: color,
-              ),
-              if (selected) ...[
-                const SizedBox(width: AppSpace.sm - 2),
-                Flexible(
-                  child: Text(
-                    item.label,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.clip,
-                    style: AppText.caption.copyWith(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: color,
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: item.label,
+        child: Pressable(
+          onTap: onTap,
+          scale: 0.90,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpace.md + 2),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  selected ? item.selectedIcon : item.icon,
+                  size: 21,
+                  color: color,
+                ),
+                if (selected) ...[
+                  const SizedBox(width: AppSpace.sm - 2),
+                  Flexible(
+                    child: Text(
+                      item.label,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.clip,
+                      style: AppText.caption.copyWith(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: color,
+                      ),
                     ),
                   ),
-                ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
