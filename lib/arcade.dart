@@ -93,7 +93,7 @@ class CardFrame extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFF0C1C22), Color(0xFF071317)],
+              colors: [Color(0xFF1D1E24), Color(0xFF121317)],
             ),
           ),
           child: Stack(
@@ -480,6 +480,80 @@ class _ShakeBoxState extends State<ShakeBox>
 }
 
 /// A gold token that arcs from a point to another and reports once.
+/// The big glowing coin disc at the centre of a coin-arcade screen: a soft
+/// bloom, a ring, then a darker core holding the emblem.
+class CoinMedallion extends StatelessWidget {
+  const CoinMedallion({super.key, this.size = 140, this.child});
+
+  final double size;
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size * 1.6,
+      height: size * 1.6,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Container(
+            width: size * 1.6,
+            height: size * 1.6,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  AppColors.gold.withValues(alpha: 0.30),
+                  AppColors.gold.withValues(alpha: 0),
+                ],
+              ),
+            ),
+          ),
+          Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.surface,
+              border: Border.all(
+                color: AppColors.gold.withValues(alpha: 0.35),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.gold.withValues(alpha: 0.25),
+                  blurRadius: 40,
+                  spreadRadius: -6,
+                ),
+              ],
+            ),
+          ),
+          Container(
+            width: size * 0.82,
+            height: size * 0.82,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [AppColors.surfaceHigh, AppColors.bgSoft],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+            child:
+                child ??
+                Icon(
+                  Icons.monetization_on_rounded,
+                  size: size * 0.42,
+                  color: AppColors.gold,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class FloatingCoin extends StatefulWidget {
   const FloatingCoin({
     super.key,

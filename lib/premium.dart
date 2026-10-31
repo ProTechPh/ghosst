@@ -338,7 +338,7 @@ class _IslandButtonState extends State<IslandButton> {
     final isOutline = widget.outline;
     final labelColor =
         widget.textColor ??
-        (isOutline ? AppColors.text : const Color(0xFF04212A));
+        (isOutline ? AppColors.text : const Color(0xFF141210));
 
     final Widget button = Container(
       padding: EdgeInsets.symmetric(
@@ -811,14 +811,14 @@ class MeshBackground extends StatelessWidget {
               Positioned(
                 top: 180,
                 right: -160,
-                child: _orb(size: 380, color: AppColors.cyan, alpha: 0.10),
+                child: _orb(size: 380, color: AppColors.primaryDeep, alpha: 0.10),
               ),
               Positioned(
                 bottom: -160,
                 left: -60,
                 child: _orb(
                   size: 460,
-                  color: const Color(0xFF0E7490),
+                  color: const Color(0xFF3A2A08),
                   alpha: 0.20,
                 ),
               ),

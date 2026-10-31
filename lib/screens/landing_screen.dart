@@ -94,12 +94,8 @@ class _HeroCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                const LogoBadge(size: 52),
-                const Spacer(),
-                const ChipStack(count: 5, size: 30),
-              ],
+            const Center(
+              child: CoinMedallion(size: 104, child: LogoBadge(size: 54)),
             ),
             const SizedBox(height: AppSpace.xl),
             GradientText(

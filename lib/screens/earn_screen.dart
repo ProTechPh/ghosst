@@ -391,7 +391,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF0B242C), Color(0xFF051216)],
+          colors: [Color(0xFF1F2026), Color(0xFF131417)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -410,7 +410,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
         borderRadius: BorderRadius.circular(AppRadius.hero),
         child: Stack(
           children: [
-            // Ambient cyan light pooling behind the balance figure.
+            // Ambient gold light pooling behind the balance figure.
             Positioned(
               top: -70,
               left: -40,
@@ -438,7 +438,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
                 AppSpace.xl,
               ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Row(
                     children: [
@@ -461,10 +461,12 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
                         ),
                     ],
                   ),
-                  const SizedBox(height: AppSpace.lg),
+                  const SizedBox(height: AppSpace.md),
+                  const CoinMedallion(size: 124),
+                  const SizedBox(height: AppSpace.sm),
                   FittedBox(
                     fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
+                    alignment: Alignment.center,
                     child: Text(
                       groupDigits(widget.coins),
                       maxLines: 1,
@@ -486,11 +488,6 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
                   Text('coins ready to spend', style: AppText.caption),
                 ],
               ),
-            ),
-            Positioned(
-              right: AppSpace.xl,
-              bottom: AppSpace.xl,
-              child: const ChipStack(count: 4, size: 42),
             ),
           ],
         ),

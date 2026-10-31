@@ -466,7 +466,7 @@ class _ClaimFlowState extends State<_ClaimFlow> {
               ),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF0C1C22), Color(0xFF071317)],
+                  colors: [Color(0xFF1D1E24), Color(0xFF121317)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),

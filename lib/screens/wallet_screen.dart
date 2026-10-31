@@ -269,7 +269,7 @@ class _WalletScreenState extends State<WalletScreen> {
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF0B242C), Color(0xFF051216)],
+          colors: [Color(0xFF1F2026), Color(0xFF131417)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
