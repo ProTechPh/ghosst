@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import 'premium.dart';
@@ -279,4 +281,329 @@ class _TablePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter old) => false;
 }
+/// Enters by flipping on the Y axis; lands once, then a short glow pulse.
+class CardFlip extends StatefulWidget {
+  const CardFlip({
+    super.key,
+    required this.child,
+    this.tier = RarityTier.standard,
+    this.duration = const Duration(milliseconds: 720),
+    this.onLanded,
+  });
 
+  final Widget child;
+  final RarityTier tier;
+  final Duration duration;
+  final VoidCallback? onLanded;
+
+  @override
+  State<CardFlip> createState() => _CardFlipState();
+}
+
+class _CardFlipState extends State<CardFlip> with TickerProviderStateMixin {
+  late final AnimationController _flip = AnimationController(
+    vsync: this,
+    duration: widget.duration,
+  );
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 240),
+  );
+  bool _started = false;
+  bool _reduced = false;
+  bool _fired = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _flip.addStatusListener((status) {
+      if (status == AnimationStatus.completed && !_reduced) _land();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _reduced = true;
+      _flip.value = 1;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _land());
+    } else {
+      _flip.forward();
+    }
+  }
+
+  void _land() {
+    if (_fired || !mounted) return;
+    _fired = true;
+    widget.onLanded?.call();
+    if (!_reduced) _pulse.repeat(reverse: true, count: 2);
+  }
+
+  @override
+  void dispose() {
+    _flip.dispose();
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([_flip, _pulse]),
+      builder: (context, _) {
+        final v = _reduced ? 1.0 : kPremiumCurve.transform(_flip.value);
+        final glow = _pulse.value;
+        return Transform(
+          alignment: Alignment.center,
+          transform: Matrix4.identity()
+            ..setEntry(3, 2, .0012)
+            ..rotateY(pi * v),
+          child: v < .5
+              ? _CardBack(tier: widget.tier)
+              : Transform(
+                  alignment: Alignment.center,
+                  transform: Matrix4.rotationY(pi),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(AppRadius.card),
+                      boxShadow: glow > 0
+                          ? [
+                              BoxShadow(
+                                color: edgeColor(
+                                  widget.tier,
+                                ).withValues(alpha: .55 * glow),
+                                blurRadius: 28,
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: widget.child,
+                  ),
+                ),
+        );
+      },
+    );
+  }
+}
+
+class _CardBack extends StatelessWidget {
+  const _CardBack({required this.tier});
+
+  final RarityTier tier;
+
+  @override
+  Widget build(BuildContext context) {
+    return CardFrame(
+      tier: tier,
+      holo: tier == RarityTier.vault,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const LogoBadge(size: 64),
+            const SizedBox(height: AppSpace.md),
+            Text(
+              'GHOSST',
+              style: AppText.label.copyWith(
+                letterSpacing: 5,
+                color: AppColors.textDim,
+              ),
+            ),
+            const SizedBox(height: AppSpace.sm),
+            Container(
+              height: 1,
+              width: 96,
+              decoration: BoxDecoration(gradient: rarityEdge(tier)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A short damped shake. Used once, on the claim landing.
+class ShakeBox extends StatefulWidget {
+  const ShakeBox({super.key, required this.child, this.enabled = true});
+
+  final Widget child;
+  final bool enabled;
+
+  @override
+  State<ShakeBox> createState() => _ShakeBoxState();
+}
+
+class _ShakeBoxState extends State<ShakeBox>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 380),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.enabled) _c.forward();
+  }
+
+  @override
+  void didUpdateWidget(ShakeBox old) {
+    super.didUpdateWidget(old);
+    if (!old.enabled && widget.enabled) _c.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context)) return widget.child;
+    return AnimatedBuilder(
+      animation: _c,
+      child: widget.child,
+      builder: (context, child) {
+        final v = _c.value;
+        return Transform.translate(
+          offset: Offset(6 * sin(v * pi * 3) * (1 - v), 0),
+          child: child,
+        );
+      },
+    );
+  }
+}
+
+/// A gold token that arcs from a point to another and reports once.
+class FloatingCoin extends StatefulWidget {
+  const FloatingCoin({
+    super.key,
+    required this.from,
+    required this.to,
+    required this.label,
+    this.onLanded,
+  });
+
+  final Offset from;
+  final Offset to;
+  final String label;
+  final VoidCallback? onLanded;
+
+  @override
+  State<FloatingCoin> createState() => _FloatingCoinState();
+}
+
+class _FloatingCoinState extends State<FloatingCoin>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
+  bool _started = false;
+  bool _reduced = false;
+  bool _fired = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _c.addStatusListener((status) {
+      if (status == AnimationStatus.completed && !_reduced) _land();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _reduced = true;
+      _c.value = 1;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _land());
+    } else {
+      _c.forward();
+    }
+  }
+
+  void _land() {
+    if (_fired || !mounted) return;
+    _fired = true;
+    widget.onLanded?.call();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  Offset _position(double t) {
+    final control = Offset(
+      (widget.from.dx + widget.to.dx) / 2,
+      (widget.from.dy + widget.to.dy) / 2 - 90,
+    );
+    final a = Offset.lerp(widget.from, control, t)!;
+    final b = Offset.lerp(control, widget.to, t)!;
+    return Offset.lerp(a, b, t)!;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: SizedBox.expand(
+        child: AnimatedBuilder(
+          animation: _c,
+          builder: (context, _) {
+            final t = _c.value;
+            final p = _position(t);
+            final opacity = t < .15
+                ? t / .15
+                : (t > .8 ? (1 - t) / .2 : 1.0);
+            return Stack(
+              children: [
+                Positioned(
+                  left: p.dx - 14,
+                  top: p.dy - 14,
+                  child: Opacity(
+                    opacity: opacity.clamp(0.0, 1.0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 28,
+                          height: 28,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: kGoldGradient,
+                          ),
+                          child: const Icon(
+                            Icons.monetization_on_rounded,
+                            size: 18,
+                            color: AppColors.bg,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          widget.label,
+                          style: AppText.figure.copyWith(
+                            fontSize: 13,
+                            color: AppColors.gold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
