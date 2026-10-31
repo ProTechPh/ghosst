@@ -258,9 +258,12 @@ class _StoreScreenState extends State<StoreScreen> {
     final shelf = _shelf;
     final rest = shelf.length > 1 ? shelf.sublist(1) : const <Product>[];
 
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(
+    return Stack(
+      children: [
+        const Positioned.fill(child: IgnorePointer(child: TableSurface())),
+        RefreshIndicator(
+          onRefresh: _load,
+          child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(
           AppSpace.xl,
@@ -446,10 +449,10 @@ class _StoreScreenState extends State<StoreScreen> {
                 ),
               ),
               _switchedShelf
-                  ? _grid(rest)
+                  ? _cardShelf(rest)
                   : ScrollReveal(
                       delay: const Duration(milliseconds: 120),
-                      child: _grid(rest),
+                      child: _cardShelf(rest),
                     ),
             ],
           ],
@@ -478,7 +481,9 @@ class _StoreScreenState extends State<StoreScreen> {
             ),
           ),
         ],
-      ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -804,15 +809,15 @@ class _StoreScreenState extends State<StoreScreen> {
     );
   }
 
-  // ---- 2-column staggered grid ----------------------------------------
-  Widget _grid(List<Product> items) {
+  // ---- 5:7 card shelf --------------------------------------------------
+  Widget _cardShelf(List<Product> items) {
     final left = <Widget>[];
     final right = <Widget>[];
     for (var i = 0; i < items.length; i++) {
       (i.isEven ? left : right).add(
         Padding(
           padding: const EdgeInsets.only(bottom: AppSpace.md),
-          child: _gridCard(items[i]),
+          child: _shelfCard(items[i]),
         ),
       );
     }
@@ -821,7 +826,7 @@ class _StoreScreenState extends State<StoreScreen> {
       children: [
         Expanded(child: Column(children: left)),
         const SizedBox(width: AppSpace.md),
-        // Dropping the right column gives the grid its editorial stagger.
+        // Dropping the right column gives the shelf its editorial stagger.
         Expanded(
           child: Padding(
             padding: EdgeInsets.only(top: items.length > 1 ? AppSpace.lg : 0),
@@ -832,94 +837,142 @@ class _StoreScreenState extends State<StoreScreen> {
     );
   }
 
-  Widget _gridCard(Product p) {
+  Widget _shelfCard(Product p) {
     final count = _stockOf(p);
     final isOwned = owned.contains(p.id);
-    final soldOut = p.isKey && count == 0;
-    final meta = p.isDownloadable
-        ? (p.isApk
-              ? (p.version.isEmpty ? 'APK' : 'APK ${p.version}')
-              : (p.fileSize.isEmpty ? 'FILE' : 'FILE · ${p.fileSize}'))
-        : 'License key';
+    final soldOut = isSoldOutCard(isKey: p.isKey, stock: count);
+    final tier = tierForCost(entryCost(p));
 
-    final card = Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF0C1C22), Color(0xFF071317)],
-        ),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          AspectRatio(
-            aspectRatio: 1,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                _cover(p, width: 400),
-                if (soldOut)
-                  ColoredBox(color: AppColors.bg.withValues(alpha: 0.55)),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(AppSpace.md),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  p.name,
-                  style: AppText.subtitle.copyWith(fontSize: 14.5),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: AppSpace.xs),
-                Text(meta, style: AppText.caption.copyWith(fontSize: 11.5)),
-                const SizedBox(height: AppSpace.sm + 2),
-                if (isOwned)
-                  const NeonPill(
-                    icon: Icons.check_circle_rounded,
-                    label: 'Owned',
-                    color: AppColors.cyan,
-                  )
-                else if (soldOut)
-                  NeonPill(
-                    icon: Icons.remove_shopping_cart_outlined,
-                    label: 'Sold out',
-                    color: AppColors.textDim,
-                  )
-                else
-                  Row(
+    return Pressable(
+      onTap: soldOut ? null : () => _openDetail(p),
+      child: CardFrame(
+        tier: tier,
+        holo: tier == RarityTier.vault,
+        child: AspectRatio(
+          aspectRatio: 5 / 7,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(10),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.card - 11),
+                  child: Stack(
+                    fit: StackFit.expand,
                     children: [
-                      if (p.hasDurations) ...[
-                        Text('from', style: AppText.caption),
-                        const SizedBox(width: AppSpace.xs),
-                      ],
-                      _priceTag(entryCost(p)),
+                      _cover(p, width: 400),
+                      if (soldOut)
+                        ColoredBox(color: AppColors.bg.withValues(alpha: .55)),
+                      Align(
+                        alignment: Alignment.bottomCenter,
+                        child: FractionallySizedBox(
+                          heightFactor: .55,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  AppColors.bg.withValues(alpha: 0),
+                                  AppColors.bg.withValues(alpha: .94),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 10,
+                        right: 10,
+                        bottom: 10,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              p.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppText.subtitle.copyWith(fontSize: 14),
+                            ),
+                            const SizedBox(height: AppSpace.xs),
+                            Text(
+                              cardMeta(p),
+                              style: AppText.caption.copyWith(fontSize: 11),
+                            ),
+                            if (!isOwned && !soldOut && count >= 0) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                '$count left',
+                                style: AppText.caption.copyWith(
+                                  fontSize: 11,
+                                  color: AppColors.green,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                     ],
                   ),
-                if (!isOwned && !soldOut && count > 0) ...[
-                  const SizedBox(height: AppSpace.xs),
-                  Text(
-                    '$count in stock',
-                    style: AppText.caption.copyWith(
-                      fontSize: 11.5,
-                      color: AppColors.green,
-                    ),
-                  ),
-                ],
-              ],
-            ),
+                ),
+              ),
+              Positioned(
+                top: 12,
+                left: 12,
+                right: 12,
+                child: CardIndex(cost: entryCost(p), type: cardType(p)),
+              ),
+              if (isOwned)
+                const Positioned(top: 44, right: 12, child: _OwnedSeal()),
+              if (soldOut) const Center(child: _SoldOutStamp()),
+            ],
           ),
-        ],
+        ),
       ),
     );
+  }
+}
 
-    return Pressable(onTap: soldOut ? null : () => _openDetail(p), child: card);
+class _OwnedSeal extends StatelessWidget {
+  const _OwnedSeal();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AppColors.cyan.withValues(alpha: .18),
+      ),
+      child: const Icon(Icons.check_rounded, size: 13, color: AppColors.cyan),
+    );
+  }
+}
+
+class _SoldOutStamp extends StatelessWidget {
+  const _SoldOutStamp();
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.rotate(
+      angle: -0.06,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.textDim.withValues(alpha: .6)),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          'SOLD OUT',
+          style: AppText.label.copyWith(
+            fontSize: 10,
+            letterSpacing: 3,
+            color: AppColors.textDim,
+          ),
+        ),
+      ),
+    );
   }
 }
