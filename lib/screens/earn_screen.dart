@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../arcade.dart';
 import '../premium.dart';
 import '../services/ad_service.dart';
 import '../services/worker_backend.dart';
@@ -43,6 +45,10 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
   bool _lastActionSucceeded = false;
   Completer<void>? _verificationWakeup;
 
+  /// Anchor for the payout token's start point.
+  final GlobalKey _ctaKey = GlobalKey();
+  OverlayEntry? _coinEntry;
+
   @override
   void initState() {
     super.initState();
@@ -67,6 +73,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _endCeremony();
     WidgetsBinding.instance.removeObserver(this);
     AdService.instance.adsEnabledNotifier.removeListener(_onAdsEnabled);
     final wakeup = _verificationWakeup;
@@ -235,6 +242,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
             status = 'Coins added!';
           });
           _startCooldown(30);
+          _celebrate();
         }
         return;
       }
@@ -270,6 +278,48 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// One gold token per verified payout: button → app-bar coin pill.
+  /// Firing from `_verify` (not `build`) is what keeps it once-per-reward.
+  void _celebrate() {
+    if (!mounted) return;
+    final overlay = Overlay.maybeOf(context);
+    if (overlay == null) return;
+
+    final size = MediaQuery.sizeOf(context);
+    final box = _ctaKey.currentContext?.findRenderObject() as RenderBox?;
+    var start = box != null && box.attached
+        ? box.localToGlobal(box.size.center(Offset.zero))
+        : Offset(size.width / 2, size.height - 160);
+    if (!(Offset.zero & size).contains(start)) {
+      start = Offset(size.width / 2, size.height - 160);
+    }
+    final end = Offset(
+      size.width * 0.82,
+      MediaQuery.paddingOf(context).top + 40,
+    );
+
+    _endCeremony();
+    final entry = OverlayEntry(
+      builder: (_) => FloatingCoin(
+        from: start,
+        to: end,
+        label: '+$_rewardCoins',
+        onLanded: () {
+          _coinEntry?.remove();
+          _coinEntry = null;
+          HapticFeedback.lightImpact();
+        },
+      ),
+    );
+    _coinEntry = entry;
+    overlay.insert(entry);
+  }
+
+  void _endCeremony() {
+    _coinEntry?.remove();
+    _coinEntry = null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final success = status == 'Coins added!' || _lastActionSucceeded;
@@ -279,46 +329,54 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
         ? 0.0
         : (_remainingCooldown / _cooldownSpan).clamp(0.0, 1.0);
 
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(
-        AppSpace.lg,
-        AppSpace.sm,
-        AppSpace.lg,
-        AppSpace.huge,
-      ),
+    return Stack(
       children: [
-        _hero(inCooldown),
-        const SizedBox(height: AppSpace.lg),
-        _statsRow(success),
-        const SizedBox(height: AppSpace.xl),
-        if (status.isNotEmpty) ...[
-          _statusPanel(statusColor, success),
-          const SizedBox(height: AppSpace.md),
-        ],
-        _primaryAction(inCooldown, cooldownFill),
-        if (!inCooldown) ...[
-          const SizedBox(height: AppSpace.md),
-          _secondAction(inCooldown),
-        ],
-        const SizedBox(height: AppSpace.lg),
-        Text(
-          inCooldown
-              ? 'Short cooldown between ads protects your reward eligibility and prevents traffic limits.'
-              : 'Rewards are verified before crediting. During beta, a small once-daily server bonus is used only when both ad formats have no inventory.',
-          textAlign: TextAlign.center,
-          style: AppText.caption.copyWith(height: 1.55),
-        ),
-        const SizedBox(height: AppSpace.xxl),
-        const SectionHeader(title: 'How it works'),
-        const SizedBox(height: AppSpace.md),
-        Row(
+        const Positioned.fill(child: IgnorePointer(child: TableSurface())),
+        ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpace.lg,
+            AppSpace.sm,
+            AppSpace.lg,
+            AppSpace.huge,
+          ),
           children: [
-            _step('1', 'Watch an ad'),
-            const SizedBox(width: AppSpace.sm),
-            _step('2', 'Earn coins'),
-            const SizedBox(width: AppSpace.sm),
-            _step('3', 'Claim keys'),
+            _hero(inCooldown),
+            const SizedBox(height: AppSpace.lg),
+            _statsRow(success),
+            const SizedBox(height: AppSpace.xl),
+            if (status.isNotEmpty) ...[
+              _statusPanel(statusColor, success),
+              const SizedBox(height: AppSpace.md),
+            ],
+            KeyedSubtree(
+              key: _ctaKey,
+              child: _primaryAction(inCooldown, cooldownFill),
+            ),
+            if (!inCooldown) ...[
+              const SizedBox(height: AppSpace.md),
+              _secondAction(inCooldown),
+            ],
+            const SizedBox(height: AppSpace.lg),
+            Text(
+              inCooldown
+                  ? 'Short cooldown between ads protects your reward eligibility and prevents traffic limits.'
+                  : 'Rewards are verified before crediting. During beta, a small once-daily server bonus is used only when both ad formats have no inventory.',
+              textAlign: TextAlign.center,
+              style: AppText.caption.copyWith(height: 1.55),
+            ),
+            const SizedBox(height: AppSpace.xxl),
+            const SectionHeader(title: 'How it works'),
+            const SizedBox(height: AppSpace.md),
+            Row(
+              children: [
+                _step('1', 'Watch an ad'),
+                const SizedBox(width: AppSpace.sm),
+                _step('2', 'Earn coins'),
+                const SizedBox(width: AppSpace.sm),
+                _step('3', 'Claim keys'),
+              ],
+            ),
           ],
         ),
       ],
@@ -417,9 +475,20 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
                     ),
                   ),
                   const SizedBox(height: AppSpace.sm),
+                  Container(
+                    width: 54,
+                    height: 1,
+                    color: AppColors.gold.withValues(alpha: 0.5),
+                  ),
+                  const SizedBox(height: AppSpace.sm),
                   Text('coins ready to spend', style: AppText.caption),
                 ],
               ),
+            ),
+            Positioned(
+              right: AppSpace.xl,
+              bottom: AppSpace.xl,
+              child: const ChipStack(count: 4, size: 42),
             ),
           ],
         ),
@@ -618,23 +687,26 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
                 ),
               ],
             )
-          : Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.play_circle_fill_rounded,
-                  size: 19,
-                  color: AppColors.bg,
-                ),
-                const SizedBox(width: AppSpace.sm),
-                const Text('Watch ad'),
-                const SizedBox(width: AppSpace.xs + 2),
-                Text(
-                  '· +$_rewardCoins coins',
-                  style: monoStyle(fontWeight: FontWeight.w800),
-                ),
-              ],
+          : Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.play_circle_fill_rounded,
+                    size: 19,
+                    color: AppColors.bg,
+                  ),
+                  const SizedBox(width: AppSpace.sm),
+                  const Text('Watch ad'),
+                  const SizedBox(width: AppSpace.xs + 2),
+                  Text(
+                    '· +$_rewardCoins coins',
+                    style: monoStyle(fontWeight: FontWeight.w800),
+                  ),
+                ],
+              ),
             ),
     );
   }
