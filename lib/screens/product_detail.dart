@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 
 import '../services/worker_backend.dart';
 import '../theme.dart';
 import 'claim_reveal.dart';
 import 'download_screen.dart';
 
-/// Full product page: image carousel, description, YouTube embed, claim CTA.
+/// Full product page: image carousel, description, YouTube poster, claim CTA.
 class ProductDetailScreen extends StatefulWidget {
   const ProductDetailScreen({
     super.key,
@@ -47,41 +46,25 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   /// one more tap meant a second charge.
   late bool _owned = widget.owned;
 
-  WebViewController? _yt;
-
   /// Duration option currently picked on the chip row (key products with
   /// admin-defined options only — empty means the flat-cost claim).
   String _durationLabel = '';
 
-  /// Parsed video id (kept for the "Watch on YouTube" fallback).
+  /// Parsed video id — drives the poster frame and the tap-to-play link.
   late final String? _ytId = _youtubeId(widget.product.youtubeUrl);
-
-  /// YouTube's own no-cookie origin — the only shape the embedded player
-  /// accepts (a `loadHtmlString` data document or a faked baseUrl is rejected
-  /// with Error 153 / 152-4).
-  static const _videoBase = 'https://www.youtube-nocookie.com/embed';
 
   @override
   void initState() {
     super.initState();
     final p = widget.product;
     if (p.hasDurations) _durationLabel = p.durations.first.label;
-    final id = _ytId;
-    if (id != null) {
-      _yt = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        // Reduced Chrome UA without WebView markers ("; wv", "Version/4.0").
-        ..setUserAgent(_chromeMobileUa)
-        ..loadRequest(Uri.parse('$_videoBase/$id'));
-    }
   }
 
-  /// Standard reduced Chrome-on-Android UA (matches real Chrome devices).
-  static const _chromeMobileUa =
-      'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) '
-      'Chrome/131.0.0.0 Mobile Safari/537.36';
-
-  /// Guaranteed fallback: open the video in the YouTube app (or browser).
+  /// Opens the video in the YouTube app (or browser).
+  ///
+  /// There used to be an in-app WebView player here. YouTube answers it with
+  /// "Configuration error" on many devices and nothing the app can send
+  /// satisfies it, so the poster frame plus the real app is the reliable path.
   Future<void> _openExternal() async {
     final id = _ytId;
     if (id == null) return;
@@ -369,39 +352,46 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           ),
 
           // ---- youtube ----
-          if (_yt != null) ...[
+          if (_ytId != null) ...[
             const SizedBox(height: 20),
             SectionLabel(p.isDownloadable ? 'Tutorial' : 'Video'),
             GlowCard(
               padding: const EdgeInsets.all(6),
-              child: Column(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: AspectRatio(
-                      aspectRatio: 16 / 9,
-                      child: WebViewWidget(controller: _yt!),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  // Fallback: some devices' WebView still reject embedded
-                  // playback — opening the YouTube app always works.
-                  NeonButton(
-                    expand: true,
-                    dense: true,
-                    outline: true,
-                    glow: false,
-                    onPressed: _openExternal,
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: GestureDetector(
+                    onTap: _openExternal,
+                    child: Stack(
+                      fit: StackFit.expand,
                       children: [
-                        Icon(Icons.ondemand_video_outlined, size: 17),
-                        SizedBox(width: 7),
-                        Text('Watch on YouTube'),
+                        Image.network(
+                          'https://i.ytimg.com/vi/$_ytId/hqdefault.jpg',
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stack) =>
+                              const ColoredBox(color: Colors.black),
+                        ),
+                        const ColoredBox(color: Color(0x2E000000)),
+                        Center(
+                          child: Container(
+                            width: 62,
+                            height: 62,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Color(0xCC000000),
+                            ),
+                            child: const Icon(
+                              Icons.play_arrow_rounded,
+                              color: Colors.white,
+                              size: 38,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                ],
+                ),
               ),
             ),
           ] else if (p.youtubeUrl.trim().isNotEmpty) ...[
