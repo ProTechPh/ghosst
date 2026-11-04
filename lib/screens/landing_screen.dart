@@ -89,6 +89,18 @@ class LandingScreen extends StatelessWidget {
                               delay: Duration(milliseconds: 120),
                               child: _Steps(),
                             ),
+                            const SizedBox(height: AppSpace.lg),
+                            // Play reviewers and users must not read this as a
+                            // marketplace for unrelated third-party apps.
+                            Text(
+                              'Ghosst Keys only delivers the license keys and files listed here, provided by their own developers. It is not affiliated with, endorsed by, or connected to any other app.',
+                              style: AppText.caption.copyWith(
+                                height: 1.45,
+                                color: AppColors.textDim.withValues(
+                                  alpha: 0.7,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
