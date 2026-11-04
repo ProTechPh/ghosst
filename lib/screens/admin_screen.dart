@@ -27,6 +27,11 @@ class _AdminScreenState extends State<AdminScreen> {
   bool busy = false;
   String message = '';
 
+  /// Manual announcement: pushed to every subscribed device and shown as a
+  /// banner for 7 days.
+  final announcementTitle = TextEditingController();
+  final announcementBody = TextEditingController();
+
   /// The "New product" form stays collapsed behind its toggle button so the
   /// panel doesn't run into one long wall of fields.
   bool showNewForm = false;
@@ -81,6 +86,8 @@ class _AdminScreenState extends State<AdminScreen> {
     productFileSize.dispose();
     productLink.dispose();
     productDurations.dispose();
+    announcementTitle.dispose();
+    announcementBody.dispose();
     editName.dispose();
     editCost.dispose();
     editDesc.dispose();
@@ -185,6 +192,33 @@ class _AdminScreenState extends State<AdminScreen> {
         message = 'Load failed: $e';
         loading = false;
       });
+    }
+  }
+
+  /// Saves an announcement, then lets the API try to push it.
+  Future<void> _sendAnnouncement() async {
+    final title = announcementTitle.text.trim();
+    final text = announcementBody.text.trim();
+    if (title.isEmpty || text.isEmpty) {
+      setState(() => message = 'Announcement failed: title and body are required.');
+      return;
+    }
+    setState(() => busy = true);
+    try {
+      final pushed = await Backend.sendAnnouncement(title: title, body: text);
+      if (!mounted) return;
+      setState(() {
+        message = pushed
+            ? 'Announcement posted and pushed.'
+            : 'Announcement posted. Push is not configured on this server.';
+        announcementTitle.clear();
+        announcementBody.clear();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => message = 'Announcement failed: $e');
+    } finally {
+      if (mounted) setState(() => busy = false);
     }
   }
 
@@ -1566,6 +1600,41 @@ class _AdminScreenState extends State<AdminScreen> {
           ),
           const SizedBox(height: 14),
         ],
+
+        // ---- Announcement ----
+        SectionLabel('Announcement'),
+        GlowCard(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: announcementTitle,
+                maxLength: 120,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  hintText: 'Title (e.g. Bagong stock: Netflix)',
+                  counterText: '',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: announcementBody,
+                maxLines: 3,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  hintText: 'Message shown in the app and in the notification',
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: busy ? null : _sendAnnouncement,
+                child: const Text('Send announcement'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
 
         // ---- Products ----
         SectionLabel('Products (${products.length})'),

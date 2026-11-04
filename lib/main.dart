@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
+import 'announcement_banner.dart';
 import 'arcade.dart';
 import 'premium.dart';
 import 'screens/adblock_screen.dart';
@@ -20,6 +21,7 @@ import 'screens/tamper_screen.dart';
 import 'screens/wallet_screen.dart';
 import 'services/ad_service.dart';
 import 'services/adblock_detector.dart';
+import 'services/announcement_store.dart';
 import 'services/worker_backend.dart';
 import 'services/consent_service.dart';
 import 'services/distribution.dart';
@@ -324,6 +326,7 @@ class _HomeShellState extends State<HomeShell> {
   bool isAdmin = false;
   bool loading = true;
   String display = '';
+  Announcement? announcement;
 
   /// Passive formats (banner + interstitial) — profit only, no coins.
   final _ads = AdService();
@@ -464,11 +467,20 @@ class _HomeShellState extends State<HomeShell> {
           )
           .catchError((_) => ''),
     ]);
+    // A failed banner fetch just means no banner; it must not break the shell.
+    Announcement? fresh;
+    try {
+      final stored = await AnnouncementStore.dismissedId();
+      fresh = unreadAnnouncement(await Backend.announcement(), stored);
+    } catch (_) {
+      fresh = null;
+    }
     if (!mounted) return;
     setState(() {
       coins = balance;
       isAdmin = results[0] as bool;
       display = results[1] as String;
+      announcement = fresh;
       loading = false;
     });
     if (failed && mounted) {
@@ -479,6 +491,13 @@ class _HomeShellState extends State<HomeShell> {
         ),
       );
     }
+  }
+
+  /// Closes the banner for good on this device.
+  Future<void> _dismissAnnouncement() async {
+    final id = announcement?.id ?? '';
+    setState(() => announcement = null);
+    if (id.isNotEmpty) await AnnouncementStore.dismiss(id);
   }
 
   void _openWallet() {
@@ -668,7 +687,24 @@ class _HomeShellState extends State<HomeShell> {
             ],
           ),
           // IndexedStack keeps each tab's state (scroll position, loaded data).
-          body: IndexedStack(index: safeIndex, children: pages),
+          body: Column(
+            children: [
+              if (announcement != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpace.lg,
+                    AppSpace.sm,
+                    AppSpace.lg,
+                    0,
+                  ),
+                  child: AnnouncementBanner(
+                    announcement: announcement!,
+                    onDismiss: _dismissAnnouncement,
+                  ),
+                ),
+              Expanded(child: IndexedStack(index: safeIndex, children: pages)),
+            ],
+          ),
           // Banner strip sits above the floating pill (visible on every tab);
           // only mounts once loaded, so a failed ad leaves no empty gap.
           bottomNavigationBar: Column(

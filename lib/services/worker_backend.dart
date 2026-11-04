@@ -246,6 +246,22 @@ class Backend {
     }
   }
 
+  // ---- announcements ----
+
+  static Future<Announcement?> announcement() async {
+    if (await _session.accessToken() == null) return null;
+    try {
+      return await _apiBackend.announcement();
+    } on ApiException {
+      return null; // a blip must not show a banner-shaped error
+    }
+  }
+
+  static Future<bool> sendAnnouncement({
+    required String title,
+    required String body,
+  }) => _apiBackend.sendAnnouncement(title: title, body: body);
+
   // ---- stock (admin) ----
 
   static Future<StockWriteResult> addKeys({
