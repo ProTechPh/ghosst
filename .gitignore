@@ -50,6 +50,7 @@ app.*.map.json
 # Agent/tooling state (not app code)
 .agents/
 .kilo/
+.superpowers/
 
 
 # Deploy archives + agent lockfiles
