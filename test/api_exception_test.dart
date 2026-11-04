@@ -90,5 +90,30 @@ void main() {
       expect(api.kind, ApiErrorKind.network);
       expect(api.retryable, isTrue);
     });
+
+    test('a busy database says so instead of a blanket server error', () {
+      final api = ApiException.fromDio(_error(
+        status: 500,
+        data: {
+          'ok': false,
+          'error': {'code': 'server_busy', 'message': 'Something went wrong on our side'},
+        },
+      ));
+
+      expect(api.kind, ApiErrorKind.server);
+      expect(api.userMessage, contains('Puno ang server'));
+    });
+
+    test('a missing table points at the setup, not at the user', () {
+      final api = ApiException.fromDio(_error(
+        status: 500,
+        data: {
+          'ok': false,
+          'error': {'code': 'server_schema', 'message': 'Something went wrong on our side'},
+        },
+      ));
+
+      expect(api.userMessage, contains('setup sa server'));
+    });
   });
 }

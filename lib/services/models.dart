@@ -169,3 +169,29 @@ class StockWriteResult {
 
   bool get ok => failed == 0;
 }
+
+/// One manual announcement: the banner text, and the notification body.
+class Announcement {
+  const Announcement({
+    required this.id,
+    required this.title,
+    required this.body,
+    this.createdAt = '',
+  });
+
+  final String id;
+  final String title;
+  final String body;
+  final String createdAt;
+
+  factory Announcement.fromJson(Map<String, dynamic> json) => Announcement(
+        id: json['id'] as String? ?? '',
+        title: json['title'] as String? ?? '',
+        body: json['body'] as String? ?? '',
+        createdAt: json['createdAt'] as String? ?? '',
+      );
+}
+
+/// Null when there is nothing to show or the user already closed this one.
+Announcement? unreadAnnouncement(Announcement? a, String dismissedId) =>
+    (a == null || a.id == dismissedId) ? null : a;

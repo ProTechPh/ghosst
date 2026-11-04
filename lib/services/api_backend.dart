@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
+import 'models.dart';
 
 class ApiProduct {
   const ApiProduct({
@@ -185,6 +186,22 @@ class ApiBackend {
   }
 
   Future<void> deleteAccount() => _api.delete('/account', data: {'confirm': 'DELETE'});
+
+  /// Newest live announcement, or null when there is none.
+  Future<Announcement?> announcement() async {
+    final res = await _api.get('/announcements');
+    final raw = res['announcement'];
+    return raw is Map<String, dynamic> ? Announcement.fromJson(raw) : null;
+  }
+
+  /// Returns whether the server actually managed to push it.
+  Future<bool> sendAnnouncement({required String title, required String body}) async {
+    final res = await _api.post(
+      '/admin/announcements',
+      data: {'title': title, 'body': body},
+    );
+    return res['pushed'] as bool? ?? false;
+  }
 
   static String _randomKey() {
     final random = math.Random.secure();

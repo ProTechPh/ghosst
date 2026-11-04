@@ -50,11 +50,15 @@ app.*.map.json
 # Agent/tooling state (not app code)
 .agents/
 .kilo/
+.superpowers/
 
 
 # Deploy archives + agent lockfiles
 claim.tar.gz
 skills-lock.json
+
+# API dev logs
+api/error_log
 
 
 graphify-out/

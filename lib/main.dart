@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
+import 'announcement_banner.dart';
+import 'api/api_exception.dart';
 import 'arcade.dart';
 import 'premium.dart';
 import 'screens/adblock_screen.dart';
@@ -20,10 +22,12 @@ import 'screens/tamper_screen.dart';
 import 'screens/wallet_screen.dart';
 import 'services/ad_service.dart';
 import 'services/adblock_detector.dart';
+import 'services/announcement_store.dart';
 import 'services/worker_backend.dart';
 import 'services/consent_service.dart';
 import 'services/distribution.dart';
 import 'services/play_store.dart';
+import 'services/push.dart';
 import 'services/security.dart';
 import 'sign_in.dart';
 import 'sign_up.dart';
@@ -31,6 +35,7 @@ import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  unawaited(Push.init());
   await Distribution.initialize();
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
@@ -202,6 +207,13 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
               setState(() => _splash = false);
               // No full-screen ad here: it can land under the user's first tap
               // and cause an accidental advertiser click.
+
+              // From here on the home shell may ask for notifications. A fresh
+              // install signs in after this point, so the ask happens there.
+              Push.splashDone = true;
+              if (await Backend.currentUser() != null) {
+                unawaited(Push.requestPermission());
+              }
             },
           ),
       ],
@@ -324,6 +336,7 @@ class _HomeShellState extends State<HomeShell> {
   bool isAdmin = false;
   bool loading = true;
   String display = '';
+  Announcement? announcement;
 
   /// Passive formats (banner + interstitial) — profit only, no coins.
   final _ads = AdService();
@@ -344,6 +357,9 @@ class _HomeShellState extends State<HomeShell> {
     // First interstitial can only appear after the cooldown, not on open.
     _lastInterstitial = DateTime.now();
     _refresh();
+    // The shell only exists when signed in and past the launch gates; the
+    // request itself waits for the splash to finish.
+    unawaited(Push.requestPermission());
   }
 
   void _onAdsEnabledForBanner() {
@@ -449,12 +465,12 @@ class _HomeShellState extends State<HomeShell> {
 
   Future<void> _refresh() async {
     var balance = coins;
-    var failed = false;
+    var reason = '';
     try {
       balance = await Backend.coins();
-    } catch (_) {
+    } catch (e) {
       // Keep the last known balance; a blip must not read as "0 coins".
-      failed = true;
+      reason = e is ApiException ? e.userMessage : 'Walang sagot ang server.';
     }
     final results = await Future.wait<Object>([
       Backend.isAdmin().catchError((_) => false),
@@ -464,21 +480,38 @@ class _HomeShellState extends State<HomeShell> {
           )
           .catchError((_) => ''),
     ]);
+    // A failed banner fetch just means no banner; it must not break the shell.
+    Announcement? fresh;
+    try {
+      final stored = await AnnouncementStore.dismissedId();
+      fresh = unreadAnnouncement(await Backend.announcement(), stored);
+    } catch (_) {
+      fresh = null;
+    }
     if (!mounted) return;
     setState(() {
       coins = balance;
       isAdmin = results[0] as bool;
       display = results[1] as String;
+      announcement = fresh;
       loading = false;
     });
-    if (failed && mounted) {
+    if (reason.isNotEmpty && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Could not refresh your balance.'),
+          // The server's own reason, not a generic "something failed".
+          content: Text('Hindi ma-refresh ang balance. $reason'),
           action: SnackBarAction(label: 'Retry', onPressed: _refresh),
         ),
       );
     }
+  }
+
+  /// Closes the banner for good on this device.
+  Future<void> _dismissAnnouncement() async {
+    final id = announcement?.id ?? '';
+    setState(() => announcement = null);
+    if (id.isNotEmpty) await AnnouncementStore.dismiss(id);
   }
 
   void _openWallet() {
@@ -549,7 +582,7 @@ class _HomeShellState extends State<HomeShell> {
         active: tab == 2,
         onGoToStore: () => setState(() => tab = 0),
       ),
-      if (isAdmin) const AdminScreen(),
+      if (isAdmin) AdminScreen(onAnnouncementSent: _refresh),
     ];
 
     final destinations = <_NavItem>[
@@ -668,7 +701,24 @@ class _HomeShellState extends State<HomeShell> {
             ],
           ),
           // IndexedStack keeps each tab's state (scroll position, loaded data).
-          body: IndexedStack(index: safeIndex, children: pages),
+          body: Column(
+            children: [
+              if (announcement != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpace.lg,
+                    AppSpace.sm,
+                    AppSpace.lg,
+                    0,
+                  ),
+                  child: AnnouncementBanner(
+                    announcement: announcement!,
+                    onDismiss: _dismissAnnouncement,
+                  ),
+                ),
+              Expanded(child: IndexedStack(index: safeIndex, children: pages)),
+            ],
+          ),
           // Banner strip sits above the floating pill (visible on every tab);
           // only mounts once loaded, so a failed ad leaves no empty gap.
           bottomNavigationBar: Column(
