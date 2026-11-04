@@ -12,6 +12,7 @@ import 'arcade.dart';
 import 'premium.dart';
 import 'screens/adblock_screen.dart';
 import 'screens/admin_screen.dart';
+import 'screens/announcements_screen.dart';
 import 'screens/earn_screen.dart';
 import 'screens/landing_screen.dart';
 import 'screens/my_keys_screen.dart';
@@ -582,6 +583,7 @@ class _HomeShellState extends State<HomeShell> {
         active: tab == 2,
         onGoToStore: () => setState(() => tab = 0),
       ),
+      const AnnouncementsScreen(embedded: true),
       if (isAdmin) AdminScreen(onAnnouncementSent: _refresh),
     ];
 
@@ -589,6 +591,7 @@ class _HomeShellState extends State<HomeShell> {
       _NavItem(Icons.storefront_outlined, Icons.storefront, 'Store'),
       _NavItem(Icons.play_circle_outline, Icons.play_circle, 'Earn'),
       _NavItem(Icons.shopping_bag_outlined, Icons.shopping_bag, 'Purchases'),
+      _NavItem(Icons.campaign_outlined, Icons.campaign, 'News'),
       if (isAdmin)
         _NavItem(
           Icons.admin_panel_settings_outlined,
@@ -831,9 +834,11 @@ class _GlassNavBar extends StatelessWidget {
               ),
               child: LayoutBuilder(
                 builder: (context, constraints) {
+                  // Five tabs on a 320px phone: never wider than the pill.
+                  final slot = math.min(_slot, constraints.maxWidth / items.length);
                   final activeWidth = math.max(
-                    _slot,
-                    constraints.maxWidth - _slot * (items.length - 1),
+                    slot,
+                    constraints.maxWidth - slot * (items.length - 1),
                   );
                   return Row(
                     children: [
@@ -841,7 +846,7 @@ class _GlassNavBar extends StatelessWidget {
                         _GlassNavItem(
                           item: items[i],
                           selected: i == index,
-                          width: i == index ? activeWidth : _slot,
+                          width: i == index ? activeWidth : slot,
                           onTap: () {
                             HapticFeedback.selectionClick();
                             onSelected(i);

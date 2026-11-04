@@ -34,6 +34,6 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Wala pang announcement.'), findsOneWidget);
+    expect(find.text("Wala pang announcement."), findsOneWidget);
   });
 }
