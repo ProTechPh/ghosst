@@ -210,6 +210,9 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
               // From here on the home shell may ask for notifications. A fresh
               // install signs in after this point, so the ask happens there.
               Push.splashDone = true;
+              if (await Backend.currentUser() != null) {
+                unawaited(Push.requestPermission());
+              }
             },
           ),
       ],
