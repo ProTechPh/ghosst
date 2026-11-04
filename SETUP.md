@@ -213,22 +213,22 @@ Everything here is optional: with a blank REST key, or on any host other than
 
 **One-time setup (owner):**
 
-1. OneSignal ? your app ? Settings ? **Push**: plug in the Firebase service
-   account JSON (OneSignal needs FCM credentials for Android push).
-2. Firebase ? add **two** Android apps to the project:
+1. OneSignal ? Settings ? **Push & In-App ? Platforms ? Google Android (FCM)**:
+   upload the Firebase **service account** JSON (Project settings ? Service
+   accounts ? Generate new private key). The plain `google-services.json` is
+   rejected there (wrong file).
+2. Firebase: one project (`ghosst-6f23e`) holds **both** Android apps,
    `com.astrixtech.ghosst` and `com.astrixtech.ghosst.direct` (the `direct`
-   flavor has `applicationIdSuffix = .direct`). Download one merged
-   `google-services.json` and drop it at `android/app/google-services.json`.
-3. `android/settings.gradle.kts` plugins block:
-   `id("com.google.gms.google-services") version "4.4.3" apply false`, and
-   `android/app/build.gradle.kts` plugins block:
-   `id("com.google.gms.google-services")`. The Gradle plugin fails the build
-   for a flavor with no matching package, so both apps are required.
-4. Build with the app id:
-   `flutter build appbundle --release --flavor play --dart-define=ONESIGNAL_APP_ID=<id>`
-5. In `api/config.php` on Hostinger set `ONESIGNAL_APP_ID` and
+   flavor has `applicationIdSuffix = .direct`). Their merged config is checked
+   in at `android/app/google-services.json`; the Google Services plugin is in
+   `android/settings.gradle.kts` + `android/app/build.gradle.kts`. Both apps
+   must stay registered or the build fails for that flavor.
+3. The public app id is the default in `lib/services/push.dart`. Override with
+   `--dart-define=ONESIGNAL_APP_ID=<id>` only if the OneSignal app changes;
+   an empty define disables push.
+4. In `api/config.php` on Hostinger set `ONESIGNAL_APP_ID` and
    `ONESIGNAL_REST_KEY` (env overrides `GHOSST_ONESIGNAL_APP_ID` /
-   `GHOSST_ONESIGNAL_REST_KEY`).
+   `GHOSST_ONESIGNAL_REST_KEY`). REST key: OneSignal ? API keys, never committed.
 
 **What sends a notification:** a new product (`products_create`), a sold-out
 duration pool getting keys again (`keys_add`, silent on top-ups), and the

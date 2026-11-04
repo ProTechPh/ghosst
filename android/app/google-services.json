@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "108562765887",
+    "project_id": "ghosst-6f23e",
+    "storage_bucket": "ghosst-6f23e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:108562765887:android:16d10d427d11da9429c08a",
+        "android_client_info": {
+          "package_name": "com.astrixtech.ghosst"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCFZl_aS9V-NEPmhyJjeZdHKuETBDp_er0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:108562765887:android:4f06e415c987b76a29c08a",
+        "android_client_info": {
+          "package_name": "com.astrixtech.ghosst.direct"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCFZl_aS9V-NEPmhyJjeZdHKuETBDp_er0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
