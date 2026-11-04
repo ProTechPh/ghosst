@@ -207,15 +207,9 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
               // No full-screen ad here: it can land under the user's first tap
               // and cause an accidental advertiser click.
 
-              // Ask for notifications only now: the gates are clear and the
-              // dialog must never sit over the splash or a gate screen.
-              final gatesClear = !(_security?.blocked ?? false) &&
-                  !(_adblock?.blocked ?? false);
-              if (!mounted) return;
-              final signedIn = await Backend.currentUser() != null;
-              if (Push.shouldAsk(signedIn: signedIn, gatesPassed: gatesClear)) {
-                unawaited(Push.requestPermission());
-              }
+              // From here on the home shell may ask for notifications. A fresh
+              // install signs in after this point, so the ask happens there.
+              Push.splashDone = true;
             },
           ),
       ],
@@ -359,6 +353,9 @@ class _HomeShellState extends State<HomeShell> {
     // First interstitial can only appear after the cooldown, not on open.
     _lastInterstitial = DateTime.now();
     _refresh();
+    // The shell only exists when signed in and past the launch gates; the
+    // request itself waits for the splash to finish.
+    unawaited(Push.requestPermission());
   }
 
   void _onAdsEnabledForBanner() {

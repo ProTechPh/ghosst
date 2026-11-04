@@ -15,10 +15,6 @@ class Push {
 
   static bool get configured => appId.isNotEmpty;
 
-  /// The dialog belongs after the launch gates and only for a signed-in user.
-  static bool shouldAsk({required bool signedIn, required bool gatesPassed}) =>
-      signedIn && gatesPassed;
-
   static Future<void> init() async {
     if (!configured) return;
     try {
@@ -28,8 +24,15 @@ class Push {
     }
   }
 
+  /// Set once the splash (and the launch gates behind it) are done. The
+  /// permission dialog must never sit over those screens.
+  static bool splashDone = false;
+
+  static bool get canAsk => configured && splashDone;
+
+  /// Askable only after the splash: see [splashDone].
   static Future<void> requestPermission() async {
-    if (!configured) return;
+    if (!canAsk) return;
     try {
       await OneSignal.Notifications.requestPermission(true);
     } catch (_) {}

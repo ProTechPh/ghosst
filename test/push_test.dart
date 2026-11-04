@@ -9,9 +9,10 @@ void main() {
     await Push.requestPermission();
   });
 
-  test('permission is only asked after the launch gates and a session', () {
-    expect(Push.shouldAsk(signedIn: false, gatesPassed: true), isFalse);
-    expect(Push.shouldAsk(signedIn: true, gatesPassed: false), isFalse);
-    expect(Push.shouldAsk(signedIn: true, gatesPassed: true), isTrue);
+  test('permission is only asked once the splash is done', () {
+    expect(Push.canAsk, isFalse); // splash not finished yet
+    Push.splashDone = true;
+    expect(Push.canAsk, Push.configured);
+    Push.splashDone = false;
   });
 }
