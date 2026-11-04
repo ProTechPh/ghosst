@@ -31,6 +31,34 @@ void main() {
     expect(dismissed, 1);
   });
 
+  testWidgets('tapping opens the whole announcement', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.dark,
+      home: Scaffold(
+        body: AnnouncementBanner(
+          announcement: const Announcement(
+            id: 'a3',
+            title: 'Bagong stock',
+            body: 'Mahaba itong announcement para siguradong hindi kasya sa banner strip.',
+          ),
+          onDismiss: () {},
+        ),
+      ),
+    ));
+
+    expect(find.text('Close'), findsNothing);
+
+    await tester.tap(find.text('Bagong stock'));
+    await tester.pumpAndSettle();
+
+    // The sheet shows the full body plus its own close button.
+    expect(find.text('Close'), findsOneWidget);
+    expect(
+      find.text('Mahaba itong announcement para siguradong hindi kasya sa banner strip.'),
+      findsWidgets,
+    );
+  });
+
   testWidgets('a long message never overflows a 320px shell', (tester) async {
     tester.view.physicalSize = const Size(320, 568);
     tester.view.devicePixelRatio = 1;
