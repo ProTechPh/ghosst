@@ -14,7 +14,7 @@ import '../services/distribution.dart';
 import '../services/play_store.dart';
 import '../theme.dart';
 import 'my_apps_screen.dart';
-import 'wallet_screen.dart';
+import 'announcements_screen.dart';import 'wallet_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
@@ -233,6 +233,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ).push(MaterialPageRoute<void>(builder: (_) => const WalletScreen()));
   }
 
+  void _openAnnouncements() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const AnnouncementsScreen()));
+  }
+
   void _openAppOwned() {
     Navigator.of(
       context,
@@ -359,6 +365,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SectionHeader(title: 'App'),
                 const SizedBox(height: AppSpace.sm),
                 _group([
+                  _row(
+                    icon: Icons.campaign_outlined,
+                    label: 'Announcements',
+                    hint: 'News and updates',
+                    onTap: _openAnnouncements,
+                  ),
                   _row(
                     icon: Icons.privacy_tip_outlined,
                     label: 'Privacy choices',

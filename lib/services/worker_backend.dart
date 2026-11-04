@@ -265,6 +265,16 @@ class Backend {
     required String body,
   }) => _apiBackend.sendAnnouncement(title: title, body: body);
 
+  /// History list; a failure reads as "nothing to show", never an error screen.
+  static Future<List<Announcement>> announcements() async {
+    if (await _session.accessToken() == null) return [];
+    try {
+      return await _apiBackend.announcements();
+    } on ApiException {
+      return [];
+    }
+  }
+
   // ---- stock (admin) ----
 
   static Future<StockWriteResult> addKeys({
