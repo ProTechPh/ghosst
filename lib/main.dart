@@ -26,6 +26,7 @@ import 'services/worker_backend.dart';
 import 'services/consent_service.dart';
 import 'services/distribution.dart';
 import 'services/play_store.dart';
+import 'services/push.dart';
 import 'services/security.dart';
 import 'sign_in.dart';
 import 'sign_up.dart';
@@ -33,6 +34,7 @@ import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  unawaited(Push.init());
   await Distribution.initialize();
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
@@ -279,6 +281,8 @@ class _HomeState extends State<Home> {
   Future<void> _load() async {
     try {
       final user = await Backend.currentUser();
+      // Permission only once there is a session: never on the launch gates.
+      if (user != null) await Push.requestPermission();
       if (mounted) setState(() => signedIn = user != null);
     } catch (_) {
       if (mounted) setState(() => signedIn = false);
