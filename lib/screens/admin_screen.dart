@@ -10,7 +10,10 @@ import '../services/worker_backend.dart';
 import '../theme.dart';
 
 class AdminScreen extends StatefulWidget {
-  const AdminScreen({super.key});
+  const AdminScreen({super.key, this.onAnnouncementSent});
+
+  /// Lets the shell refresh its banner right after a post.
+  final VoidCallback? onAnnouncementSent;
 
   @override
   State<AdminScreen> createState() => _AdminScreenState();
@@ -214,6 +217,7 @@ class _AdminScreenState extends State<AdminScreen> {
         announcementTitle.clear();
         announcementBody.clear();
       });
+      widget.onAnnouncementSent?.call();
     } catch (e) {
       if (!mounted) return;
       setState(() => message = 'Announcement failed: $e');

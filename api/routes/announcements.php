@@ -31,7 +31,7 @@ function announcements_create(array $ctx): array
     $body = read_json();
 
     $title = mb_substr(trim((string) ($body['title'] ?? '')), 0, 120, 'UTF-8');
-    $text = trim((string) ($body['body'] ?? ''));
+    $text = mb_substr(trim((string) ($body['body'] ?? '')), 0, 2000, 'UTF-8');
     if ($title === '' || $text === '') {
         throw new ApiError(400, 'invalid_announcement', 'Title and body are required');
     }

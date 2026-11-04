@@ -57,6 +57,9 @@ app.*.map.json
 claim.tar.gz
 skills-lock.json
 
+# API dev logs
+api/error_log
+
 
 graphify-out/
 .opencode/

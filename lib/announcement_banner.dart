@@ -26,10 +26,17 @@ class AnnouncementBanner extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(announcement.title, style: AppText.subtitle.copyWith(fontSize: 15)),
+                Text(
+                  announcement.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.subtitle.copyWith(fontSize: 15),
+                ),
                 const SizedBox(height: AppSpace.xs),
                 Text(
                   announcement.body,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
                   style: AppText.caption.copyWith(height: 1.4, color: AppColors.textDim),
                 ),
               ],

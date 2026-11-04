@@ -29,7 +29,7 @@ app/file products single-purchase), `app_ad_rewards` (SSV dedupe, PK = AdMob
 `transaction_id`), `app_idempotency` (`idem_key`, PK `(user_id, idem_key)`),
 `app_announcements` (manual banner/push text, 7-day `expires_at`).
 
-Apply both files in order, in phpMyAdmin or:
+Apply the schema files in order, in phpMyAdmin or:
 
 ```powershell
 mysql -u khctcfuv_ghost_premium -p khctcfuv_ghosst < database\mobile_app_schema.sql
@@ -37,8 +37,11 @@ mysql -u khctcfuv_ghost_premium -p khctcfuv_ghosst < database\mobile_app_data.sq
 mysql -u khctcfuv_ghost_premium -p khctcfuv_ghosst < database\app_announcements.sql
 ```
 
-Both are pure additions (`CREATE TABLE IF NOT EXISTS` + `INSERT`). Re-running
+All three are pure additions (`CREATE TABLE IF NOT EXISTS` + `INSERT`). Re-running
 the data file duplicates rows — it is a one-shot migration of the old D1 data.
+Run `app_announcements.sql` **before** uploading the new `api/`: an app that
+calls `GET /v1/announcements` against a missing table logs a 500 on every
+launch.
 
 ## 2. Admin
 

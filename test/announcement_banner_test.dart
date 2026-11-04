@@ -30,4 +30,32 @@ void main() {
     await tester.pump();
     expect(dismissed, 1);
   });
+
+  testWidgets('a long message never overflows a 320px shell', (tester) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.dark,
+      home: Scaffold(
+        body: Column(
+          children: [
+            AnnouncementBanner(
+              announcement: Announcement(
+                id: 'a2',
+                title: 'Bagong stock: Netflix Premium 4K Ultra HD Annual Plan',
+                body: List.filled(40, 'Available na ulit ang stock, claim bago maubos.').join(' '),
+              ),
+              onDismiss: () {},
+            ),
+            const Expanded(child: SizedBox.expand()),
+          ],
+        ),
+      ),
+    ));
+
+    expect(tester.takeException(), isNull);
+  });
 }

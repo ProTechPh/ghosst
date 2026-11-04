@@ -206,6 +206,16 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
               setState(() => _splash = false);
               // No full-screen ad here: it can land under the user's first tap
               // and cause an accidental advertiser click.
+
+              // Ask for notifications only now: the gates are clear and the
+              // dialog must never sit over the splash or a gate screen.
+              final gatesClear = !(_security?.blocked ?? false) &&
+                  !(_adblock?.blocked ?? false);
+              if (!mounted) return;
+              final signedIn = await Backend.currentUser() != null;
+              if (Push.shouldAsk(signedIn: signedIn, gatesPassed: gatesClear)) {
+                unawaited(Push.requestPermission());
+              }
             },
           ),
       ],
@@ -281,8 +291,6 @@ class _HomeState extends State<Home> {
   Future<void> _load() async {
     try {
       final user = await Backend.currentUser();
-      // Permission only once there is a session: never on the launch gates.
-      if (user != null) await Push.requestPermission();
       if (mounted) setState(() => signedIn = user != null);
     } catch (_) {
       if (mounted) setState(() => signedIn = false);
@@ -572,7 +580,7 @@ class _HomeShellState extends State<HomeShell> {
         active: tab == 2,
         onGoToStore: () => setState(() => tab = 0),
       ),
-      if (isAdmin) const AdminScreen(),
+      if (isAdmin) AdminScreen(onAnnouncementSent: _refresh),
     ];
 
     final destinations = <_NavItem>[

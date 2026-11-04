@@ -29,22 +29,30 @@ function push_send(string $title, string $body): bool
         'contents'           => ['en' => $body],
     ]);
 
-    $ch = curl_init('https://api.onesignal.com/notifications');
-    curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => $payload,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 5,
-        CURLOPT_HTTPHEADER     => [
-            'Authorization: Key ' . ONESIGNAL_REST_KEY,
-            'Content-Type: application/json',
-        ],
-    ]);
+    try {
+        $ch = curl_init('https://api.onesignal.com/notifications');
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $payload,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 3,
+            CURLOPT_TIMEOUT        => 5,
+            CURLOPT_HTTPHEADER     => [
+                'Authorization: Key ' . ONESIGNAL_REST_KEY,
+                'Content-Type: application/json',
+            ],
+        ]);
 
-    $out = curl_exec($ch);
-    $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    $error = curl_error($ch);
-    curl_close($ch);
+        $out = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+    } catch (Throwable $e) {
+        // No cURL, or cURL refused to start: the row is already saved, so this
+        // must not turn a successful admin action into a 500.
+        error_log('push failed: ' . $e->getMessage());
+        return false;
+    }
 
     if ($out === false || $status < 200 || $status >= 300) {
         error_log('push failed: ' . ($error !== '' ? $error : 'HTTP ' . $status . ' ' . substr((string) $out, 0, 300)));

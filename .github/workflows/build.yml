@@ -83,7 +83,7 @@ jobs:
       - name: Build release QA APK (test ads)
         run: |
           set -euo pipefail
-          flutter build apk --release --flavor play --dart-define=USE_TEST_ADS=true \
+          flutter build apk --release --flavor play --dart-define=USE_TEST_ADS=true --dart-define=ONESIGNAL_APP_ID=${{ vars.ONESIGNAL_APP_ID }} \
             --build-number "$QA_BUILD"
           cp build/app/outputs/flutter-apk/app-play-release.apk \
             "release-assets/ghosst-play-release-test-ads-${ASSET_VERSION}.apk"
@@ -92,7 +92,7 @@ jobs:
       - name: Build closed-beta bundle (test ads)
         run: |
           set -euo pipefail
-          flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=true \
+          flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=true --dart-define=ONESIGNAL_APP_ID=${{ vars.ONESIGNAL_APP_ID }} \
             --build-number "$QA_BUILD"
           cp build/app/outputs/bundle/playRelease/app-play-release.aab \
             "release-assets/ghosst-play-closed-beta-test-ads-${ASSET_VERSION}.aab"
@@ -100,14 +100,14 @@ jobs:
       - name: Build release APK (live ads)
         run: |
           set -euo pipefail
-          flutter build apk --release --flavor play --dart-define=USE_TEST_ADS=false
+          flutter build apk --release --flavor play --dart-define=USE_TEST_ADS=false --dart-define=ONESIGNAL_APP_ID=${{ vars.ONESIGNAL_APP_ID }}
           cp build/app/outputs/flutter-apk/app-play-release.apk \
             "release-assets/ghosst-play-release-live-ads-${ASSET_VERSION}.apk"
 
       - name: Build Play bundle (live ads)
         run: |
           set -euo pipefail
-          flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=false
+          flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=false --dart-define=ONESIGNAL_APP_ID=${{ vars.ONESIGNAL_APP_ID }}
           cp build/app/outputs/bundle/playRelease/app-play-release.aab \
             "release-assets/ghosst-play-live-ads-${ASSET_VERSION}.aab"
 
