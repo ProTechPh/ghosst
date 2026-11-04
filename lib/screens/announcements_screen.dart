@@ -44,7 +44,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
         ? const Center(child: CircularProgressIndicator())
         : items.isEmpty
         ? const Center(
-            child: Text("Wala pang announcement.", style: TextStyle(color: AppColors.textDim)),
+            child: Text("There's no announcement yet.", style: TextStyle(color: AppColors.textDim)),
           )
         : ListView.separated(
             padding: const EdgeInsets.fromLTRB(
