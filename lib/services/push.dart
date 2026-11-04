@@ -7,7 +7,11 @@ import 'package:onesignal_flutter/onesignal_flutter.dart';
 class Push {
   Push._();
 
-  static const appId = String.fromEnvironment('ONESIGNAL_APP_ID');
+  // Public app id — safe in the repo. `--dart-define` still wins if set.
+  static const appId = String.fromEnvironment(
+    'ONESIGNAL_APP_ID',
+    defaultValue: 'cb151c2b-07e6-4240-88fe-36905ff390a8',
+  );
 
   static bool get configured => appId.isNotEmpty;
 
@@ -18,7 +22,7 @@ class Push {
   static Future<void> init() async {
     if (!configured) return;
     try {
-      OneSignal.initialize(appId);
+      await OneSignal.initialize(appId);
     } catch (_) {
       // A push SDK that cannot start must never block the app.
     }
@@ -27,7 +31,7 @@ class Push {
   static Future<void> requestPermission() async {
     if (!configured) return;
     try {
-      OneSignal.Notifications.requestPermission(true);
+      await OneSignal.Notifications.requestPermission(true);
     } catch (_) {}
   }
 }
