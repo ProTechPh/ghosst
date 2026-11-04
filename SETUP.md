@@ -19,20 +19,22 @@ this file is the app-side setup.
 
 ## 1. Data model (MySQL)
 
-Ten `app_*` tables live beside the website's own 36 tables and never touch them:
+Eleven `app_*` tables live beside the website's own 36 tables and never touch them:
 `app_users` (email, password hash, coins, is_admin, `web_user_id` → website
 `users.id`), `app_sessions` (refresh tokens, only the SHA-256 is stored),
 `app_products`, `app_product_images`, `app_product_durations`,
 `app_product_files` (the MediaFire link for apk/file products), `app_keys`
 (`UNIQUE(product_id, key_value)`), `app_claims` (`ux_app_claims_owned` makes
 app/file products single-purchase), `app_ad_rewards` (SSV dedupe, PK = AdMob
-`transaction_id`), `app_idempotency` (`idem_key`, PK `(user_id, idem_key)`).
+`transaction_id`), `app_idempotency` (`idem_key`, PK `(user_id, idem_key)`),
+`app_announcements` (manual banner/push text, 7-day `expires_at`).
 
 Apply both files in order, in phpMyAdmin or:
 
 ```powershell
 mysql -u khctcfuv_ghost_premium -p khctcfuv_ghosst < database\mobile_app_schema.sql
 mysql -u khctcfuv_ghost_premium -p khctcfuv_ghosst < database\mobile_app_data.sql
+mysql -u khctcfuv_ghost_premium -p khctcfuv_ghosst < database\app_announcements.sql
 ```
 
 Both are pure additions (`CREATE TABLE IF NOT EXISTS` + `INSERT`). Re-running
@@ -151,6 +153,10 @@ The API base URL defaults to production; point it at a local server with
 - [ ] `JWT_SECRET` in `api/config.php` changed from the placeholder.
 - [ ] `CLOUDINARY_API_SECRET` set, so deleting a product also deletes its
       images.
+- [ ] Push notifications: `ONESIGNAL_APP_ID` / `ONESIGNAL_REST_KEY` set in
+      `api/config.php` on the host (blank = push silently off), and
+      `android/app/google-services.json` present with **both** packages
+      (`com.astrixtech.ghosst`, `com.astrixtech.ghosst.direct`). See §8.
 - [ ] Each published APK/file product has a working MediaFire link.
 - [ ] Play upload uses the `N` from CI: every push to `main` auto-bumps
       `version: x.y.z+N` in `pubspec.yaml` and publishes `vX.Y.Z+N`. Bump
@@ -178,6 +184,7 @@ The API base URL defaults to production; point it at a local server with
 | APK won't install | `REQUEST_INSTALL_PACKAGES` missing from the manifest (play flavor) or "install unknown apps" disabled for Ghosst |
 | Release: `Missing classes detected while running R8` | Copy the `-dontwarn` lines from `build/app/outputs/mapping/<variant>/missing_rules.txt` into `android/app/proguard-rules.pro` |
 | Release: `Gradle build daemon disappeared` | `org.gradle.jvmargs` too big for the machine — 4G works on 12 GB Windows and 7 GB CI runners |
+| No notification arrives | `google-services.json` missing or its package name does not match the installed flavor; device not under OneSignal → Audience → Subscriptions; `ONESIGNAL_REST_KEY` not set on the host (a dev host is skipped on purpose) |
 
 ## 7. Trust boundaries
 
@@ -194,3 +201,35 @@ The API base URL defaults to production; point it at a local server with
   server-side validation of every field the Admin form sends.
 - A modded client can only send requests faster; idempotency + the locked
   transaction make that useless.
+
+## 8. Push notifications (OneSignal + FCM)
+
+The API broadcasts through OneSignal; the app only holds the public app id.
+Everything here is optional: with a blank REST key, or on any host other than
+`ghossthub.com`, `push_send()` logs `push skipped` and the feature is off.
+
+**One-time setup (owner):**
+
+1. OneSignal ? your app ? Settings ? **Push**: plug in the Firebase service
+   account JSON (OneSignal needs FCM credentials for Android push).
+2. Firebase ? add **two** Android apps to the project:
+   `com.astrixtech.ghosst` and `com.astrixtech.ghosst.direct` (the `direct`
+   flavor has `applicationIdSuffix = .direct`). Download one merged
+   `google-services.json` and drop it at `android/app/google-services.json`.
+3. `android/settings.gradle.kts` plugins block:
+   `id("com.google.gms.google-services") version "4.4.3" apply false`, and
+   `android/app/build.gradle.kts` plugins block:
+   `id("com.google.gms.google-services")`. The Gradle plugin fails the build
+   for a flavor with no matching package, so both apps are required.
+4. Build with the app id:
+   `flutter build appbundle --release --flavor play --dart-define=ONESIGNAL_APP_ID=<id>`
+5. In `api/config.php` on Hostinger set `ONESIGNAL_APP_ID` and
+   `ONESIGNAL_REST_KEY` (env overrides `GHOSST_ONESIGNAL_APP_ID` /
+   `GHOSST_ONESIGNAL_REST_KEY`).
+
+**What sends a notification:** a new product (`products_create`), a sold-out
+duration pool getting keys again (`keys_add`, silent on top-ups), and the
+Admin tab's announcement card (saved in `app_announcements`, shown as a
+dismissible banner for 7 days). Pushes are fire-and-forget: a failed send is
+logged (`push failed: ...` / `push skipped: host/key`) and never fails the
+admin request.
