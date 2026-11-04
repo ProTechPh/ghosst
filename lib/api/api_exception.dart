@@ -49,7 +49,11 @@ class ApiException implements Exception {
         ApiErrorKind.rateLimited => 'Sobrang daming request. Subukan ulit maya-maya.',
         ApiErrorKind.quotaExceeded =>
           'Puno na ang server quota ngayong araw. Bumalik bukas — hindi nawala ang coins mo.',
-        ApiErrorKind.server => 'May problema sa server. Subukan ulit.',
+        ApiErrorKind.server => switch (code) {
+          'server_busy' => 'Puno ang server ngayon. Subukan ulit maya-maya.',
+          'server_schema' => 'May kulang na setup sa server. Ipaalam sa admin.',
+          _ => 'May problema sa server. Subukan ulit.',
+        },
         ApiErrorKind.badResponse => 'Hindi maintindihan ang sagot ng server.',
       };
 

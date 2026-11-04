@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import 'announcement_banner.dart';
+import 'api/api_exception.dart';
 import 'arcade.dart';
 import 'premium.dart';
 import 'screens/adblock_screen.dart';
@@ -464,12 +465,12 @@ class _HomeShellState extends State<HomeShell> {
 
   Future<void> _refresh() async {
     var balance = coins;
-    var failed = false;
+    var reason = '';
     try {
       balance = await Backend.coins();
-    } catch (_) {
+    } catch (e) {
       // Keep the last known balance; a blip must not read as "0 coins".
-      failed = true;
+      reason = e is ApiException ? e.userMessage : 'Walang sagot ang server.';
     }
     final results = await Future.wait<Object>([
       Backend.isAdmin().catchError((_) => false),
@@ -495,10 +496,11 @@ class _HomeShellState extends State<HomeShell> {
       announcement = fresh;
       loading = false;
     });
-    if (failed && mounted) {
+    if (reason.isNotEmpty && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Could not refresh your balance.'),
+          // The server's own reason, not a generic "something failed".
+          content: Text('Hindi ma-refresh ang balance. $reason'),
           action: SnackBarAction(label: 'Retry', onPressed: _refresh),
         ),
       );

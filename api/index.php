@@ -62,6 +62,19 @@ const ROUTES = [
     ['GET',    '#^/v1/ads/ssv$#',                          'ads_ssv',                 'none'],
 ];
 
+/** Kilalang server failure → code na kayang ipaliwanag ng app. */
+function internal_error_code(Throwable $e): string
+{
+    $m = $e->getMessage();
+    if (str_contains($m, 'max_user_connections') || str_contains($m, 'Too many connections')) {
+        return 'server_busy';
+    }
+    if (str_contains($m, 'SQLSTATE[42S02]') || str_contains($m, 'Base table or view not found')) {
+        return 'server_schema';
+    }
+    return 'internal';
+}
+
 function send_response(int $status, string $body, string $contentType): void
 {
     http_response_code($status);
@@ -186,7 +199,7 @@ try {
     send_response(
         500,
         json_encode_body(['ok' => false, 'error' => [
-            'code'      => 'internal',
+            'code'      => internal_error_code($e),
             'message'   => 'Something went wrong on our side',
             'requestId' => $requestId,
         ]]),

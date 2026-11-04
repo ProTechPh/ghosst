@@ -87,6 +87,7 @@ class Backend {
 
   static Future<AppUser> _me() async {
     final u = (await _api.get('/me'))['user'] as Map<String, dynamic>;
+    _isAdmin = u['isAdmin'] as bool? ?? false;
     return AppUser(
       id: u['id'] as String,
       email: u['email'] as String? ?? '',
@@ -95,12 +96,14 @@ class Backend {
     );
   }
 
+  /// Reuses the cached `/me` payload: two parallel calls on launch meant two
+  /// DB connections per open, and Hostinger caps them per account.
   static Future<bool> isAdmin() async {
     final cached = _isAdmin;
     if (cached != null) return cached;
     try {
-      final u = (await _api.get('/me'))['user'] as Map<String, dynamic>;
-      return _isAdmin = u['isAdmin'] as bool? ?? false;
+      await currentUser();
+      return _isAdmin ?? false;
     } on ApiException {
       return false;
     }
