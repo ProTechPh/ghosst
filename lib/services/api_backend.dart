@@ -194,6 +194,15 @@ class ApiBackend {
     return raw is Map<String, dynamic> ? Announcement.fromJson(raw) : null;
   }
 
+  /// Every announcement still published, newest first.
+  Future<List<Announcement>> announcements() async {
+    final res = await _api.get('/announcements/history');
+    return (res['announcements'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(Announcement.fromJson)
+        .toList();
+  }
+
   /// Returns whether the server actually managed to push it.
   Future<bool> sendAnnouncement({required String title, required String body}) async {
     final res = await _api.post(
