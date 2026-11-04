@@ -24,7 +24,10 @@ function push_send(string $title, string $body): bool
 
     $payload = json_encode_body([
         'app_id'             => ONESIGNAL_APP_ID,
-        'included_segments'  => ['Subscribed Users'],
+        // "Subscribed Users" misses devices whose API-stored state lags behind
+        // the granted OS permission; "Total Subscriptions" reaches them and
+        // the OS still drops anything the user has muted.
+        'included_segments'  => ['Total Subscriptions'],
         'headings'           => ['en' => $title],
         'contents'           => ['en' => $body],
     ]);
