@@ -20,6 +20,7 @@ require __DIR__ . '/lib/idempotency.php';
 require __DIR__ . '/lib/rewards.php';
 require __DIR__ . '/lib/cloudinary.php';
 require __DIR__ . '/lib/push.php';
+require __DIR__ . '/lib/firebase.php';
 
 foreach (glob(__DIR__ . '/routes/*.php') ?: [] as $file) {
     require $file;
