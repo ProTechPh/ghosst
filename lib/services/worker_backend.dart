@@ -17,12 +17,14 @@ class AppUser {
     required this.email,
     required this.name,
     this.createdAt = '',
+    this.chatMuted = false,
   });
 
   final String id;
   final String email;
   final String name;
   final String createdAt;
+  final bool chatMuted;
 }
 
 /// Same surface the screens already used, served by the `ghosst-api` Worker.
@@ -35,6 +37,7 @@ class Backend {
 
   static AppUser? _user;
   static bool? _isAdmin;
+  static bool? _chatMuted;
 
   /// Set once by main.dart: the refresh token died, go back to sign-in.
   static set onSignedOut(void Function()? cb) => _api.onSignedOut = cb;
@@ -70,12 +73,14 @@ class Backend {
     );
     _user = null;
     _isAdmin = null;
+    _chatMuted = null;
   }
 
   static Future<void> signOut() async {
     await _api.logout();
     _user = null;
     _isAdmin = null;
+    _chatMuted = null;
   }
 
   /// Custom token para sa world chat (503 `chat_disabled` kapag hindi
@@ -88,16 +93,19 @@ class Backend {
     await _session.clear();
     _user = null;
     _isAdmin = null;
+    _chatMuted = null;
   }
 
   static Future<AppUser> _me() async {
     final u = (await _api.get('/me'))['user'] as Map<String, dynamic>;
     _isAdmin = u['isAdmin'] as bool? ?? false;
+    _chatMuted = u['chatMuted'] as bool? ?? false;
     return AppUser(
       id: u['id'] as String,
       email: u['email'] as String? ?? '',
       name: u['displayName'] as String? ?? '',
       createdAt: u['createdAt'] as String? ?? '',
+      chatMuted: _chatMuted!,
     );
   }
 
@@ -112,6 +120,23 @@ class Backend {
     } on ApiException {
       return false;
     }
+  }
+
+  /// Mute status sa world chat, mula sa cached `/me` payload (tulad ng isAdmin).
+  static Future<bool> chatMuted() async {
+    final cached = _chatMuted;
+    if (cached != null) return cached;
+    try {
+      await currentUser();
+      return _chatMuted ?? false;
+    } on ApiException {
+      return false;
+    }
+  }
+
+  /// Admin: i-mute/unmute ang isang user sa world chat.
+  static Future<void> setChatMuted(String userId, bool muted) async {
+    await _api.post('/admin/chat/mute', data: {'userId': userId, 'muted': muted});
   }
 
   // ---- profile ----

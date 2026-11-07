@@ -7,24 +7,40 @@ import 'package:ghosst/services/chat_service.dart';
 import 'package:ghosst/theme.dart';
 
 class _FakeClient implements ChatClient {
-  _FakeClient({this.ready = true, this.signedIn = true});
+  _FakeClient({
+    this.ready = true,
+    this.signedIn = true,
+    this.muted = false,
+  });
 
   @override
   final bool ready;
   final bool signedIn;
+  final bool muted;
   static const myUid = 'uid-1';
 
   final _controller = StreamController<List<ChatMessage>>();
   final sent = <String>[];
   final sentReplyTo = <ChatMessage?>[];
+  final muteCalls = <String>[];
   int subscribes = 0;
   String? sendError;
+  String? muteError;
 
   @override
   Future<bool> ensureSignedIn() async => signedIn;
 
   @override
   Future<String?> currentUid() async => myUid;
+
+  @override
+  Future<bool> isMuted() async => muted;
+
+  @override
+  Future<String?> setUserMuted(String uid, bool muted) async {
+    muteCalls.add('$uid:$muted');
+    return muteError;
+  }
 
   @override
   Stream<List<ChatMessage>> messages() {
@@ -70,10 +86,13 @@ Future<void> _pump(
   WidgetTester tester,
   ChatClient client, {
   bool active = true,
+  bool isAdmin = false,
 }) async {
   await tester.pumpWidget(MaterialApp(
     theme: AppTheme.dark,
-    home: Scaffold(body: ChatScreen(client: client, active: active)),
+    home: Scaffold(
+      body: ChatScreen(client: client, active: active, isAdmin: isAdmin),
+    ),
   ));
   await tester.pump();
 }
@@ -227,6 +246,67 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('No messages yet. Be the first.'), findsOneWidget);
+  });
+
+  testWidgets('admin long-press opens the mute dialog', (tester) async {
+    final client = _FakeClient();
+    await _pump(tester, client, isAdmin: true);
+    await tester.pumpAndSettle();
+
+    client._controller.add([_msg(uid: 'uid-2', text: 'Hello')]);
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('Hello'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mute Jeric in world chat?'), findsOneWidget);
+
+    await tester.tap(find.text('Mute'));
+    await tester.pumpAndSettle();
+
+    expect(client.muteCalls, ['uid-2:true']);
+    expect(find.text('User muted.'), findsOneWidget);
+  });
+
+  testWidgets('non-admin long-press shows no dialog', (tester) async {
+    final client = _FakeClient();
+    await _pump(tester, client);
+    await tester.pumpAndSettle();
+
+    client._controller.add([_msg(uid: 'uid-2', text: 'Hello')]);
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('Hello'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Chat moderation'), findsNothing);
+    expect(client.muteCalls, isEmpty);
+  });
+
+  testWidgets('admin long-press on own message shows no dialog',
+      (tester) async {
+    final client = _FakeClient();
+    await _pump(tester, client, isAdmin: true);
+    await tester.pumpAndSettle();
+
+    client._controller.add([_msg(text: 'Mine')]);
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('Mine'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Chat moderation'), findsNothing);
+    expect(client.muteCalls, isEmpty);
+  });
+
+  testWidgets('a muted user sees the muted bar instead of the composer',
+      (tester) async {
+    final client = _FakeClient(muted: true);
+    await _pump(tester, client);
+    await tester.pumpAndSettle();
+
+    expect(find.text('You are muted in this chat.'), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
   });
 
   testWidgets('renders the reply quote inside the bubble', (tester) async {

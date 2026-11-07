@@ -105,6 +105,7 @@ service cloud.firestore {
         && request.resource.data.text.size() > 0
         && request.resource.data.text.size() <= 500
         && request.resource.data.admin == (request.auth.token.admin == true)
+        && request.auth.token.muted == false
         && request.resource.data.ts == request.time
         && (!('replyName' in request.resource.data)
           || (request.resource.data.replyName is string
@@ -127,9 +128,9 @@ service cloud.firestore {
   - `firebase_custom_token(string $uid, bool $isAdmin): string` — RS256 JWT exactly
     per Firebase docs: `iss`/`sub` = SA email, `aud =
     https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit`,
-    `iat`, `exp` = iat+3600 (the max), `uid`, `claims {admin: true|false}` —
-    the claim is always present (absent claim = rules error on
-    `request.auth.token.admin`, denying every non-admin write).
+    `iat`, `exp` = iat+3600 (the max), `uid`, `claims {admin: true|false,
+    muted: true|false}` — both claims are always present (absent claim =
+    rules error on `request.auth.token.admin`/`muted`, denying writes).
     (`admin` is not a reserved claim). Signs with `openssl_sign` + `b64url_encode`,
     mirroring `sign_access_token()`.
   - `firebase_scrub_chat(string $uid): void` — SA-key OAuth2 token (scope

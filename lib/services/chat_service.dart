@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
+import '../api/api_exception.dart';
 import 'worker_backend.dart';
 
 /// Isang message sa world chat room.
@@ -43,6 +44,12 @@ abstract class ChatClient {
 
   /// Ang backend UUID ng naka-sign-in na user (null = wala pa).
   Future<String?> currentUid();
+
+  /// True kapag ang kasalukuyang user ay naka-mute sa chat (token claim).
+  Future<bool> isMuted();
+
+  /// Admin: i-mute/unmute ang isang user sa chat. `null` = ok; string = dahilan.
+  Future<String?> setUserMuted(String uid, bool muted);
 
   Stream<List<ChatMessage>> messages();
   Future<String?> send(String text, {ChatMessage? replyTo});
@@ -89,10 +96,10 @@ class ChatService implements ChatClient {
   }
 
   /// Invisible sign-in gamit ang custom token. Nagre-mint kapag stale ang
-  /// admin claim (halimbawa, ginawang admin ang account pagkatapos ng login).
-  /// Ang `isAdmin` ay kukunin lang kapag may existing session na — sa bagong
-  /// device (walang session) hindi ito ginagamit at isang /me round trip
-  /// ang nasasayang kung kukunin ito nang maaga.
+  /// admin o muted claim (halimbawa, ginawang admin o na-mute ang account
+  /// pagkatapos ng login). Ang `isAdmin` at `chatMuted` ay kukunin lang
+  /// kapag may existing session na — sa bagong device (walang session) hindi
+  /// sila ginagamit at isang /me round trip ang nasasayang kung maaga.
   @override
   Future<bool> ensureSignedIn() async {
     if (!_ready) return false;
@@ -100,9 +107,10 @@ class ChatService implements ChatClient {
       final current = FirebaseAuth.instance.currentUser;
       if (current != null) {
         final isAdmin = await Backend.isAdmin();
+        final muted = await Backend.chatMuted();
         final claims = (await current.getIdTokenResult()).claims ?? const {};
         // Eksaktong tugma, hindi truthy: kulang na claim = kailangang i-mint ulit.
-        if (claims['admin'] == isAdmin) return true;
+        if (claims['admin'] == isAdmin && claims['muted'] == muted) return true;
         await FirebaseAuth.instance.signOut();
       }
       final token = await Backend.firebaseToken();
@@ -122,6 +130,34 @@ class ChatService implements ChatClient {
   Future<String?> currentUid() async {
     if (!_ready) return null;
     return FirebaseAuth.instance.currentUser?.uid;
+  }
+
+  /// Ang `muted` claim ng kasalukuyang token (cached, walang network).
+  @override
+  Future<bool> isMuted() async {
+    if (!_ready) return false;
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return false;
+      final claims = (await user.getIdTokenResult(true)).claims ?? const {};
+      return claims['muted'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Admin-only moderation. Ang API ang nagvavalidate ng role; dito lang
+  /// SnackBar-ready na string ang ibinabalik.
+  @override
+  Future<String?> setUserMuted(String uid, bool muted) async {
+    try {
+      await Backend.setChatMuted(uid, muted);
+      return null;
+    } on ApiException catch (e) {
+      return e.userMessage;
+    } catch (_) {
+      return 'Could not update mute. Try again.';
+    }
   }
 
   /// Pinakabagong 50 messages, live (Firestore cache = offline queueing).

@@ -14,6 +14,7 @@ class ChatScreen extends StatefulWidget {
     this.embedded = true,
     this.client,
     this.active = true,
+    this.isAdmin = false,
   });
 
   /// True when shown as a shell tab (the shell supplies the bar).
@@ -26,6 +27,9 @@ class ChatScreen extends StatefulWidget {
   /// so the listener waits for the first visit instead of billing a read on
   /// every app open (Spark daily cap).
   final bool active;
+
+  /// True kapag admin ang naka-sign-in — lumalabas ang long-press mute menu.
+  final bool isAdmin;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -40,6 +44,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _booting = false;
   bool _unavailable = false;
   bool _booted = false; // true pagkatapos ng unang snapshot (hindi empty state)
+  bool _muted = false;
   String? _myUid;
   ChatMessage? _replyTo;
 
@@ -75,10 +80,12 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
     final uid = await _client.currentUid();
+    final muted = await _client.isMuted();
     debugPrint('[ChatScreen] signed in + subscribing in ${sw.elapsedMilliseconds}ms');
     if (mounted) {
       setState(() {
         _myUid = uid;
+        _muted = muted;
         _subscribe();
       });
     }
@@ -112,6 +119,42 @@ class _ChatScreenState extends State<ChatScreen> {
     _sub?.cancel();
     _input.dispose();
     super.dispose();
+  }
+
+  /// Long-press sa message ng ibang user (admin lang): mute/unmute dialog.
+  /// Ang enforcement ay server-side (muted claim sa rules); ito ay UI lang.
+  Future<void> _onLongPress(ChatMessage m) async {
+    if (!widget.isAdmin || m.uid == _myUid || m.name.isEmpty) return;
+    final action = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Chat moderation'),
+        content: Text('Mute ${m.name} in world chat?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, 'cancel'),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, 'unmute'),
+            child: const Text('Unmute'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, 'mute'),
+            style: TextButton.styleFrom(foregroundColor: AppColors.red),
+            child: const Text('Mute'),
+          ),
+        ],
+      ),
+    );
+    if (action != 'mute' && action != 'unmute') return;
+    if (!mounted) return;
+    final muted = action == 'mute';
+    final problem = await _client.setUserMuted(m.uid, muted);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(problem ?? (muted ? 'User muted.' : 'User unmuted.'))),
+    );
   }
 
   Future<void> _send() async {
@@ -217,7 +260,10 @@ class _ChatScreenState extends State<ChatScreen> {
         alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: maxBubble),
-          child: _bubble(m, mine),
+          child: GestureDetector(
+            onLongPress: () => _onLongPress(m),
+            child: _bubble(m, mine),
+          ),
         ),
       ),
     );
@@ -332,6 +378,39 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  /// "You are muted" bar kapalit ng composer (enforcement ay nasa rules).
+  Widget _mutedBar() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(
+        AppSpace.lg,
+        AppSpace.sm,
+        AppSpace.lg,
+        AppSpace.sm,
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.md,
+        vertical: AppSpace.md,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.input),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.block, size: 18, color: AppColors.red),
+          SizedBox(width: AppSpace.sm),
+          Expanded(
+            child: Text(
+              'You are muted in this chat.',
+              style: AppText.caption,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// "Reply to ..." preview bar sa ibabaw ng input (tulad ng screenshot).
   Widget _replyPreview() {
     final target = _replyTo!;
@@ -396,8 +475,11 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (_replyTo != null) _replyPreview(),
-          Padding(
+          if (_replyTo != null && !_muted) _replyPreview(),
+          if (_muted)
+            _mutedBar()
+          else
+            Padding(
             padding: const EdgeInsets.fromLTRB(
               AppSpace.lg,
               AppSpace.sm,
