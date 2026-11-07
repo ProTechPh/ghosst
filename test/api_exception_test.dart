@@ -101,7 +101,7 @@ void main() {
       ));
 
       expect(api.kind, ApiErrorKind.server);
-      expect(api.userMessage, contains('Puno ang server'));
+      expect(api.userMessage, contains('server is full'));
     });
 
     test('a missing table points at the setup, not at the user', () {
@@ -113,7 +113,7 @@ void main() {
         },
       ));
 
-      expect(api.userMessage, contains('setup sa server'));
+      expect(api.userMessage, contains('missing some setup'));
     });
   });
 }

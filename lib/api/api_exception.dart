@@ -40,21 +40,21 @@ class ApiException implements Exception {
 
   /// What the user reads. Short, calm, never a stack trace.
   String get userMessage => switch (kind) {
-        ApiErrorKind.network => 'Walang internet connection. Subukan ulit.',
-        ApiErrorKind.timeout => 'Masyadong matagal ang sagot. Subukan ulit.',
-        ApiErrorKind.unauthorized => 'Nag-expire ang session. Mag-sign in ulit.',
-        ApiErrorKind.forbidden => 'Wala kang access dito.',
-        ApiErrorKind.notFound => 'Hindi na-available ang item na ito.',
+        ApiErrorKind.network => 'No internet connection. Try again.',
+        ApiErrorKind.timeout => 'The response is taking too long. Try again.',
+        ApiErrorKind.unauthorized => 'Your session has expired. Sign in again.',
+        ApiErrorKind.forbidden => 'You do not have access to this.',
+        ApiErrorKind.notFound => 'This item is no longer available.',
         ApiErrorKind.conflict => message,
-        ApiErrorKind.rateLimited => 'Sobrang daming request. Subukan ulit maya-maya.',
+        ApiErrorKind.rateLimited => 'Too many requests. Try again in a bit.',
         ApiErrorKind.quotaExceeded =>
-          'Puno na ang server quota ngayong araw. Bumalik bukas — hindi nawala ang coins mo.',
+          'The server quota is full for today. Come back tomorrow — your coins are safe.',
         ApiErrorKind.server => switch (code) {
-          'server_busy' => 'Puno ang server ngayon. Subukan ulit maya-maya.',
-          'server_schema' => 'May kulang na setup sa server. Ipaalam sa admin.',
-          _ => 'May problema sa server. Subukan ulit.',
+          'server_busy' => 'The server is full right now. Try again in a bit.',
+          'server_schema' => 'The server is missing some setup. Please tell an admin.',
+          _ => 'There is a problem with the server. Try again.',
         },
-        ApiErrorKind.badResponse => 'Hindi maintindihan ang sagot ng server.',
+        ApiErrorKind.badResponse => 'The server response could not be understood.',
       };
 
   int? get retryAfterSeconds => retryAfter?.inSeconds;

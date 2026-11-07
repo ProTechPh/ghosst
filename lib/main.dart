@@ -476,7 +476,7 @@ class _HomeShellState extends State<HomeShell> {
       balance = await Backend.coins();
     } catch (e) {
       // Keep the last known balance; a blip must not read as "0 coins".
-      reason = e is ApiException ? e.userMessage : 'Walang sagot ang server.';
+      reason = e is ApiException ? e.userMessage : 'The server did not respond.';
     }
     final results = await Future.wait<Object>([
       Backend.isAdmin().catchError((_) => false),
@@ -506,7 +506,7 @@ class _HomeShellState extends State<HomeShell> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           // The server's own reason, not a generic "something failed".
-          content: Text('Hindi ma-refresh ang balance. $reason'),
+          content: Text('Could not refresh the balance. $reason'),
           action: SnackBarAction(label: 'Retry', onPressed: _refresh),
         ),
       );

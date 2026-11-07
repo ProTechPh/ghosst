@@ -182,7 +182,7 @@ class Backend {
     if (key == null || key.isEmpty) {
       throw const ApiException(
         kind: ApiErrorKind.badResponse,
-        message: 'Walang key sa sagot ng server',
+        message: 'No key in the server response',
       );
     }
     return key;
@@ -194,7 +194,7 @@ class Backend {
     if (url == null || url.trim().isEmpty) {
       throw const ApiException(
         kind: ApiErrorKind.conflict,
-        message: 'Wala pang download link ang produktong ito.',
+        message: 'This product has no download link yet.',
       );
     }
     return (url: url, sha256: res['sha256'] as String?);
@@ -396,7 +396,7 @@ class Backend {
     if (id is! String || id.isEmpty) {
       throw const ApiException(
         kind: ApiErrorKind.badResponse,
-        message: 'Walang id sa sagot ng server',
+        message: 'No id in the server response',
       );
     }
     return id;

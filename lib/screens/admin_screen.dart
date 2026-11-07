@@ -1617,7 +1617,7 @@ class _AdminScreenState extends State<AdminScreen> {
                 maxLength: 120,
                 textCapitalization: TextCapitalization.sentences,
                 decoration: const InputDecoration(
-                  hintText: 'Title (e.g. Bagong stock: Netflix)',
+                  hintText: 'Title (e.g. New stock: Netflix)',
                   counterText: '',
                 ),
               ),

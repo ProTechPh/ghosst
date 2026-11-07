@@ -63,7 +63,7 @@ class _SignInState extends State<SignIn> {
       if (mounted) {
         setState(() {
           error = e.code == 'invalid_credentials'
-              ? 'Maling email o password.'
+              ? 'Wrong email or password.'
               : e.userMessage;
         });
       }
