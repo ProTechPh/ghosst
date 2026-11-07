@@ -89,7 +89,18 @@ class _ChatScreenState extends State<ChatScreen> {
     if (!mounted) return;
     _booting = false;
     if (!_client.ready) return;
-    if (!await _client.ensureSignedIn()) {
+    // Boot timeout: ang Firebase sign-in ay walang app-level timeout, kaya
+    // mananatiling "loading" nang hangganan kung ito ay bibitin sa mabagal
+    // na network. Pag lumampas sa 25s, fallback ang ipapakita (at ang pagbalik
+    // sa tab ay magre-retry, kasi _sub ay null pa rin).
+    final ok = await _client.ensureSignedIn().timeout(
+      const Duration(seconds: 25),
+      onTimeout: () {
+        debugPrint('[ChatScreen] boot timed out after ${sw.elapsedMilliseconds}ms');
+        return false;
+      },
+    );
+    if (!ok) {
       if (mounted) setState(() => _unavailable = true);
       return;
     }

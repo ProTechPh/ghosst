@@ -22,6 +22,9 @@ class _FakeClient implements ChatClient {
   final List<MutedUser> mutedList;
   static const myUid = 'uid-1';
 
+  /// True ay hindi kailanman natatapos ang sign-in (boot timeout test).
+  bool hangSignIn = false;
+
   final _controller = StreamController<List<ChatMessage>>();
   final sent = <String>[];
   final sentReplyTo = <ChatMessage?>[];
@@ -31,7 +34,10 @@ class _FakeClient implements ChatClient {
   String? muteError;
 
   @override
-  Future<bool> ensureSignedIn() async => signedIn;
+  Future<bool> ensureSignedIn() async {
+    if (hangSignIn) return Completer<bool>().future;
+    return signedIn;
+  }
 
   @override
   Future<String?> currentUid() async => myUid;
@@ -236,6 +242,20 @@ void main() {
     expect(client.sentReplyTo.single?.name, 'Jeric');
     expect(client.sentReplyTo.single?.text, 'Hello');
     expect(find.text('Reply to Jeric'), findsNothing);
+  });
+
+  testWidgets('a hanging sign-in falls back after the boot timeout',
+      (tester) async {
+    final client = _FakeClient()..hangSignIn = true;
+    await _pump(tester, client);
+    await tester.pump();
+
+    expect(find.text('Loading chat…'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 26));
+
+    expect(find.text('Chat unavailable'), findsOneWidget);
+    expect(client.subscribes, 0);
   });
 
   testWidgets('shows loading until the first snapshot, then the empty state',
