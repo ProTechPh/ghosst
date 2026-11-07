@@ -37,6 +37,7 @@ class Backend {
 
   static AppUser? _user;
   static bool? _isAdmin;
+  static bool? _isModerator;
   static bool? _chatMuted;
 
   /// Set once by main.dart: the refresh token died, go back to sign-in.
@@ -73,6 +74,7 @@ class Backend {
     );
     _user = null;
     _isAdmin = null;
+    _isModerator = null;
     _chatMuted = null;
   }
 
@@ -80,6 +82,7 @@ class Backend {
     await _api.logout();
     _user = null;
     _isAdmin = null;
+    _isModerator = null;
     _chatMuted = null;
   }
 
@@ -93,12 +96,14 @@ class Backend {
     await _session.clear();
     _user = null;
     _isAdmin = null;
+    _isModerator = null;
     _chatMuted = null;
   }
 
   static Future<AppUser> _me() async {
     final u = (await _api.get('/me'))['user'] as Map<String, dynamic>;
     _isAdmin = u['isAdmin'] as bool? ?? false;
+    _isModerator = u['isModerator'] as bool? ?? false;
     _chatMuted = u['chatMuted'] as bool? ?? false;
     return AppUser(
       id: u['id'] as String,
@@ -117,6 +122,17 @@ class Backend {
     try {
       await currentUser();
       return _isAdmin ?? false;
+    } on ApiException {
+      return false;
+    }
+  }
+
+  static Future<bool> isModerator() async {
+    final cached = _isModerator;
+    if (cached != null) return cached;
+    try {
+      await currentUser();
+      return _isModerator ?? false;
     } on ApiException {
       return false;
     }
@@ -524,6 +540,28 @@ class Backend {
 
   static Future<void> deleteAppFile(String productId) =>
       _api.patch('/products/$productId', data: {'fileUrl': ''});
+
+  // ---- moderators (admin only) ----
+
+  static Future<List<Map<String, dynamic>>> moderators() async {
+    final res = await _api.get('/admin/moderators');
+    final rows = (res['users'] as List?) ?? const [];
+    return rows.map((e) => (e as Map).cast<String, dynamic>()).toList();
+  }
+
+  static Future<void> promoteModerator(String userId) async {
+    await _api.post('/admin/moderators/$userId');
+  }
+
+  static Future<void> demoteModerator(String userId) async {
+    await _api.delete('/admin/moderators/$userId');
+  }
+
+  static Future<List<Map<String, dynamic>>> searchUsers(String query) async {
+    final res = await _api.get('/admin/users', query: {'search': query});
+    final rows = (res['users'] as List?) ?? const [];
+    return rows.map((e) => (e as Map).cast<String, dynamic>()).toList();
+  }
 
   // ---- images ----
 

@@ -15,6 +15,8 @@ class ChatScreen extends StatefulWidget {
     this.client,
     this.active = true,
     this.isAdmin = false,
+    this.isModerator = false,
+    this.onUnreadChanged,
   });
 
   /// True when shown as a shell tab (the shell supplies the bar).
@@ -30,6 +32,8 @@ class ChatScreen extends StatefulWidget {
 
   /// True kapag admin ang naka-sign-in — lumalabas ang long-press mute menu.
   final bool isAdmin;
+  final bool isModerator;
+  final ValueChanged<bool>? onUnreadChanged;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -38,6 +42,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   late final ChatClient _client = widget.client ?? ChatService();
   final _input = TextEditingController();
+  final _scroll = ScrollController();
   StreamSubscription<List<ChatMessage>>? _sub;
   List<ChatMessage> _messages = const [];
   bool _sending = false;
@@ -47,6 +52,8 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _muted = false;
   String? _myUid;
   ChatMessage? _replyTo;
+  bool _loadingMore = false;
+  bool _hasMore = true;
 
   /// Ang ids ng mga naka-mute user (admin lang) — pangtanggal ng hula sa
   /// long-press dialog. Ni-refresh pagbalik sa tab at pagkatapos ng action.
@@ -67,6 +74,8 @@ class _ChatScreenState extends State<ChatScreen> {
       // Ang mute status ay pwedeng nagbago habang wala sa tab (admin
       // nag-unmute/mute) — i-recheck sa bawat pagbalik, hindi sa restart.
       if (_sub != null) _recheckMuted();
+      // Nalimutan na ang unread reply kapag binuksan ang tab.
+      widget.onUnreadChanged?.call(false);
     }
   }
 
@@ -100,10 +109,34 @@ class _ChatScreenState extends State<ChatScreen> {
     if (!mounted) return;
     _booting = false;
     if (!_client.ready) return;
-    // Boot timeout: ang Firebase sign-in ay walang app-level timeout, kaya
-    // mananatiling "loading" nang hangganan kung ito ay bibitin sa mabagal
-    // na network. Pag lumampas sa 25s, fallback ang ipapakita (at ang pagbalik
-    // sa tab ay magre-retry, kasi _sub ay null pa rin).
+
+    if (_client.hasSession) {
+      // Fast path: may persisted session na. Mag-subscribe agad gamit ito
+      // (ang read rule ay kailangan lang ng auth — sapat ang lumang token),
+      // at i-validate ang claims laban sa backend sa background. Ang /me at
+      // token refresh ay hindi na nasa critical path ng unang paint.
+      final uid = await _client.currentUid();
+      final muted = await _client.isMuted();
+      debugPrint('[ChatScreen] subscribing (session) in ${sw.elapsedMilliseconds}ms');
+      if (mounted) {
+        setState(() {
+          _myUid = uid;
+          _muted = muted;
+          _subscribe();
+        });
+        // Ang muted list ay dialog state lang — pagkatapos ng subscribe para
+        // hindi nito i-delay ang unang paint.
+        if (widget.isAdmin) _refreshMuted();
+      }
+      // Background validation: nire-mint kung stale ang claims (walang signOut
+      // kaya nabubuhay ang stream). Kung pumalya ito, ang send path ang
+      // magre-validate ulit — hindi ito critical para sa pagbasang.
+      unawaited(_client.ensureSignedIn());
+      return;
+    }
+
+    // Slow path (bagong device): buong sign-in muna bago mag-subscribe, at
+    // 25s timeout para hindi maging infinite loading ang mabagal na network.
     final ok = await _client.ensureSignedIn().timeout(
       const Duration(seconds: 25),
       onTimeout: () {
@@ -140,6 +173,15 @@ class _ChatScreenState extends State<ChatScreen> {
           debugPrint(
               '[ChatScreen] first snapshot (${list.length} msgs) in ${sw.elapsedMilliseconds}ms');
         }
+        final oldIds = _messages.map((m) => m.id).toSet();
+        final hasNewReply = list.any((m) =>
+            m.uid != _myUid &&
+            m.replyToId != null &&
+            _messages.any((o) => o.id == m.replyToId && o.uid == _myUid) &&
+            !oldIds.contains(m.id));
+        if (hasNewReply && !widget.active) {
+          widget.onUnreadChanged?.call(true);
+        }
         setState(() {
           _messages = list;
           _booted = true;
@@ -148,6 +190,7 @@ class _ChatScreenState extends State<ChatScreen> {
       onError: (Object e) {
         debugPrint('[ChatScreen] stream failed: $e');
         _sub?.cancel();
+        _sub = null; // payagan ang re-boot pagbalik sa tab (retry)
         if (mounted) setState(() => _unavailable = true);
       },
     );
@@ -157,6 +200,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _sub?.cancel();
     _input.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -164,7 +208,7 @@ class _ChatScreenState extends State<ChatScreen> {
   /// Ang enforcement ay server-side (muted claim sa rules); ito ay UI lang.
   /// Isang action button lang ang pinapakita, batay sa totoong mute state.
   Future<void> _onLongPress(ChatMessage m) async {
-    if (!widget.isAdmin || m.uid == _myUid || m.name.isEmpty) return;
+    if (!(widget.isAdmin || widget.isModerator) || m.uid == _myUid || m.name.isEmpty) return;
     final muted = _mutedIds.contains(m.uid);
     final action = await showDialog<String>(
       context: context,
@@ -277,6 +321,7 @@ class _ChatScreenState extends State<ChatScreen> {
       builder: (context, constraints) {
         final maxBubble = constraints.maxWidth * 0.78;
         return ListView.separated(
+          controller: _scroll,
           reverse: true,
           padding: const EdgeInsets.fromLTRB(
             AppSpace.lg,
@@ -284,9 +329,25 @@ class _ChatScreenState extends State<ChatScreen> {
             AppSpace.lg,
             AppSpace.sm,
           ),
-          itemCount: _messages.length,
+          itemCount: _messages.length + (_hasMore ? 1 : 0),
           separatorBuilder: (_, _) => const SizedBox(height: AppSpace.sm),
-          itemBuilder: (_, i) => _swipeable(_messages[i], maxBubble),
+          itemBuilder: (_, i) {
+            if (i >= _messages.length) {
+              return Center(
+                child: TextButton(
+                  onPressed: _loadingMore ? null : _loadMore,
+                  child: _loadingMore
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Load older messages'),
+                ),
+              );
+            }
+            return _swipeable(_messages[i], maxBubble);
+          },
         );
       },
     );
@@ -312,12 +373,102 @@ class _ChatScreenState extends State<ChatScreen> {
       },
       child: Align(
         alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: maxBubble),
-          child: GestureDetector(
-            onLongPress: () => _onLongPress(m),
-            child: _bubble(m, mine),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (!mine) ...[
+              _avatar(m.name, mine),
+              const SizedBox(width: AppSpace.sm),
+            ],
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxBubble - 36),
+              child: GestureDetector(
+                onLongPress: () => _onLongPress(m),
+                child: _bubble(m, mine),
+              ),
+            ),
+            if (mine) ...[
+              const SizedBox(width: AppSpace.sm),
+              _avatar(m.name, mine),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _jumpToReply(String? replyToId) {
+    if (replyToId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Original message not available')),
+      );
+      return;
+    }
+    final idx = _messages.indexWhere((m) => m.id == replyToId);
+    if (idx < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Original message not loaded')),
+      );
+      return;
+    }
+    // reversed list: index in ListView = (_messages.length - 1 - idx) + (hasMore?1:0)
+    final listIndex = (_messages.length - 1 - idx);
+    if (_scroll.hasClients) {
+      _scroll.animateTo(
+        listIndex * 80.0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_hasMore || _messages.isEmpty) return;
+    setState(() => _loadingMore = true);
+    final older = await _client.loadOlder(_messages.last.tsMillis);
+    if (!mounted) return;
+    setState(() {
+      if (older.isEmpty) {
+        _hasMore = false;
+      } else {
+        final ids = _messages.map((m) => m.id).toSet();
+        final newOnes = older.where((m) => !ids.contains(m.id)).toList();
+        _messages = [..._messages, ...newOnes];
+        if (newOnes.length < 50) _hasMore = false;
+      }
+      _loadingMore = false;
+    });
+  }
+
+  Widget _avatar(String name, bool mine) {
+    final letter = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
+    return Container(
+      width: 28,
+      height: 28,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        gradient: mine ? kNeonGradient : null,
+        color: mine ? null : AppColors.surfaceHigh,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: mine ? Colors.transparent : AppColors.border,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: (mine ? AppColors.primary : Colors.black)
+                .withValues(alpha: 0.25),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
+        ],
+      ),
+      child: Text(
+        letter,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          color: mine ? const Color(0xFF04212A) : AppColors.text,
         ),
       ),
     );
@@ -325,8 +476,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _bubble(ChatMessage m, bool mine) {
     final at = DateTime.fromMillisecondsSinceEpoch(m.tsMillis);
+    final hour12 = at.hour % 12 == 0 ? 12 : at.hour % 12;
+    final period = at.hour >= 12 ? 'PM' : 'AM';
     final clock =
-        '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
+        '$hour12:${at.minute.toString().padLeft(2, '0')} $period';
     // Sariling bubble: cyan gradient + dark text (tulad ng NeonButton).
     final ink = mine ? const Color(0xFF04212A) : AppColors.text;
     final dim = mine ? const Color(0xB304212A) : AppColors.textDim;
@@ -341,11 +494,22 @@ class _ChatScreenState extends State<ChatScreen> {
         color: mine ? null : AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadius.button),
         border: mine ? null : Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (m.replyName != null || m.replyText != null) _quote(m, mine),
+          if (m.replyName != null || m.replyText != null)
+            GestureDetector(
+              onTap: () => _jumpToReply(m.replyToId),
+              child: _quote(m, mine),
+            ),
           if (!mine)
             Row(
               children: [

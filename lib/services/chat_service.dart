@@ -20,6 +20,7 @@ class ChatMessage {
     required this.tsMillis,
     this.replyName,
     this.replyText,
+  this.replyToId,
   });
 
   final String id;
@@ -33,6 +34,7 @@ class ChatMessage {
   /// ay maaaring '' (deleted user) — display-time na 'Deleted user'.
   final String? replyName;
   final String? replyText;
+  final String? replyToId;
 }
 
 /// Ang surface na ginagamit ng [ChatScreen] — fake ito sa widget tests.
@@ -41,6 +43,10 @@ abstract class ChatClient {
 
   /// Invisible Firebase sign-in; false = chat unavailable.
   Future<bool> ensureSignedIn();
+
+  /// True kapag may persisted Firebase session na (sync check, walang network).
+  /// Kapag true, pwedeng mag-subscribe agad at i-validate sa background.
+  bool get hasSession;
 
   /// Ang backend UUID ng naka-sign-in na user (null = wala pa).
   Future<String?> currentUid();
@@ -61,6 +67,8 @@ abstract class ChatClient {
   Future<List<MutedUser>> mutedUsers();
 
   Stream<List<ChatMessage>> messages();
+  /// Kumuha ng mas lumang messages bago ang [beforeTsMillis] (pagination).
+  Future<List<ChatMessage>> loadOlder(int beforeTsMillis);
   Future<String?> send(String text, {ChatMessage? replyTo});
   Future<void> signOut();
 }
@@ -109,6 +117,8 @@ class ChatService implements ChatClient {
   /// pagkatapos ng login). Ang `isAdmin` at `chatMuted` ay kukunin lang
   /// kapag may existing session na — sa bagong device (walang session) hindi
   /// sila ginagamit at isang /me round trip ang nasasayang kung maaga.
+  /// Walang `signOut` dito: parehong uid ang mint, kaya ang Firestore stream
+  /// ay nire-re-auth lang sa halip na maputol.
   @override
   Future<bool> ensureSignedIn() async {
     if (!_ready) return false;
@@ -117,10 +127,16 @@ class ChatService implements ChatClient {
       if (current != null) {
         final isAdmin = await Backend.isAdmin();
         final muted = await Backend.chatMuted();
-        final claims = (await current.getIdTokenResult()).claims ?? const {};
+        Map<String, dynamic>? claims;
+        try {
+          claims = (await current.getIdTokenResult()).claims;
+        } catch (_) {
+          claims = null; // patay ang session — mint ulit sa baba
+        }
         // Eksaktong tugma, hindi truthy: kulang na claim = kailangang i-mint ulit.
-        if (claims['admin'] == isAdmin && claims['muted'] == muted) return true;
-        await FirebaseAuth.instance.signOut();
+        if (claims != null && claims['admin'] == isAdmin && claims['muted'] == muted) {
+          return true;
+        }
       }
       final token = await Backend.firebaseToken();
       await FirebaseAuth.instance.signInWithCustomToken(token);
@@ -129,6 +145,12 @@ class ChatService implements ChatClient {
       debugPrint('[ChatService] sign-in failed: $e');
       return false;
     }
+  }
+
+  @override
+  bool get hasSession {
+    if (!_ready) return false;
+    return FirebaseAuth.instance.currentUser != null;
   }
 
   /// Admin: lahat ng users na naka-mute sa world chat (para sa Admin screen).
@@ -192,8 +214,8 @@ class ChatService implements ChatClient {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
         final claims = (await user.getIdTokenResult()).claims ?? const {};
+        // Walang signOut — parehong uid ang mint, nire-re-auth lang ang stream.
         if (claims['muted'] != muted) {
-          await FirebaseAuth.instance.signOut();
           final token = await Backend.firebaseToken();
           await FirebaseAuth.instance.signInWithCustomToken(token);
         }
@@ -247,8 +269,41 @@ class ChatService implements ChatClient {
                         (doc.data()['ts'] as Timestamp).millisecondsSinceEpoch,
                     replyName: doc.data()['replyName'] as String?,
                     replyText: doc.data()['replyText'] as String?,
+                    replyToId: doc.data()['replyToId'] as String?,
                   ),
             ]);
+  }
+
+  @override
+  Future<List<ChatMessage>> loadOlder(int beforeTsMillis) async {
+    if (!_ready) return const [];
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('world_chat')
+          .orderBy('ts', descending: true)
+          .startAfter([Timestamp.fromMillisecondsSinceEpoch(beforeTsMillis)])
+          .limit(_pageSize)
+          .get();
+      return [
+        for (final doc in snap.docs)
+          if (doc.data()['ts'] is Timestamp)
+            ChatMessage(
+              id: doc.id,
+              uid: doc.data()['uid'] as String? ?? '',
+              name: doc.data()['name'] as String? ?? '',
+              text: doc.data()['text'] as String? ?? '',
+              admin: doc.data()['admin'] as bool? ?? false,
+              tsMillis:
+                  (doc.data()['ts'] as Timestamp).millisecondsSinceEpoch,
+              replyName: doc.data()['replyName'] as String?,
+              replyText: doc.data()['replyText'] as String?,
+              replyToId: doc.data()['replyToId'] as String?,
+            ),
+      ];
+    } catch (e) {
+      debugPrint('[ChatService] loadOlder failed: $e');
+      return const [];
+    }
   }
 
   /// `null` = naipadala; string = dahilan kung bakit hindi. Validation at
@@ -292,6 +347,7 @@ class ChatService implements ChatClient {
         data['replyName'] = replyTo.name;
         data['replyText'] =
             String.fromCharCodes(replyTo.text.runes.take(_maxQuote));
+        data['replyToId'] = replyTo.id;
       }
       await FirebaseFirestore.instance.collection('world_chat').add(data);
       return null;

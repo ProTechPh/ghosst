@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Earn Design Options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#050B0E;--panel:#08151A;--border:#1A3740;--cyan:#22D3EE;--cyan2:#67E8F9;--gold:#FBBF24;--text:#F1FAFC;--dim:#8DA6AF;--green:#34D399;--red:#F43F5E}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#020608;color:var(--text);font-family:'Rajdhani','Segoe UI',sans-serif;padding:24px;min-height:100vh}
+  h1{font-family:'Orbitron',sans-serif;font-size:20px;font-weight:900;letter-spacing:.08em;margin-bottom:4px;color:var(--cyan)}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:28px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px}
+  .phone{background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:16px;overflow:hidden;box-shadow:0 0 40px rgba(34,211,238,.08),0 30px 80px rgba(0,0,0,.9);position:relative;height:520px;display:flex;flex-direction:column}
+  .phone::before{content:'';position:absolute;inset:0;background:radial-gradient(400px 200px at 50% 0%,rgba(34,211,238,.06),transparent);pointer-events:none}
+  .lab{font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;letter-spacing:.2em;color:var(--cyan);margin-bottom:6px}
+  .ttl{font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;margin-bottom:2px}
+  .dsc{font-size:11px;color:var(--dim);margin-bottom:10px;line-height:1.4}
+  .scroll{flex:1;overflow:auto;padding:4px}
+  .hero{background:linear-gradient(135deg,rgba(34,211,238,.12),rgba(8,21,26,.9));border:1px solid rgba(34,211,238,.3);border-radius:16px;padding:16px;margin-bottom:10px;text-align:center;position:relative;overflow:hidden}
+  .hero .label{font-size:10px;color:var(--dim);letter-spacing:.18em;text-transform:uppercase;margin-bottom:4px}
+  .hero .balance{font-size:36px;font-weight:900;color:var(--gold);font-family:'Orbitron',sans-serif;text-shadow:0 0 20px rgba(251,191,36,.3);margin-bottom:4px}
+  .hero .sub{font-size:11px;color:var(--dim)}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+  .stat{background:rgba(8,21,26,.7);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center}
+  .stat .v{font-size:16px;font-weight:800;color:var(--cyan)}
+  .stat .l{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-top:2px}
+  .btn{background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#04212A;border:none;border-radius:12px;padding:14px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 0 20px rgba(34,211,238,.3);width:100%;margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:8px}
+  .btn.ghost{background:rgba(255,255,255,.04);color:var(--text);border:1px solid var(--border);box-shadow:none}
+  .btn.disabled{opacity:.5;cursor:not-allowed}
+  .progress{height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden;margin:8px 0}
+  .progress .fill{height:100%;background:linear-gradient(90deg,var(--cyan),var(--cyan2));border-radius:3px;transition:width .3s}
+  .ring{width:120px;height:120px;border-radius:50%;border:4px solid rgba(34,211,238,.2);display:grid;place-items:center;margin:0 auto 10px;position:relative}
+  .ring .inner{font-size:28px;font-weight:900;color:var(--gold);font-family:'Orbitron',sans-serif}
+  .ring::before{content:'';position:absolute;inset:-4px;border-radius:50%;border:4px solid transparent;border-top-color:var(--cyan);animation:spin 3s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .levelbar{background:rgba(255,255,255,.06);border-radius:999px;height:8px;overflow:hidden;margin:6px 0}
+  .levelbar .fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--cyan));border-radius:999px}
+  .streak{display:flex;gap:4px;justify-content:center;margin:8px 0}
+  .streak .dot{width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,.06);border:1px solid var(--border);display:grid;place-items:center;font-size:9px;font-weight:700;color:var(--dim)}
+  .streak .dot.done{background:linear-gradient(135deg,var(--gold),#F59E0B);color:#422006;border-color:var(--gold)}
+  .step{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+  .step:last-child{border-bottom:none}
+  .step .num{width:24px;height:24px;border-radius:50%;background:rgba(34,211,238,.1);border:1px solid var(--cyan);display:grid;place-items:center;font-size:10px;font-weight:700;color:var(--cyan);flex-shrink:0}
+  .step .txt{flex:1}
+  .step .t{font-size:12px;font-weight:600}
+  .step .s{font-size:10px;color:var(--dim);margin-top:1px}
+</style>
+</head>
+<body>
+<h1>Earn Design Options</h1>
+<p class="sub">Pick a style for the earn tab.</p>
+<div class="grid">
+
+  <div class="phone">
+    <div class="lab">Option 1</div>
+    <div class="ttl">Hero + Stats</div>
+    <div class="dsc">Big balance hero, stat row, primary action. Current style.</div>
+    <div class="scroll">
+      <div class="hero"><div class="label">Your balance</div><div class="balance">1,240</div><div class="sub">coins</div></div>
+      <div class="stats"><div class="stat"><div class="v">10</div><div class="l">Per ad</div></div><div class="stat"><div class="v">30s</div><div class="l">Cooldown</div></div></div>
+      <button class="btn">▶ Watch ad · +10 coins</button>
+      <button class="btn ghost">Watch another ad</button>
+      <div class="progress"><div class="fill" style="width:60%"></div></div>
+      <div style="font-size:10px;color:var(--dim);text-align:center;margin-top:4px">Cooldown: 18s remaining</div>
+      <div style="margin-top:12px">
+        <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;font-weight:600">How it works</div>
+        <div class="step"><div class="num">01</div><div class="txt"><div class="t">Watch an ad</div><div class="s">One rewarded ad pays 10 coins.</div></div></div>
+        <div class="step"><div class="num">02</div><div class="txt"><div class="t">Earn coins</div><div class="s">Verified before crediting.</div></div></div>
+        <div class="step"><div class="num">03</div><div class="txt"><div class="t">Claim keys</div><div class="s">Spend in the store.</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Option 2</div>
+    <div class="ttl">Progress Ring</div>
+    <div class="dsc">Circular progress ring around balance. Gamified.</div>
+    <div class="scroll">
+      <div style="text-align:center;margin-bottom:10px">
+        <div class="ring"><div class="inner">1,240</div></div>
+        <div style="font-size:11px;color:var(--dim)">coins</div>
+      </div>
+      <div class="stats"><div class="stat"><div class="v">10</div><div class="l">Per ad</div></div><div class="stat"><div class="v">30s</div><div class="l">Cooldown</div></div></div>
+      <button class="btn">▶ Watch ad · +10 coins</button>
+      <div class="progress"><div class="fill" style="width:60%"></div></div>
+      <div style="font-size:10px;color:var(--dim);text-align:center;margin-top:4px">Cooldown: 18s</div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Option 3</div>
+    <div class="ttl">Gamified Streak</div>
+    <div class="dsc">Streak dots, level bar, daily bonus. Engaging.</div>
+    <div class="scroll">
+      <div class="hero"><div class="label">Your balance</div><div class="balance">1,240</div><div class="sub">coins · Level 5</div></div>
+      <div class="levelbar"><div class="fill" style="width:65%"></div></div>
+      <div style="font-size:10px;color:var(--dim);text-align:center;margin-bottom:8px">650/1000 to next level</div>
+      <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px;font-weight:600">Daily streak</div>
+      <div class="streak"><div class="dot done">1</div><div class="dot done">2</div><div class="dot done">3</div><div class="dot">4</div><div class="dot">5</div><div class="dot">6</div><div class="dot">7</div></div>
+      <button class="btn">▶ Watch ad · +10 coins</button>
+      <button class="btn ghost">Claim daily bonus (+5)</button>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Option 4</div>
+    <div class="ttl">Minimal Clean</div>
+    <div class="dsc">Simple balance + one button. No clutter.</div>
+    <div class="scroll">
+      <div style="text-align:center;padding:20px 0">
+        <div style="font-size:11px;color:var(--dim);letter-spacing:.18em;text-transform:uppercase;margin-bottom:8px">Your balance</div>
+        <div style="font-size:48px;font-weight:900;color:var(--gold);font-family:'Orbitron',sans-serif;text-shadow:0 0 24px rgba(251,191,36,.3)">1,240</div>
+        <div style="font-size:12px;color:var(--dim);margin-top:4px">coins</div>
+      </div>
+      <button class="btn">▶ Watch ad · +10 coins</button>
+      <div style="font-size:10px;color:var(--dim);text-align:center;margin-top:8px">Cooldown: 18s remaining</div>
+      <div class="progress"><div class="fill" style="width:60%"></div></div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

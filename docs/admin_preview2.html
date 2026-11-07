@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Admin Page Options 2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0A0A0A;--panel:#111;--border:#222;--text:#E5E5E5;--dim:#888;--accent:#3B82F6;--red:#EF4444;--green:#22C55E}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#000;color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:24px;min-height:100vh}
+  h1{font-size:20px;font-weight:700;letter-spacing:-.02em;margin-bottom:4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:28px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:24px}
+  .phone{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.8)}
+  .lab{font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+  .ttl{font-size:15px;font-weight:700;margin-bottom:4px}
+  .dsc{font-size:12px;color:var(--dim);margin-bottom:14px;line-height:1.5}
+  .stage{height:420px;overflow:auto;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px}
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+  .topbar h2{font-size:15px;font-weight:700}
+  .btn{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:11px;font-weight:600;cursor:pointer}
+  .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
+  .btn.danger{background:transparent;color:var(--red);border:1px solid var(--red)}
+  .tbl{width:100%;border-collapse:collapse;font-size:11px}
+  .tbl th{text-align:left;padding:6px 8px;color:var(--dim);font-weight:600;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.08em}
+  .tbl td{padding:8px;border-bottom:1px solid rgba(255,255,255,.04)}
+  .tbl tr:hover td{background:rgba(255,255,255,.02)}
+  .badge{font-size:9px;padding:2px 6px;border-radius:4px;background:rgba(59,130,246,.15);color:var(--accent);font-weight:600}
+  .badge.key{background:rgba(251,191,36,.15);color:#FBBF24}
+  .badge.apk{background:rgba(52,211,153,.15);color:#34D399}
+  .sidebar{display:flex;gap:10px;height:100%}
+  .side{width:90px;border-right:1px solid var(--border);padding-right:8px}
+  .side a{display:block;padding:6px 8px;font-size:11px;color:var(--dim);border-radius:6px;margin-bottom:2px;text-decoration:none}
+  .side a.active{background:rgba(59,130,246,.15);color:var(--accent);font-weight:600}
+  .main{flex:1;padding-left:4px}
+  .productcard{background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:8px;display:flex;gap:10px}
+  .thumb{width:48px;height:48px;border-radius:6px;background:linear-gradient(135deg,#1a1a2e,#0f3460);flex-shrink:0}
+  .pcinfo{flex:1;min-width:0}
+  .pcname{font-size:12px;font-weight:600;margin-bottom:2px}
+  .pcmeta{font-size:10px;color:var(--dim);margin-bottom:6px}
+  .pcactions{display:flex;gap:6px}
+  .input{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px;width:100%;margin-bottom:6px}
+  .listrow{display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px}
+  .listrow:last-child{border-bottom:none}
+  .mono{font-family:'JetBrains Mono',monospace;font-size:10px}
+</style>
+</head>
+<body>
+<h1>Admin Page Options 2 (less AI slop)</h1>
+<p class="sub">Restrained, table/sidebar/card based. Pick one.</p>
+<div class="grid">
+
+  <div class="phone">
+    <div class="lab">Option E</div>
+    <div class="ttl">Data Table</div>
+    <div class="dsc">Compact table with sortable columns and inline actions. Dense, efficient.</div>
+    <div class="stage">
+      <div class="topbar">
+        <h2>Products</h2>
+        <button class="btn">+ New</button>
+      </div>
+      <table class="tbl">
+        <thead><tr><th>Name</th><th>Type</th><th>Cost</th><th>Stock</th><th></th></tr></thead>
+        <tbody>
+          <tr><td>Ghosst Premium V4</td><td><span class="badge key">KEY</span></td><td class="mono">10</td><td class="mono">12/20</td><td><button class="btn ghost" style="padding:3px 6px;font-size:10px">Edit</button></td></tr>
+          <tr><td>CODM APK</td><td><span class="badge apk">APK</span></td><td class="mono">15</td><td class="mono">—</td><td><button class="btn ghost" style="padding:3px 6px;font-size:10px">Edit</button></td></tr>
+          <tr><td>Netflix Key</td><td><span class="badge key">KEY</span></td><td class="mono">25</td><td class="mono">0/5</td><td><button class="btn ghost" style="padding:3px 6px;font-size:10px">Edit</button></td></tr>
+        </tbody>
+      </table>
+      <div class="topbar" style="margin-top:12px"><h2 style="font-size:13px">Muted users</h2></div>
+      <table class="tbl">
+        <thead><tr><th>Name</th><th>Email</th><th></th></tr></thead>
+        <tbody>
+          <tr><td>troll2</td><td class="mono" style="font-size:10px">troll2@mail.com</td><td><button class="btn danger" style="padding:3px 6px;font-size:10px">Unmute</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Option F</div>
+    <div class="ttl">Sidebar Nav</div>
+    <div class="dsc">Left sidebar sections, content on right. Desktop-like admin.</div>
+    <div class="stage">
+      <div class="sidebar">
+        <div class="side">
+          <a class="active">Products</a>
+          <a>Keys</a>
+          <a>Users</a>
+          <a>Muted</a>
+          <a>Banned</a>
+          <a>Announce</a>
+          <a>Settings</a>
+        </div>
+        <div class="main">
+          <div style="font-size:13px;font-weight:700;margin-bottom:8px">Products</div>
+          <div class="productcard">
+            <div class="thumb"></div>
+            <div class="pcinfo">
+              <div class="pcname">Ghosst Premium V4</div>
+              <div class="pcmeta">KEY · 10 coins · 12/20 stock</div>
+              <div class="pcactions"><button class="btn ghost" style="padding:3px 6px;font-size:10px">Edit</button><button class="btn ghost" style="padding:3px 6px;font-size:10px">Stock</button></div>
+            </div>
+          </div>
+          <div class="productcard">
+            <div class="thumb" style="background:linear-gradient(135deg,#2d1b00,#5a3a00)"></div>
+            <div class="pcinfo">
+              <div class="pcname">CODM APK</div>
+              <div class="pcmeta">APK · 15 coins · v1.2.3</div>
+              <div class="pcactions"><button class="btn ghost" style="padding:3px 6px;font-size:10px">Edit</button><button class="btn danger" style="padding:3px 6px;font-size:10px">Delete</button></div>
+            </div>
+          </div>
+          <button class="btn" style="width:100%;margin-top:4px">+ New product</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Option G</div>
+    <div class="ttl">Product Cards Grid</div>
+    <div class="dsc">Large product cards with thumbnails, compact actions.</div>
+    <div class="stage">
+      <div class="topbar">
+        <h2>Products</h2>
+        <button class="btn">+ New</button>
+      </div>
+      <div class="productcard">
+        <div class="thumb"></div>
+        <div class="pcinfo">
+          <div class="pcname">Ghosst Premium V4</div>
+          <div class="pcmeta">KEY · 10 coins · Stock 12/20</div>
+          <div class="pcactions"><button class="btn ghost" style="padding:3px 6px;font-size:10px">Edit</button><button class="btn ghost" style="padding:3px 6px;font-size:10px">Stock</button><button class="btn danger" style="padding:3px 6px;font-size:10px">Del</button></div>
+        </div>
+      </div>
+      <div class="productcard">
+        <div class="thumb" style="background:linear-gradient(135deg,#2d1b00,#5a3a00)"></div>
+        <div class="pcinfo">
+          <div class="pcname">CODM APK</div>
+          <div class="pcmeta">APK · 15 coins · v1.2.3 · 45MB</div>
+          <div class="pcactions"><button class="btn ghost" style="padding:3px 6px;font-size:10px">Edit</button><button class="btn danger" style="padding:3px 6px;font-size:10px">Del</button></div>
+        </div>
+      </div>
+      <div class="topbar" style="margin-top:8px"><h2 style="font-size:13px">Muted (1)</h2></div>
+      <div class="listrow"><span style="color:var(--red)">●</span><span style="flex:1">troll2@mail.com</span><button class="btn danger" style="padding:3px 6px;font-size:10px">Unmute</button></div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Option H</div>
+    <div class="ttl">Minimal Inline List</div>
+    <div class="dsc">No cards — just rows with inline edit. Fastest.</div>
+    <div class="stage">
+      <div class="topbar">
+        <h2>Admin</h2>
+        <button class="btn ghost">+ New</button>
+      </div>
+      <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin:8px 0 4px;font-weight:600">Announcement</div>
+      <input class="input" placeholder="Title" />
+      <input class="input" placeholder="Message" />
+      <button class="btn" style="width:100%;margin-bottom:10px">Send</button>
+      <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin:8px 0 4px;font-weight:600">Products</div>
+      <div class="listrow"><span style="flex:1">Ghosst Premium V4</span><span class="badge key">KEY</span><span class="mono" style="color:var(--dim)">10c</span><button class="btn ghost" style="padding:3px 6px;font-size:10px">Edit</button></div>
+      <div class="listrow"><span style="flex:1">CODM APK</span><span class="badge apk">APK</span><span class="mono" style="color:var(--dim)">15c</span><button class="btn ghost" style="padding:3px 6px;font-size:10px">Edit</button></div>
+      <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin:8px 0 4px;font-weight:600">Muted (1)</div>
+      <div class="listrow"><span style="flex:1">troll2@mail.com</span><button class="btn danger" style="padding:3px 6px;font-size:10px">Unmute</button></div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

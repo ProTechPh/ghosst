@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Product Detail Design Options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#020408;--panel:#060B12;--border:#1A2A3A;--cyan:#22D3EE;--cyan2:#67E8F9;--gold:#FBBF24;--text:#E8F4F8;--dim:#5A7A8A;--green:#34D399;--red:#F43F5E}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#000;color:var(--text);font-family:'Rajdhani','Segoe UI',sans-serif;padding:24px;min-height:100vh}
+  h1{font-family:'Orbitron',sans-serif;font-size:20px;font-weight:900;letter-spacing:.08em;margin-bottom:4px;color:var(--cyan)}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:28px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:24px}
+  .phone{background:linear-gradient(180deg,#060B12,#020408);border:1px solid var(--border);border-radius:28px;padding:16px;overflow:hidden;box-shadow:0 0 60px rgba(34,211,238,.08),0 40px 100px rgba(0,0,0,.9);position:relative;height:620px;display:flex;flex-direction:column}
+  .phone::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(34,211,238,.015) 2px 3px);pointer-events:none}
+  .lab{font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;letter-spacing:.2em;color:var(--cyan);margin-bottom:6px}
+  .ttl{font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;margin-bottom:2px}
+  .dsc{font-size:11px;color:var(--dim);margin-bottom:10px;line-height:1.4}
+  .scroll{flex:1;overflow:auto;padding:4px}
+  .eyebrow{font-size:9px;color:var(--dim);letter-spacing:.2em;text-transform:uppercase;font-weight:700;margin-bottom:4px}
+  .hero{height:200px;border-radius:16px;position:relative;overflow:hidden;margin-bottom:12px;background:linear-gradient(135deg,rgba(34,211,238,.25),rgba(14,116,144,.4),rgba(6,11,18,.9))}
+  .hero .badge{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.6);border:1px solid var(--cyan);border-radius:6px;padding:2px 8px;font-size:9px;font-weight:700;color:var(--cyan);letter-spacing:.1em}
+  .hero .stock{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.6);border:1px solid var(--gold);border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;color:var(--gold)}
+  .hero .dots{position:absolute;bottom:8px;left:0;right:0;display:flex;gap:4px;justify-content:center}
+  .hero .dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.3)}
+  .hero .dot.on{width:18px;background:var(--cyan)}
+  .name{font-size:20px;font-weight:900;margin-bottom:2px}
+  .meta{font-size:10px;color:var(--dim);margin-bottom:8px}
+  .stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px}
+  .stat{background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:10px;padding:8px;text-align:center}
+  .stat .lbl{font-size:8px;color:var(--dim);letter-spacing:.15em;margin-bottom:2px}
+  .stat .val{font-size:14px;font-weight:900;color:var(--gold)}
+  .stat .val.cyan{color:var(--cyan)}
+  .stat .val.green{color:var(--green)}
+  .desc{font-size:11px;color:var(--dim);line-height:1.5;margin-bottom:12px}
+  .yt{height:100px;border-radius:12px;background:linear-gradient(135deg,rgba(244,63,94,.2),rgba(6,11,18,.9));display:grid;place-items:center;margin-bottom:12px;position:relative}
+  .yt .play{width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.2);display:grid;place-items:center}
+  .dur{display:flex;gap:6px;margin-bottom:12px}
+  .dur .chip{background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:10px;font-weight:700}
+  .dur .chip.on{background:rgba(34,211,238,.15);border-color:var(--cyan);color:var(--cyan)}
+  .buybar{background:rgba(6,11,18,.95);border-top:1px solid var(--border);padding:10px 12px;display:flex;align-items:center;gap:10px;margin-top:auto}
+  .buybar .price{font-size:18px;font-weight:900;color:var(--gold)}
+  .buybar .cta{flex:1;background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#04212A;border:none;border-radius:999px;padding:10px;font-size:12px;font-weight:800;text-align:center;cursor:pointer}
+  .footer{text-align:center;font-size:9px;color:var(--dim);letter-spacing:.15em;margin-top:8px}
+</style>
+</head>
+<body>
+<h1>Product Detail Design Options</h1>
+<p class="sub">Pick a style for the product detail page.</p>
+<div class="grid">
+
+  <!-- Option 1: Current -->
+  <div class="phone">
+    <div class="lab">Option 1</div>
+    <div class="ttl">Current</div>
+    <div class="dsc">Hero image, info below, sticky buy bar. Current style.</div>
+    <div class="scroll">
+      <div class="hero"><div class="badge">KEY · 250</div><div class="stock">5 left</div><div class="dots"><div class="dot on"></div><div class="dot"></div></div></div>
+      <div class="name">Premium Key Pack</div>
+      <div class="meta">License key · delivered instantly</div>
+      <div class="stats">
+        <div class="stat"><div class="lbl">PRICE</div><div class="val">250</div></div>
+        <div class="stat"><div class="lbl">STOCK</div><div class="val green">5</div></div>
+        <div class="stat"><div class="lbl">TYPE</div><div class="val cyan">KEY</div></div>
+      </div>
+      <div class="desc">Fresh unused license key, delivered instantly after claim. One purchase — re-download any time.</div>
+      <div class="yt"><div class="play">▶</div></div>
+      <div class="dur"><div class="chip on">1 Hour</div><div class="chip">1 Day</div><div class="chip">1 Week</div></div>
+    </div>
+    <div class="buybar"><div class="price">🪙 250</div><button class="cta">Claim key</button></div>
+  </div>
+
+  <!-- Option 2: Magazine Cover -->
+  <div class="phone">
+    <div class="lab">Option 2</div>
+    <div class="ttl">Magazine Cover</div>
+    <div class="dsc">Full-bleed hero with big title overlay, then info.</div>
+    <div class="scroll">
+      <div class="hero" style="height:260px"><div class="badge">FEATURED · KEY</div><div class="stock">5 left</div>
+        <div style="position:absolute;bottom:12px;left:12px;right:12px">
+          <div style="font-size:9px;color:var(--cyan);letter-spacing:.2em;font-weight:700;margin-bottom:2px">ISSUE 01</div>
+          <div style="font-size:24px;font-weight:900;line-height:1.05;margin-bottom:6px">Premium Key Pack</div>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div style="font-size:16px;font-weight:900;color:var(--gold)">🪙 250</div>
+            <button style="background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#04212A;border:none;border-radius:999px;padding:6px 14px;font-size:11px;font-weight:800;cursor:pointer">Claim ▶</button>
+          </div>
+        </div>
+      </div>
+      <div class="meta">License key · delivered instantly</div>
+      <div class="desc">Fresh unused license key, delivered instantly after claim.</div>
+      <div class="yt"><div class="play">▶</div></div>
+    </div>
+    <div class="buybar"><div class="price">🪙 250</div><button class="cta">Claim key</button></div>
+  </div>
+
+  <!-- Option 3: Card Stack -->
+  <div class="phone">
+    <div class="lab">Option 3</div>
+    <div class="ttl">Card Stack</div>
+    <div class="dsc">Hero card, then info cards stacked with spacing.</div>
+    <div class="scroll">
+      <div class="hero" style="height:160px;border-radius:16px;margin-bottom:10px"><div class="badge">KEY · 250</div><div class="stock">5 left</div></div>
+      <div style="background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px">
+        <div style="font-size:16px;font-weight:900;margin-bottom:2px">Premium Key Pack</div>
+        <div style="font-size:10px;color:var(--dim)">License key · delivered instantly</div>
+      </div>
+      <div style="background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px">
+        <div style="font-size:9px;color:var(--dim);letter-spacing:.15em;margin-bottom:6px">ABOUT</div>
+        <div style="font-size:11px;color:var(--dim);line-height:1.5">Fresh unused license key, delivered instantly after claim.</div>
+      </div>
+      <div style="background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px">
+        <div style="font-size:9px;color:var(--dim);letter-spacing:.15em;margin-bottom:6px">DURATION</div>
+        <div class="dur" style="margin-bottom:0"><div class="chip on">1 Hour</div><div class="chip">1 Day</div></div>
+      </div>
+    </div>
+    <div class="buybar"><div class="price">🪙 250</div><button class="cta">Claim key</button></div>
+  </div>
+
+  <!-- Option 4: Minimal Editorial -->
+  <div class="phone">
+    <div class="lab">Option 4</div>
+    <div class="ttl">Minimal Editorial</div>
+    <div class="dsc">Lots of whitespace, big type, hairline rules.</div>
+    <div class="scroll">
+      <div style="font-size:9px;color:var(--cyan);letter-spacing:.25em;font-weight:700;margin-bottom:6px">PRODUCT</div>
+      <div style="font-size:26px;font-weight:900;line-height:1.05;margin-bottom:4px">Premium<br>Key Pack</div>
+      <div style="font-size:11px;color:var(--dim);margin-bottom:16px">License key · delivered instantly</div>
+      <div style="height:140px;border-radius:12px;background:linear-gradient(135deg,rgba(34,211,238,.2),rgba(6,11,18,.9));margin-bottom:16px;display:grid;place-items:center;font-size:48px">🔑</div>
+      <div style="border-top:1px solid rgba(255,255,255,.06);padding-top:12px;margin-bottom:12px">
+        <div style="font-size:9px;color:var(--dim);letter-spacing:.15em;margin-bottom:4px">PRICE</div>
+        <div style="font-size:22px;font-weight:900;color:var(--gold)">🪙 250 coins</div>
+      </div>
+      <div style="font-size:11px;color:var(--dim);line-height:1.6;margin-bottom:12px">Fresh unused license key, delivered instantly after claim.</div>
+      <div class="yt" style="height:80px"><div class="play">▶</div></div>
+    </div>
+    <div class="buybar"><div class="price">🪙 250</div><button class="cta">Claim key</button></div>
+  </div>
+
+  <!-- Option 5: Split Hero -->
+  <div class="phone">
+    <div class="lab">Option 5</div>
+    <div class="ttl">Split Hero</div>
+    <div class="dsc">Image on top half, info below with buy CTA inline.</div>
+    <div class="scroll">
+      <div style="display:flex;gap:10px;margin-bottom:12px">
+        <div style="flex:1;height:150px;border-radius:12px;background:linear-gradient(135deg,rgba(34,211,238,.2),rgba(6,11,18,.9));display:grid;place-items:center;font-size:40px">🔑</div>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center">
+          <div style="font-size:9px;color:var(--cyan);letter-spacing:.2em;font-weight:700;margin-bottom:4px">LICENSE KEY</div>
+          <div style="font-size:16px;font-weight:900;margin-bottom:4px">Premium Key Pack</div>
+          <div style="font-size:10px;color:var(--dim);margin-bottom:8px">5 left in stock</div>
+          <div style="font-size:18px;font-weight:900;color:var(--gold)">🪙 250</div>
+        </div>
+      </div>
+      <div style="background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px">
+        <div style="font-size:9px;color:var(--dim);letter-spacing:.15em;margin-bottom:6px">ABOUT</div>
+        <div style="font-size:11px;color:var(--dim);line-height:1.5">Fresh unused license key, delivered instantly after claim.</div>
+      </div>
+      <div class="yt" style="height:90px"><div class="play">▶</div></div>
+    </div>
+    <div class="buybar"><div class="price">🪙 250</div><button class="cta">Claim key</button></div>
+  </div>
+
+  <!-- Option 6: Bottom Sheet -->
+  <div class="phone">
+    <div class="lab">Option 6</div>
+    <div class="ttl">Bottom Sheet</div>
+    <div class="dsc">Hero image behind, info in a raised sheet with CTA.</div>
+    <div class="scroll" style="position:relative">
+      <div style="height:260px;border-radius:16px;background:linear-gradient(135deg,rgba(34,211,238,.25),rgba(14,116,144,.4),rgba(6,11,18,.9));margin-bottom:-40px;display:grid;place-items:center;font-size:64px">🔑</div>
+      <div style="background:linear-gradient(180deg,rgba(6,11,18,.95),#060B12);border:1px solid var(--border);border-radius:16px 16px 0 0;padding:14px 12px 12px;position:relative">
+        <div style="width:36px;height:4px;background:rgba(255,255,255,.2);border-radius:2px;margin:0 auto 10px"></div>
+        <div style="font-size:18px;font-weight:900;margin-bottom:2px">Premium Key Pack</div>
+        <div style="font-size:10px;color:var(--dim);margin-bottom:10px">License key · 5 left</div>
+        <div style="font-size:12px;color:var(--dim);line-height:1.5;margin-bottom:10px">Fresh unused license key, delivered instantly.</div>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:20px;font-weight:900;color:var(--gold)">🪙 250</div>
+          <button style="background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#04212A;border:none;border-radius:999px;padding:8px 16px;font-size:11px;font-weight:800;cursor:pointer">Claim key</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

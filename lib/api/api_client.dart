@@ -62,12 +62,13 @@ class ApiClient {
     String path, {
     Object? data,
     Map<String, String>? headers,
+    Map<String, dynamic>? extra,
   }) =>
       _run(() async {
         final res = await _dio.post<dynamic>(
           path,
           data: data,
-          options: Options(headers: headers),
+          options: Options(headers: headers, extra: extra),
         );
         return _asMap(res.data);
       });

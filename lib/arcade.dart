@@ -76,15 +76,27 @@ class CardFrame extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: rarityEdge(tier),
         borderRadius: BorderRadius.circular(radius),
-        boxShadow: glow
-            ? [
-                BoxShadow(
-                  color: edgeColor(tier).withValues(alpha: .32),
-                  blurRadius: 26,
-                  spreadRadius: -4,
-                ),
-              ]
-            : null,
+        boxShadow: [
+          // Floating drop shadow so every card lifts off the page.
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: .18),
+            blurRadius: 40,
+            spreadRadius: -4,
+            offset: const Offset(0, 16),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: .50),
+            blurRadius: 24,
+            spreadRadius: -8,
+            offset: const Offset(0, 12),
+          ),
+          if (glow)
+            BoxShadow(
+              color: edgeColor(tier).withValues(alpha: .45),
+              blurRadius: 32,
+              spreadRadius: -2,
+            ),
+        ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(inner),
@@ -93,7 +105,7 @@ class CardFrame extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFF0C1C22), Color(0xFF071317)],
+              colors: [Color(0xFF0F2228), Color(0xFF091820)],
             ),
           ),
           child: Stack(

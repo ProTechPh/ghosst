@@ -273,36 +273,35 @@ class _StoreScreenState extends State<StoreScreen> {
           AppSpace.huge + AppSpace.xxl,
         ),
         children: [
-          // ---- editorial header ----------------------------------------
+          // ---- compact header (Magazine Cover) -------------------------
           ScrollReveal(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Eyebrow(text: _tab == 'key' ? 'License store' : 'App store'),
-                const SizedBox(height: AppSpace.md),
-                Text(
-                  'Spend coins,',
-                  style: AppText.display.copyWith(fontSize: 38, height: 1.02),
-                ),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: GradientText(
-                    _tab == 'key' ? 'claim keys.' : 'download apps.',
-                    style: AppText.display.copyWith(fontSize: 38, height: 1.02),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Eyebrow(text: _tab == 'key' ? 'License store' : 'App store'),
+                      const SizedBox(height: AppSpace.xs),
+                      Text(
+                        _tab == 'key' ? 'Products' : 'Apps & files',
+                        style: AppText.headline,
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: AppSpace.md),
                 Text(
-                  _tab == 'key'
-                      ? 'Every claim gives you a fresh, unused license key.'
-                      : 'Buy APKs and files with your ad coins, then download them here.',
-                  style: AppText.caption.copyWith(height: 1.5),
+                  '${widget.coins} coins',
+                  style: AppText.figure.copyWith(
+                    fontSize: 13,
+                    color: AppColors.gold,
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: AppSpace.xl),
+          const SizedBox(height: AppSpace.md),
 
           // ---- shelf switch (Keys | Apps) -------------------------------
           if (Distribution.showsDownloadStore) ...[
@@ -316,9 +315,29 @@ class _StoreScreenState extends State<StoreScreen> {
           // ---- balance strip -------------------------------------------
           ScrollReveal(
             delay: const Duration(milliseconds: 110),
-            child: CardFrame(
-              radius: AppRadius.hero,
-              glow: true,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1A1508), Color(0xFF0C1C22)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(AppRadius.hero),
+                border: Border.all(color: AppColors.gold.withValues(alpha: .3), width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.gold.withValues(alpha: .25),
+                    blurRadius: 32,
+                    spreadRadius: -4,
+                    offset: const Offset(0, 12),
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: .4),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
               child: Column(
                 children: [
                   Pressable(
@@ -467,7 +486,7 @@ class _StoreScreenState extends State<StoreScreen> {
             if (rest.isNotEmpty) ...[
               const SizedBox(height: AppSpace.xl),
               SectionHeader(
-                title: _tab == 'key' ? 'All keys' : 'Apps & files',
+                title: 'More inside',
                 trailing: Text(
                   '${rest.length}',
                   style: AppText.figure.copyWith(
@@ -725,35 +744,82 @@ class _StoreScreenState extends State<StoreScreen> {
         radius: AppRadius.hero,
         tier: tierForCost(entryCost(p)),
         child: SizedBox(
-          height: 286,
+          height: 220,
           child: Stack(
             fit: StackFit.expand,
             children: [
               _cover(p),
-              // Cyan-tinted scrim: the poster fades into the page, never a
-              // black rectangle behind the title.
+              // Magazine-cover scrim: heavy bottom fade so the big title reads.
               DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    stops: const [0, 0.45, 1],
+                    stops: const [0, 0.35, 1],
                     colors: [
-                      AppColors.bg.withValues(alpha: 0.05),
-                      AppColors.bg.withValues(alpha: 0.35),
-                      AppColors.bg.withValues(alpha: 0.96),
+                      AppColors.bg.withValues(alpha: 0.10),
+                      AppColors.bg.withValues(alpha: 0.40),
+                      AppColors.bg.withValues(alpha: 0.97),
                     ],
                   ),
                 ),
               ),
               if (soldOut)
                 ColoredBox(color: AppColors.bg.withValues(alpha: 0.45)),
+              // Top-left issue/featured label.
               Positioned(
                 top: AppSpace.md,
                 left: AppSpace.md,
-                right: AppSpace.md,
-                child: CardIndex(cost: entryCost(p), type: cardType(p)),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpace.sm + 2,
+                    vertical: AppSpace.xs,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(AppRadius.chip),
+                    border: Border.all(
+                      color: AppColors.cyan.withValues(alpha: 0.6),
+                    ),
+                  ),
+                  child: Text(
+                    _tab == 'key' ? 'FEATURED · KEY' : 'FEATURED · APP',
+                    style: AppText.label.copyWith(
+                      fontSize: 9,
+                      letterSpacing: 1.6,
+                      color: AppColors.cyan,
+                    ),
+                  ),
+                ),
               ),
+              // Top-right stock badge.
+              if (!isOwned && !soldOut)
+                Positioned(
+                  top: AppSpace.md,
+                  right: AppSpace.md,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpace.sm + 2,
+                      vertical: AppSpace.xs,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(AppRadius.chip),
+                      border: Border.all(
+                        color: AppColors.gold.withValues(alpha: 0.6),
+                      ),
+                    ),
+                    child: Text(
+                      count >= 0 ? '$count left' : 'Fresh drop',
+                      style: AppText.label.copyWith(
+                        fontSize: 9,
+                        letterSpacing: 1.6,
+                        color: AppColors.gold,
+                      ),
+                    ),
+                  ),
+                ),
+              // Bottom magazine title block.
               Positioned(
                 left: AppSpace.lg,
                 right: AppSpace.lg,
@@ -762,17 +828,29 @@ class _StoreScreenState extends State<StoreScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
+                      'ISSUE 01',
+                      style: AppText.label.copyWith(
+                        fontSize: 9,
+                        letterSpacing: 2.4,
+                        color: AppColors.cyan,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpace.xs),
+                    Text(
                       p.name,
-                      style: AppText.headline,
+                      style: AppText.display.copyWith(
+                        fontSize: 26,
+                        height: 1.02,
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (desc.isNotEmpty) ...[
-                      const SizedBox(height: AppSpace.xs + 2),
+                      const SizedBox(height: AppSpace.xs),
                       Text(
                         desc,
                         style: AppText.caption,
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
@@ -797,40 +875,50 @@ class _StoreScreenState extends State<StoreScreen> {
                             Text('from', style: AppText.caption),
                             const SizedBox(width: AppSpace.xs + 2),
                           ],
-                          _priceTag(entryCost(p), size: 17),
+                          _priceTag(entryCost(p), size: 20),
                           const SizedBox(width: AppSpace.xs + 2),
                           Text('coins', style: AppText.caption),
                         ],
                         const Spacer(),
-                        if (!isOwned && !soldOut) ...[
-                          Text(
-                            count >= 0 ? '$count left' : 'Fresh drop',
-                            style: AppText.label.copyWith(
-                              fontSize: 10,
-                              letterSpacing: 1.6,
-                              color: AppColors.textDim,
+                        if (!isOwned && !soldOut)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpace.md + 2,
+                              vertical: AppSpace.sm - 1,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: kNeonGradient,
+                              borderRadius: BorderRadius.circular(AppRadius.pill),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primary.withValues(alpha: 0.35),
+                                  blurRadius: 16,
+                                  spreadRadius: -6,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Claim',
+                                  style: AppText.label.copyWith(
+                                    fontSize: 11,
+                                    letterSpacing: 1.2,
+                                    color: const Color(0xFF04212A),
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(width: AppSpace.xs),
+                                const Icon(
+                                  CupertinoIcons.chevron_right,
+                                  size: 11,
+                                  color: Color(0xFF04212A),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(width: AppSpace.sm),
-                        ],
-                        Container(
-                          width: 38,
-                          height: 38,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white.withValues(alpha: 0.10),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.22),
-                            ),
-                          ),
-                          child: Icon(
-                            soldOut
-                                ? Icons.lock_outline_rounded
-                                : CupertinoIcons.chevron_right,
-                            size: 16,
-                            color: soldOut ? AppColors.textDim : AppColors.text,
-                          ),
-                        ),
                       ],
                     ),
                   ],

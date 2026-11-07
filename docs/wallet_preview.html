@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Wallet Design Options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#020408;--panel:#060B12;--border:#1A2A3A;--cyan:#22D3EE;--cyan2:#67E8F9;--gold:#FBBF24;--text:#E8F4F8;--dim:#5A7A8A;--green:#34D399}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#000;color:var(--text);font-family:'Rajdhani','Segoe UI',sans-serif;padding:24px;min-height:100vh}
+  h1{font-family:'Orbitron',sans-serif;font-size:20px;font-weight:900;letter-spacing:.08em;margin-bottom:4px;color:var(--cyan)}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:28px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:24px}
+  .phone{background:linear-gradient(180deg,#060B12,#020408);border:1px solid var(--border);border-radius:28px;padding:16px;overflow:hidden;box-shadow:0 0 60px rgba(34,211,238,.08),0 40px 100px rgba(0,0,0,.9);position:relative;height:620px;display:flex;flex-direction:column}
+  .phone::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(34,211,238,.015) 2px 3px);pointer-events:none}
+  .lab{font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;letter-spacing:.2em;color:var(--cyan);margin-bottom:6px}
+  .ttl{font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;margin-bottom:2px}
+  .dsc{font-size:11px;color:var(--dim);margin-bottom:10px;line-height:1.4}
+  .scroll{flex:1;overflow:auto;padding:4px}
+  .hero{background:linear-gradient(135deg,rgba(34,211,238,.08),rgba(6,11,18,.8));border:1px solid rgba(34,211,238,.2);border-radius:16px;padding:14px;margin-bottom:12px}
+  .hero .lbl{font-size:9px;color:var(--dim);letter-spacing:.2em;margin-bottom:4px}
+  .hero .val{font-size:40px;font-weight:900;color:var(--gold);font-family:'Orbitron',sans-serif}
+  .hero .row{display:flex;justify-content:space-between;margin-top:8px;font-size:10px;color:var(--dim)}
+  .bar{height:4px;background:rgba(255,255,255,.06);border-radius:2px;margin:10px 0;overflow:hidden}
+  .bar .fill{height:100%;background:linear-gradient(90deg,var(--cyan),var(--cyan2))}
+  .metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px}
+  .metric{background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:10px;padding:8px;text-align:center}
+  .metric .lbl{font-size:8px;color:var(--dim);letter-spacing:.15em;margin-bottom:2px}
+  .metric .val{font-size:14px;font-weight:900;color:var(--text)}
+  .metric .val.gold{color:var(--gold)}
+  .metric .val.cyan{color:var(--cyan)}
+  .tx{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+  .tx .icon{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-size:14px}
+  .tx .info{flex:1;min-width:0}
+  .tx .name{font-size:12px;font-weight:700;margin-bottom:1px}
+  .tx .meta{font-size:9px;color:var(--dim)}
+  .tx .amt{font-size:13px;font-weight:900}
+  .tx .amt.earn{color:var(--cyan)}
+  .tx .amt.spend{color:var(--dim)}
+  .date{font-size:9px;color:var(--dim);letter-spacing:.15em;font-weight:700;margin:10px 0 4px}
+  .footer{text-align:center;font-size:9px;color:var(--dim);letter-spacing:.15em;margin-top:8px}
+</style>
+</head>
+<body>
+<h1>Wallet Design Options</h1>
+<p class="sub">Pick a style for the wallet tab.</p>
+<div class="grid">
+
+  <!-- Option 1: Current -->
+  <div class="phone">
+    <div class="lab">Option 1</div>
+    <div class="ttl">Current</div>
+    <div class="dsc">Balance hero, spent bar, metrics, activity. Current style.</div>
+    <div class="scroll">
+      <div class="hero">
+        <div class="lbl">BALANCE</div>
+        <div class="val">1,240</div>
+        <div class="row"><span>Spent 250</span><span>15% spent</span></div>
+        <div class="bar"><div class="fill" style="width:15%"></div></div>
+      </div>
+      <div class="metrics">
+        <div class="metric"><div class="lbl">EARNED</div><div class="val cyan">1,490</div></div>
+        <div class="metric"><div class="lbl">KEYS</div><div class="val">3</div></div>
+        <div class="metric"><div class="lbl">APPS</div><div class="val">1</div></div>
+      </div>
+      <div class="date">2026-11-07</div>
+      <div class="tx"><div class="icon" style="background:rgba(34,211,238,.1);color:var(--cyan)">▶</div><div class="info"><div class="name">Ad reward</div><div class="meta">Rewarded ad watched</div></div><div class="amt earn">+50</div></div>
+      <div class="tx"><div class="icon" style="background:rgba(255,255,255,.04);color:var(--dim)">🔑</div><div class="info"><div class="name">Premium Key Pack</div><div class="meta">Key claimed</div></div><div class="amt spend">−250</div></div>
+    </div>
+  </div>
+
+  <!-- Option 2: Magazine Card -->
+  <div class="phone">
+    <div class="lab">Option 2</div>
+    <div class="ttl">Magazine Card</div>
+    <div class="dsc">Full-bleed balance card with big number + chips.</div>
+    <div class="scroll">
+      <div style="background:linear-gradient(135deg,rgba(34,211,238,.15),rgba(6,11,18,.9));border:2px solid var(--cyan);border-radius:20px;padding:16px;margin-bottom:12px;box-shadow:0 0 30px rgba(34,211,238,.25)">
+        <div style="font-size:9px;color:var(--cyan);letter-spacing:.2em;font-weight:700;margin-bottom:6px">WALLET · ISSUE 01</div>
+        <div style="font-size:48px;font-weight:900;color:var(--gold);font-family:'Orbitron',sans-serif;line-height:1">1,240</div>
+        <div style="font-size:10px;color:var(--dim);margin-bottom:10px">coins</div>
+        <div style="display:flex;gap:8px">
+          <div style="background:rgba(0,0,0,.4);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:10px"><div style="color:var(--dim)">Spent</div><div style="color:var(--gold);font-weight:700">250</div></div>
+          <div style="background:rgba(0,0,0,.4);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:10px"><div style="color:var(--dim)">Earned</div><div style="color:var(--cyan);font-weight:700">1,490</div></div>
+        </div>
+      </div>
+      <div class="date">2026-11-07</div>
+      <div class="tx"><div class="icon" style="background:rgba(34,211,238,.1);color:var(--cyan)">▶</div><div class="info"><div class="name">Ad reward</div><div class="meta">Rewarded ad watched</div></div><div class="amt earn">+50</div></div>
+      <div class="tx"><div class="icon" style="background:rgba(255,255,255,.04);color:var(--dim)">🔑</div><div class="info"><div class="name">Premium Key Pack</div><div class="meta">Key claimed</div></div><div class="amt spend">−250</div></div>
+    </div>
+  </div>
+
+  <!-- Option 3: Glassmorphism -->
+  <div class="phone">
+    <div class="lab">Option 3</div>
+    <div class="ttl">Glassmorphism</div>
+    <div class="dsc">Frosted glass balance card, soft.</div>
+    <div class="scroll">
+      <div style="background:rgba(255,255,255,.03);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:16px;margin-bottom:12px">
+        <div style="font-size:9px;color:var(--dim);letter-spacing:.15em;margin-bottom:4px">BALANCE</div>
+        <div style="font-size:44px;font-weight:900;color:var(--gold)">1,240</div>
+        <div style="font-size:10px;color:var(--dim);margin-bottom:10px">coins</div>
+        <div style="display:flex;gap:12px">
+          <div><div style="font-size:8px;color:var(--dim)">Spent</div><div style="font-size:14px;font-weight:700;color:var(--text)">250</div></div>
+          <div><div style="font-size:8px;color:var(--dim)">Earned</div><div style="font-size:14px;font-weight:700;color:var(--cyan)">1,490</div></div>
+          <div><div style="font-size:8px;color:var(--dim)">Keys</div><div style="font-size:14px;font-weight:700;color:var(--text)">3</div></div>
+        </div>
+      </div>
+      <div class="bar" style="margin-bottom:12px"><div class="fill" style="width:15%"></div></div>
+      <div class="date">2026-11-07</div>
+      <div class="tx"><div class="icon" style="background:rgba(34,211,238,.1);color:var(--cyan)">▶</div><div class="info"><div class="name">Ad reward</div><div class="meta">Rewarded ad watched</div></div><div class="amt earn">+50</div></div>
+      <div class="tx"><div class="icon" style="background:rgba(255,255,255,.04);color:var(--dim)">🔑</div><div class="info"><div class="name">Premium Key Pack</div><div class="meta">Key claimed</div></div><div class="amt spend">−250</div></div>
+    </div>
+  </div>
+
+  <!-- Option 4: Minimal -->
+  <div class="phone">
+    <div class="lab">Option 4</div>
+    <div class="ttl">Minimal</div>
+    <div class="dsc">Lots of whitespace, big type, hairline rules.</div>
+    <div class="scroll">
+      <div style="font-size:9px;color:var(--cyan);letter-spacing:.25em;font-weight:700;margin-bottom:6px">WALLET</div>
+      <div style="font-size:44px;font-weight:900;color:var(--gold);line-height:1;margin-bottom:2px">1,240</div>
+      <div style="font-size:11px;color:var(--dim);margin-bottom:16px">coins</div>
+      <div style="border-top:1px solid rgba(255,255,255,.06);padding-top:12px;margin-bottom:12px;display:flex;gap:24px">
+        <div><div style="font-size:9px;color:var(--dim);letter-spacing:.15em;margin-bottom:2px">EARNED</div><div style="font-size:16px;font-weight:700;color:var(--cyan)">1,490</div></div>
+        <div><div style="font-size:9px;color:var(--dim);letter-spacing:.15em;margin-bottom:2px">SPENT</div><div style="font-size:16px;font-weight:700;color:var(--text)">250</div></div>
+        <div><div style="font-size:9px;color:var(--dim);letter-spacing:.15em;margin-bottom:2px">KEYS</div><div style="font-size:16px;font-weight:700;color:var(--text)">3</div></div>
+      </div>
+      <div class="date">2026-11-07</div>
+      <div class="tx" style="border-bottom:none;padding-bottom:4px"><div class="icon" style="background:rgba(34,211,238,.1);color:var(--cyan)">▶</div><div class="info"><div class="name">Ad reward</div><div class="meta">Rewarded ad watched</div></div><div class="amt earn">+50</div></div>
+      <div class="tx" style="border-bottom:none"><div class="icon" style="background:rgba(255,255,255,.04);color:var(--dim)">🔑</div><div class="info"><div class="name">Premium Key Pack</div><div class="meta">Key claimed</div></div><div class="amt spend">−250</div></div>
+    </div>
+  </div>
+
+  <!-- Option 5: Neon Glow -->
+  <div class="phone">
+    <div class="lab">Option 5</div>
+    <div class="ttl">Neon Glow</div>
+    <div class="dsc">Glowing neon balance, cyberpunk feel.</div>
+    <div class="scroll">
+      <div style="background:rgba(6,11,18,.8);border:2px solid var(--cyan);border-radius:16px;padding:14px;margin-bottom:12px;box-shadow:0 0 30px rgba(34,211,238,.3)">
+        <div style="font-size:9px;color:var(--cyan);letter-spacing:.2em;font-weight:700;margin-bottom:4px;text-shadow:0 0 8px rgba(34,211,238,.4)">BALANCE</div>
+        <div style="font-size:44px;font-weight:900;color:var(--gold);text-shadow:0 0 12px rgba(251,191,36,.4)">1,240</div>
+        <div style="font-size:10px;color:var(--dim);margin-bottom:8px">coins</div>
+        <div style="display:flex;gap:8px">
+          <div style="background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.3);border-radius:8px;padding:4px 8px;font-size:10px"><span style="color:var(--dim)">Spent </span><span style="color:var(--gold);font-weight:700">250</span></div>
+          <div style="background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.3);border-radius:8px;padding:4px 8px;font-size:10px"><span style="color:var(--dim)">Earned </span><span style="color:var(--cyan);font-weight:700">1,490</span></div>
+        </div>
+      </div>
+      <div class="bar" style="margin-bottom:12px"><div class="fill" style="width:15%;box-shadow:0 0 8px rgba(34,211,238,.5)"></div></div>
+      <div class="metrics">
+        <div class="metric" style="border-color:rgba(34,211,238,.3);box-shadow:0 0 8px rgba(34,211,238,.1)"><div class="lbl">KEYS</div><div class="val">3</div></div>
+        <div class="metric" style="border-color:rgba(34,211,238,.3);box-shadow:0 0 8px rgba(34,211,238,.1)"><div class="lbl">APPS</div><div class="val">1</div></div>
+        <div class="metric" style="border-color:rgba(34,211,238,.3);box-shadow:0 0 8px rgba(34,211,238,.1)"><div class="lbl">SPENT</div><div class="val gold">250</div></div>
+      </div>
+      <div class="date">2026-11-07</div>
+      <div class="tx"><div class="icon" style="background:rgba(34,211,238,.1);color:var(--cyan);filter:drop-shadow(0 0 4px rgba(34,211,238,.4))">▶</div><div class="info"><div class="name">Ad reward</div><div class="meta">Rewarded ad watched</div></div><div class="amt earn">+50</div></div>
+    </div>
+  </div>
+
+  <!-- Option 6: Compact List -->
+  <div class="phone">
+    <div class="lab">Option 6</div>
+    <div class="ttl">Compact List</div>
+    <div class="dsc">Balance inline, dense activity rows.</div>
+    <div class="scroll">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div><div style="font-size:9px;color:var(--dim);letter-spacing:.15em">BALANCE</div><div style="font-size:28px;font-weight:900;color:var(--gold)">1,240</div></div>
+        <div style="background:rgba(251,191,36,.1);border:1px solid var(--gold);border-radius:8px;padding:4px 10px;font-size:10px;font-weight:700;color:var(--gold)">🪙 1,240</div>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <div style="flex:1;background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:8px;padding:6px;text-align:center"><div style="font-size:8px;color:var(--dim)">EARNED</div><div style="font-size:12px;font-weight:700;color:var(--cyan)">1,490</div></div>
+        <div style="flex:1;background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:8px;padding:6px;text-align:center"><div style="font-size:8px;color:var(--dim)">SPENT</div><div style="font-size:12px;font-weight:700;color:var(--text)">250</div></div>
+        <div style="flex:1;background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:8px;padding:6px;text-align:center"><div style="font-size:8px;color:var(--dim)">KEYS</div><div style="font-size:12px;font-weight:700;color:var(--text)">3</div></div>
+      </div>
+      <div class="date">2026-11-07</div>
+      <div class="tx" style="padding:6px 0"><div class="icon" style="width:26px;height:26px;font-size:12px;background:rgba(34,211,238,.1);color:var(--cyan)">▶</div><div class="info"><div class="name" style="font-size:11px">Ad reward</div><div class="meta">+50 coins</div></div><div class="amt earn" style="font-size:11px">+50</div></div>
+      <div class="tx" style="padding:6px 0"><div class="icon" style="width:26px;height:26px;font-size:12px;background:rgba(255,255,255,.04);color:var(--dim)">🔑</div><div class="info"><div class="name" style="font-size:11px">Premium Key Pack</div><div class="meta">−250 coins</div></div><div class="amt spend" style="font-size:11px">−250</div></div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

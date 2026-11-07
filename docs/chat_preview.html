@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Chat Design Options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#050B0E;--panel:#08151A;--border:#1A3740;--cyan:#22D3EE;--cyan2:#67E8F9;--text:#F1FAFC;--dim:#8DA6AF;--surface:#0C1D23}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#020608;color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:24px;min-height:100vh}
+  h1{font-size:20px;font-weight:700;letter-spacing:-.02em;margin-bottom:4px;color:var(--cyan)}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:28px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px}
+  .phone{background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:12px;overflow:hidden;box-shadow:0 0 40px rgba(34,211,238,.08),0 30px 80px rgba(0,0,0,.9);position:relative;height:520px;display:flex;flex-direction:column}
+  .phone::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(34,211,238,.015) 2px 3px);pointer-events:none}
+  .lab{font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--cyan);margin-bottom:6px}
+  .ttl{font-size:14px;font-weight:700;margin-bottom:2px}
+  .dsc{font-size:11px;color:var(--dim);margin-bottom:10px;line-height:1.4}
+  .chat{flex:1;display:flex;flex-direction:column;gap:8px;overflow:auto;padding:8px 4px}
+  .msg{max-width:78%;padding:8px 12px;border-radius:12px;font-size:12px;line-height:1.4}
+  .msg.mine{align-self:flex-end;background:linear-gradient(135deg,var(--cyan2),var(--cyan));color:#04212A;border-radius:12px 12px 2px 12px}
+  .msg.other{align-self:flex-start;background:var(--surface);border:1px solid var(--border);border-radius:12px 12px 12px 2px;color:var(--text)}
+  .msg .name{font-size:10px;font-weight:700;margin-bottom:2px;opacity:.8}
+  .msg .time{font-size:9px;opacity:.6;margin-top:2px;text-align:right}
+  .composer{display:flex;gap:6px;padding:8px 4px 0;border-top:1px solid var(--border);margin-top:4px}
+  .composer input{flex:1;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:999px;padding:8px 12px;color:var(--text);font-size:12px}
+  .composer button{background:var(--cyan);color:#04212A;border:none;border-radius:999px;padding:8px 12px;font-size:11px;font-weight:700;cursor:pointer}
+  /* Option 2 flat */
+  .flat .msg.mine{background:rgba(34,211,238,.12);color:var(--text);border:1px solid rgba(34,211,238,.3)}
+  .flat .msg.other{background:rgba(255,255,255,.03)}
+  /* Option 3 hud */
+  .hud{font-family:'Rajdhani',sans-serif}
+  .hud .msg{border-radius:2px;clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px)}
+  .hud .msg.mine{background:var(--cyan);color:#04212A}
+  .hud .msg.other{background:rgba(6,11,18,.9);border:1px solid var(--cyan)}
+  .hud .composer input{border-radius:2px;font-family:'Rajdhani',sans-serif}
+  .hud .composer button{border-radius:2px}
+  /* Option 4 cards */
+  .cards .msg{border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+  .cards .msg.mine{background:linear-gradient(135deg,var(--cyan2),var(--cyan));color:#04212A}
+  .cards .msg.other{background:var(--surface);border:1px solid var(--border)}
+  .avatar{width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#8B5CF6,#3B82F6);display:grid;place-items:center;color:#fff;font-size:9px;font-weight:700;flex-shrink:0}
+  .msgrow{display:flex;gap:6px;align-items:flex-end}
+  .msgrow.mine{justify-content:flex-end}
+</style>
+</head>
+<body>
+<h1>Chat Design Options</h1>
+<p class="sub">Pick a style for the world chat.</p>
+<div class="grid">
+
+  <div class="phone">
+    <div class="lab">Option 1</div>
+    <div class="ttl">Modern Bubbles</div>
+    <div class="dsc">Gradient mine, surface other. Current style.</div>
+    <div class="chat">
+      <div class="msg other"><div class="name">Alice</div>Hello! Anyone online?<div class="time">10:32</div></div>
+      <div class="msg mine">Yes, I'm here. What's up?<div class="time">10:33</div></div>
+      <div class="msg other"><div class="name">Bob</div>Need help with keys<div class="time">10:34</div></div>
+      <div class="msg mine">Check the store tab<div class="time">10:35</div></div>
+    </div>
+    <div class="composer"><input placeholder="Message..." /><button>Send</button></div>
+  </div>
+
+  <div class="phone flat">
+    <div class="lab">Option 2</div>
+    <div class="ttl">Flat Minimal</div>
+    <div class="dsc">No gradients. Subtle borders. Clean.</div>
+    <div class="chat">
+      <div class="msg other"><div class="name">Alice</div>Hello! Anyone online?<div class="time">10:32</div></div>
+      <div class="msg mine">Yes, I'm here. What's up?<div class="time">10:33</div></div>
+      <div class="msg other"><div class="name">Bob</div>Need help with keys<div class="time">10:34</div></div>
+      <div class="msg mine">Check the store tab<div class="time">10:35</div></div>
+    </div>
+    <div class="composer"><input placeholder="Message..." /><button>Send</button></div>
+  </div>
+
+  <div class="phone hud">
+    <div class="lab">Option 3</div>
+    <div class="ttl">Gamer HUD</div>
+    <div class="dsc">Angular clipped, neon borders. Matches nav.</div>
+    <div class="chat">
+      <div class="msg other"><div class="name">Alice</div>Hello! Anyone online?<div class="time">10:32</div></div>
+      <div class="msg mine">Yes, I'm here. What's up?<div class="time">10:33</div></div>
+      <div class="msg other"><div class="name">Bob</div>Need help with keys<div class="time">10:34</div></div>
+      <div class="msg mine">Check the store tab<div class="time">10:35</div></div>
+    </div>
+    <div class="composer"><input placeholder="Message..." /><button>Send</button></div>
+  </div>
+
+  <div class="phone cards">
+    <div class="lab">Option 4</div>
+    <div class="ttl">Cards with Avatars</div>
+    <div class="dsc">Each message has an avatar. Softer shadows.</div>
+    <div class="chat">
+      <div class="msgrow"><div class="avatar">A</div><div class="msg other"><div class="name">Alice</div>Hello! Anyone online?<div class="time">10:32</div></div></div>
+      <div class="msgrow mine"><div class="msg mine">Yes, I'm here. What's up?<div class="time">10:33</div></div><div class="avatar" style="background:linear-gradient(135deg,#22D3EE,#0E7490)">Y</div></div>
+      <div class="msgrow"><div class="avatar" style="background:linear-gradient(135deg,#FBBF24,#F59E0B)">B</div><div class="msg other"><div class="name">Bob</div>Need help with keys<div class="time">10:34</div></div></div>
+      <div class="msgrow mine"><div class="msg mine">Check the store tab<div class="time">10:35</div></div><div class="avatar" style="background:linear-gradient(135deg,#22D3EE,#0E7490)">Y</div></div>
+    </div>
+    <div class="composer"><input placeholder="Message..." /><button>Send</button></div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -38,8 +38,6 @@ class ProductDetailScreen extends StatefulWidget {
 
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
   late int coins = widget.coins;
-  final _page = PageController();
-  int _pageIdx = 0;
   bool claiming = false;
 
   /// Ownership mirrored locally. [ProductDetailScreen.owned] is a snapshot
@@ -82,7 +80,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   @override
   void dispose() {
-    _page.dispose();
     super.dispose();
   }
 
@@ -284,32 +281,124 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           ListView(
             padding: const EdgeInsets.only(bottom: AppSpace.lg),
             children: [
-              CardFrame(
-                radius: 0,
-                tier: tierForCost(entryCost(widget.product)),
-                child: _hero(),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpace.xl,
+                  0,
+                  AppSpace.xl,
+                  0,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(AppRadius.card),
+                      child: SizedBox(
+                        width: 132,
+                        height: 132,
+                        child: (p.imageIds.isEmpty)
+                            ? Container(
+                                color: AppColors.surfaceHigh,
+                                child: Center(
+                                  child: Icon(
+                                    p.isKey
+                                        ? Icons.key_rounded
+                                        : p.isApk
+                                        ? Icons.android_rounded
+                                        : Icons.insert_drive_file_rounded,
+                                    color: AppColors.cyan.withValues(alpha: 0.55),
+                                    size: 48,
+                                  ),
+                                ),
+                              )
+                            : Image.network(
+                                Backend.imageUrl(p.imageIds.first, width: 300),
+                                fit: BoxFit.cover,
+                              ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpace.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(height: MediaQuery.paddingOf(context).top + AppSpace.sm),
+                          Text(
+                            p.isApk
+                                ? 'ANDROID APP'
+                                : p.isFile
+                                ? 'DIGITAL FILE'
+                                : 'LICENSE KEY',
+                            style: AppText.label.copyWith(
+                              fontSize: 9,
+                              letterSpacing: 1.8,
+                              color: AppColors.cyan,
+                            ),
+                          ),
+                          const SizedBox(height: AppSpace.xs),
+                          Text(
+                            p.name,
+                            style: AppText.headline.copyWith(fontSize: 18),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: AppSpace.xs),
+                          Text(
+                            isApp
+                                ? (p.isApk
+                                      ? 'Downloaded with your coins'
+                                      : 'Digital file · your coins')
+                                : 'Delivered instantly',
+                            style: AppText.caption,
+                          ),
+                          const SizedBox(height: AppSpace.sm),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.monetization_on_rounded,
+                                size: 15,
+                                color: AppColors.gold,
+                              ),
+                              const SizedBox(width: AppSpace.xs),
+                              Text(
+                                groupDigits(cost),
+                                style: AppText.figure.copyWith(
+                                  fontSize: 17,
+                                  color: AppColors.gold,
+                                ),
+                              ),
+                              const SizedBox(width: AppSpace.xs),
+                              Text('coins', style: AppText.caption),
+                            ],
+                          ),
+                          if (p.isKey && widget.stock >= 0) ...[
+                            const SizedBox(height: AppSpace.xs),
+                            Text(
+                              outOfStock ? 'Sold out' : '${widget.stock} left',
+                              style: AppText.caption.copyWith(
+                                color: outOfStock
+                                    ? AppColors.red
+                                    : AppColors.green,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(
                   AppSpace.xl,
-                  AppSpace.xl,
+                  AppSpace.lg,
                   AppSpace.xl,
                   0,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(p.name, style: AppText.headline),
-                    const SizedBox(height: AppSpace.sm),
-                    Text(
-                      isApp
-                          ? (p.isApk
-                                ? 'Android app · downloaded with your coins'
-                                : 'Digital file · downloaded with your coins')
-                          : 'License key · delivered instantly',
-                      style: AppText.caption,
-                    ),
-
                     // ---- version / file size ---------------------------
                     if (p.version.isNotEmpty || p.fileSize.isNotEmpty) ...[
                       const SizedBox(height: AppSpace.sm + 2),
@@ -818,120 +907,4 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
-  /// Edge-to-edge poster with a scrim that melts into the page background.
-  Widget _hero() {
-    final product = widget.product;
-    final ids = product.imageIds;
-
-    return SizedBox(
-      height: 320,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (ids.isEmpty)
-            Container(
-              color: AppColors.surfaceHigh,
-              child: Center(
-                child: Icon(
-                  product.isKey
-                      ? Icons.key_rounded
-                      : product.isApk
-                      ? Icons.android_rounded
-                      : Icons.insert_drive_file_rounded,
-                  color: AppColors.cyan.withValues(alpha: 0.45),
-                  size: 72,
-                ),
-              ),
-            )
-          else
-            PageView.builder(
-              controller: _page,
-              itemCount: ids.length,
-              onPageChanged: (i) => setState(() => _pageIdx = i),
-              itemBuilder: (context, i) => Image.network(
-                Backend.imageUrl(ids[i], width: 900),
-                fit: BoxFit.cover,
-                loadingBuilder: (context, child, progress) => progress == null
-                    ? child
-                    : const Center(
-                        child: CircularProgressIndicator(strokeWidth: 2.6),
-                      ),
-                errorBuilder: (context, e, s) => Container(
-                  color: AppColors.surfaceHigh,
-                  child: const Icon(
-                    Icons.broken_image_outlined,
-                    color: AppColors.textDim,
-                    size: 42,
-                  ),
-                ),
-              ),
-            ),
-
-          // Darken under the floating back button.
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                stops: const [0, 0.42],
-                colors: [
-                  AppColors.bg.withValues(alpha: 0.62),
-                  AppColors.bg.withValues(alpha: 0),
-                ],
-              ),
-            ),
-          ),
-          // Melt the bottom edge into the page.
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                stops: const [0.55, 1],
-                colors: [AppColors.bg.withValues(alpha: 0), AppColors.bg],
-              ),
-            ),
-          ),
-
-          if (ids.length > 1)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: AppSpace.md,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  for (var i = 0; i < ids.length; i++)
-                    AnimatedContainer(
-                      duration: kMotionStandard,
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: AppSpace.xs - 1,
-                      ),
-                      width: i == _pageIdx ? 20 : 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        color: i == _pageIdx
-                            ? AppColors.primary
-                            : Colors.white.withValues(alpha: 0.28),
-                        borderRadius: BorderRadius.circular(AppRadius.pill),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          Positioned(
-            // clears the 44 px glass back button above it
-            top:
-                MediaQuery.paddingOf(context).top +
-                AppSpace.xs +
-                44 +
-                AppSpace.sm,
-            left: AppSpace.lg,
-            right: AppSpace.lg,
-            child: CardIndex(cost: entryCost(product), type: cardType(product)),
-          ),
-        ],
-      ),
-    );
-  }
 }

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Gamer Nav Bar Options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Orbitron:wght@700;900&family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#020408;--panel:#060B12;--border:#1A2A3A;--cyan:#22D3EE;--cyan2:#67E8F9;--gold:#FBBF24;--text:#E8F4F8;--dim:#5A7A8A;--red:#F43F5E;--olive:#7A8A5A;--amber:#F59E0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#000;color:var(--text);font-family:'Rajdhani','Segoe UI',sans-serif;padding:32px;min-height:100vh}
+  h1{font-family:'Orbitron',sans-serif;font-size:20px;font-weight:900;letter-spacing:.08em;margin-bottom:4px;color:var(--cyan)}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:32px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px}
+  .phone{background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:20px 16px 16px;position:relative;overflow:hidden;box-shadow:0 0 40px rgba(34,211,238,.08),0 30px 80px rgba(0,0,0,.9)}
+  .phone::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(34,211,238,.015) 2px 3px);pointer-events:none}
+  .lab{font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;letter-spacing:.2em;color:var(--cyan);margin-bottom:8px}
+  .ttl{font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;margin-bottom:4px}
+  .dsc{font-size:12px;color:var(--dim);margin-bottom:16px;line-height:1.5}
+  .stage{height:210px;display:flex;flex-direction:column;justify-content:flex-end}
+  .content{flex:1;border:1px solid rgba(34,211,238,.08);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#1A3A4A;font-size:11px;margin-bottom:12px;background:linear-gradient(180deg,rgba(34,211,238,.03),transparent)}
+  .ic{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 4px currentColor)}
+  /* 1 Cyberpunk HUD */
+  .hud{background:linear-gradient(180deg,rgba(34,211,238,.08),rgba(6,11,18,.9));border:1px solid var(--cyan);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);padding:8px 6px;display:flex;gap:4px;box-shadow:0 0 20px rgba(34,211,238,.25),inset 0 0 20px rgba(34,211,238,.05)}
+  .hudt{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;color:var(--dim);font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px);transition:all .2s;position:relative}
+  .hudt.active{color:var(--cyan);background:rgba(34,211,238,.12);text-shadow:0 0 8px var(--cyan)}
+  .hudt.active::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  /* 2 RPG hotbar */
+  .hotbar{display:flex;gap:6px;justify-content:center;padding:6px;background:rgba(0,0,0,.6);border:1px solid var(--border);border-radius:4px}
+  .slot{width:46px;height:46px;background:linear-gradient(180deg,#0A1420,#040810);border:2px solid var(--border);border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--dim);font-size:8px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;position:relative;box-shadow:inset 0 2px 4px rgba(0,0,0,.5)}
+  .slot.active{border-color:var(--cyan);color:var(--cyan);box-shadow:inset 0 2px 4px rgba(0,0,0,.5),0 0 16px rgba(34,211,238,.5);background:linear-gradient(180deg,rgba(34,211,238,.15),#040810)}
+  .slot.active::before{content:'';position:absolute;inset:-2px;border:1px solid var(--cyan2);border-radius:8px;opacity:.6}
+  /* 3 Esports segmented */
+  .esport{background:rgba(6,11,18,.8);border:1px solid var(--border);border-radius:2px;padding:4px;display:flex;position:relative;overflow:hidden}
+  .esport::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent)}
+  .es{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;color:var(--dim);font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;transition:color .2s;position:relative;z-index:2}
+  .es.active{color:var(--bg);font-weight:700}
+  .esind{position:absolute;top:4px;bottom:4px;left:4px;width:calc((100% - 8px)/6);background:linear-gradient(135deg,var(--cyan),var(--cyan2));box-shadow:0 0 18px rgba(34,211,238,.6);transition:left .3s cubic-bezier(.22,1,.36,1);clip-path:polygon(6px 0,100% 0,calc(100% - 6px) 100%,0 100%)}
+  /* 4 Arcade neon */
+  .arcade{display:flex;gap:8px;justify-content:center;padding:8px;background:radial-gradient(ellipse at center,rgba(34,211,238,.06),transparent);border-top:1px solid rgba(34,211,238,.2)}
+  .arc{width:48px;height:48px;border-radius:50%;background:rgba(6,11,18,.8);border:2px solid var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--dim);font-size:8px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;transition:all .25s;position:relative}
+  .arc.active{border-color:var(--cyan);color:var(--cyan);box-shadow:0 0 24px rgba(34,211,238,.6),inset 0 0 12px rgba(34,211,238,.15);transform:scale(1.08)}
+  .arc.active::after{content:'';position:absolute;inset:-4px;border-radius:50%;border:1px solid var(--cyan2);opacity:.5}
+  /* 5 Holographic */
+  .holo{background:linear-gradient(135deg,rgba(103,232,249,.12),rgba(34,211,238,.04),rgba(14,116,144,.12));border:1px solid rgba(103,232,249,.35);border-radius:18px;padding:6px;display:flex;gap:4px;backdrop-filter:blur(12px);box-shadow:0 8px 32px rgba(34,211,238,.15),inset 0 1px 0 rgba(255,255,255,.1)}
+  .holot{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;color:var(--dim);font-size:9px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;border-radius:14px;transition:all .3s}
+  .holot.active{color:#fff;background:linear-gradient(135deg,rgba(103,232,249,.35),rgba(34,211,238,.15));box-shadow:0 0 20px rgba(103,232,249,.4),inset 0 1px 0 rgba(255,255,255,.25);text-shadow:0 0 6px #fff}
+  /* 6 Military tactical */
+  .mil{background:#0A0F0A;border:1px solid #2A3A2A;border-radius:2px;padding:6px;display:flex;gap:2px;position:relative}
+  .mil::before{content:'';position:absolute;top:0;left:0;width:8px;height:8px;border-top:2px solid var(--olive);border-left:2px solid var(--olive)}
+  .mil::after{content:'';position:absolute;bottom:0;right:0;width:8px;height:8px;border-bottom:2px solid var(--olive);border-right:2px solid var(--olive)}
+  .milt{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;color:var(--olive);font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;transition:all .2s}
+  .milt.active{color:var(--amber);background:rgba(245,158,11,.08);text-shadow:0 0 6px var(--amber)}
+  .milt.active::before{content:'[';position:absolute;left:2px;top:50%;transform:translateY(-50%);color:var(--amber)}
+  /* 7 Racing dashboard */
+  .race{background:linear-gradient(180deg,#1A1A1A,#0A0A0A);border:2px solid #333;border-radius:8px;padding:6px;display:flex;gap:4px;position:relative;overflow:hidden}
+  .race::before{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--red),var(--gold));box-shadow:0 0 12px var(--red)}
+  .ract{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;color:#666;font-family:'Orbitron',sans-serif;font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;transition:all .2s;position:relative}
+  .ract.active{color:var(--red);text-shadow:0 0 8px var(--red)}
+  .ract.active::after{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:6px solid var(--red);filter:drop-shadow(0 0 6px var(--red))}
+  /* 8 Fantasy rune */
+  .rune{background:radial-gradient(ellipse at center,#1A1208,#050300);border:1px solid #3A2A10;border-radius:12px;padding:6px;display:flex;gap:4px;position:relative}
+  .rune::before,.rune::after{content:'';position:absolute;left:50%;transform:translateX(-50%);width:60%;height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent)}
+  .rune::before{top:0}.rune::after{bottom:0}
+  .runet{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;color:#6A5A30;font-family:'Cinzel',serif;font-size:9px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;transition:all .3s}
+  .runet.active{color:var(--gold);text-shadow:0 0 10px var(--gold)}
+  .runet.active .ic{filter:drop-shadow(0 0 8px var(--gold));stroke:var(--gold)}
+  /* 9 Neon Edge */
+  .neonedge{background:#030609;border:1px solid rgba(34,211,238,.2);border-radius:4px;padding:6px;display:flex;gap:2px;position:relative;box-shadow:inset 0 0 20px rgba(34,211,238,.05)}
+  .ne{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;color:var(--dim);font-size:9px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;position:relative;transition:all .3s}
+  .ne.active{color:var(--cyan);text-shadow:0 0 10px var(--cyan)}
+  .ne.active::before,.ne.active::after{content:'';position:absolute;left:0;right:0;height:1px;background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+  .ne.active::before{top:0}.ne.active::after{bottom:0}
+  /* 10 Hexagon */
+  .hexbar{display:flex;gap:4px;justify-content:center;padding:6px}
+  .hex{width:52px;height:46px;background:rgba(6,11,18,.8);clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--dim);font-size:8px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;transition:all .25s;border:1px solid var(--border)}
+  .hex.active{background:linear-gradient(135deg,rgba(34,211,238,.3),rgba(34,211,238,.1));color:var(--cyan);border-color:var(--cyan);filter:drop-shadow(0 0 12px rgba(34,211,238,.5))}
+  /* 11 Glass HUD parallax */
+  .ghud{background:linear-gradient(135deg,rgba(255,255,255,.06),rgba(34,211,238,.04));border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:6px;display:flex;gap:4px;backdrop-filter:blur(8px);box-shadow:0 8px 32px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.08)}
+  .gh{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;color:var(--dim);font-size:9px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;border-radius:12px;transition:all .3s;position:relative}
+  .gh.active{color:#fff;background:radial-gradient(circle at 50% 0%,rgba(34,211,238,.25),transparent);box-shadow:inset 0 -2px 0 var(--cyan)}
+  .gh.active .ic{filter:drop-shadow(0 0 8px var(--cyan))}
+  /* 12 Retro Pixel */
+  .pixel{background:#0A0A14;border:2px solid #3A3A5A;padding:4px;display:flex;gap:2px;image-rendering:pixelated}
+  .px{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;color:#5A5A7A;font-family:'Courier New',monospace;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0;transition:all .1s;position:relative;border:2px solid transparent}
+  .px.active{color:#000;background:var(--cyan);border-color:#fff;box-shadow:2px 2px 0 #000}
+  /* 13 Holographic Prism */
+  .prism{background:linear-gradient(120deg,rgba(255,0,128,.08),rgba(0,255,255,.08),rgba(128,0,255,.08));border:1px solid rgba(255,255,255,.15);border-radius:14px;padding:6px;display:flex;gap:4px;position:relative;overflow:hidden}
+  .prism::after{content:'';position:absolute;inset:0;background:linear-gradient(120deg,transparent 30%,rgba(255,255,255,.08) 50%,transparent 70%);pointer-events:none}
+  .pr{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;color:var(--dim);font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;border-radius:10px;transition:all .3s}
+  .pr.active{color:#fff;background:linear-gradient(135deg,rgba(255,0,128,.25),rgba(0,255,255,.25));box-shadow:0 0 18px rgba(255,0,255,.3)}
+  /* 14 Minimal Luxe */
+  .luxe{background:#050505;border:1px solid #2A2518;border-radius:2px;padding:8px 6px;display:flex;gap:6px}
+  .lx{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 2px;color:#5A5030;font-family:'Cinzel',serif;font-size:9px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;transition:all .3s;border-bottom:1px solid transparent}
+  .lx.active{color:var(--gold);border-bottom:1px solid var(--gold);text-shadow:0 0 8px rgba(251,191,36,.4)}
+  .lx .ic{stroke:currentColor}
+  /* 15 Cyber Deck */
+  .deck{background:linear-gradient(180deg,#1A1A1A,#0D0D0D);border:2px solid #333;border-radius:4px;padding:6px;display:flex;gap:3px;position:relative;box-shadow:inset 0 2px 0 rgba(255,255,255,.05)}
+  .dk{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;color:#555;font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;transition:all .2s;border:1px solid #222;border-radius:2px;background:#111}
+  .dk.active{color:var(--cyan);border-color:var(--cyan);background:#0A1A1A;box-shadow:inset 0 0 12px rgba(34,211,238,.2),0 0 8px rgba(34,211,238,.3)}
+  .dk.active::before{content:'';position:absolute;top:2px;left:2px;width:4px;height:4px;background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
+  /* 16 Aurora */
+  .aurora{background:rgba(5,5,15,.8);border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:6px;display:flex;gap:4px;position:relative;overflow:hidden}
+  .aurora::before{content:'';position:absolute;bottom:0;left:0;right:0;height:40%;background:linear-gradient(180deg,transparent,rgba(34,211,238,.08));pointer-events:none}
+  .au{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;color:var(--dim);font-size:9px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;transition:all .3s;position:relative;z-index:2}
+  .au.active{color:#fff}
+  .au.active .ic{filter:drop-shadow(0 0 10px var(--cyan2))}
+  .auind{position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:20px;height:3px;border-radius:2px;background:linear-gradient(90deg,var(--cyan),var(--cyan2),var(--gold));box-shadow:0 0 12px var(--cyan)}
+  .au:not(.active) .auind{display:none}
+</style>
+</head>
+<body>
+<h1>Gamer Nav Bar Options (1–8)</h1>
+<p class="sub">Pick a number.</p>
+<div class="grid">
+
+  <div class="phone"><div class="lab">1</div><div class="ttl">Cyberpunk HUD</div><div class="dsc">Angular clipped panel, scanlines, glowing active beam.</div><div class="stage"><div class="content">game screen</div><div class="hud"><div class="hudt"><svg class="ic" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>store</div><div class="hudt active"><svg class="ic" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>earn</div><div class="hudt"><svg class="ic" viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/></svg>keys</div><div class="hudt"><svg class="ic" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>news</div><div class="hudt"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>chat</div><div class="hudt"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg>admin</div></div></div></div>
+
+  <div class="phone"><div class="lab">2</div><div class="ttl">RPG Hotbar</div><div class="dsc">Square inventory slots, beveled, active glows cyan.</div><div class="stage"><div class="content">game screen</div><div class="hotbar"><div class="slot"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>store</div><div class="slot active"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><polygon points="5 3 19 12 5 21 5 3"/></svg>earn</div><div class="slot"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/></svg>keys</div><div class="slot"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>news</div><div class="slot"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>chat</div><div class="slot"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><circle cx="12" cy="12" r="3"/></svg>admin</div></div></div></div>
+
+  <div class="phone"><div class="lab">3</div><div class="ttl">Esports Segmented</div><div class="dsc">Skewed glowing active block, sharp edges.</div><div class="stage"><div class="content">game screen</div><div class="esport"><div class="esind" style="left:calc(4px + (100% - 8px)/6*1)"></div><div class="es">store</div><div class="es active">earn</div><div class="es">keys</div><div class="es">news</div><div class="es">chat</div><div class="es">admin</div></div></div></div>
+
+  <div class="phone"><div class="lab">4</div><div class="ttl">Arcade Neon</div><div class="dsc">Circular neon tokens, heavy glow, arcade cabinet.</div><div class="stage"><div class="content">game screen</div><div class="arcade"><div class="arc"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>store</div><div class="arc active"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><polygon points="5 3 19 12 5 21 5 3"/></svg>earn</div><div class="arc"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/></svg>keys</div><div class="arc"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>news</div><div class="arc"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>chat</div><div class="arc"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><circle cx="12" cy="12" r="3"/></svg>admin</div></div></div></div>
+
+  <div class="phone"><div class="lab">5</div><div class="ttl">Holographic</div><div class="dsc">Iridescent glass, floating, subtle shimmer.</div><div class="stage"><div class="content">game screen</div><div class="holo"><div class="holot"><svg class="ic" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>store</div><div class="holot active"><svg class="ic" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>earn</div><div class="holot"><svg class="ic" viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/></svg>keys</div><div class="holot"><svg class="ic" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>news</div><div class="holot"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>chat</div><div class="holot"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg>admin</div></div></div></div>
+
+  <div class="phone"><div class="lab">6</div><div class="ttl">Military Tactical</div><div class="dsc">Olive/amber, bracket corners, tactical readout.</div><div class="stage"><div class="content">game screen</div><div class="mil"><div class="milt">store</div><div class="milt active">earn</div><div class="milt">keys</div><div class="milt">news</div><div class="milt">chat</div><div class="milt">admin</div></div></div></div>
+
+  <div class="phone"><div class="lab">7</div><div class="ttl">Racing Dashboard</div><div class="dsc">Carbon fiber, red accent, speedometer active.</div><div class="stage"><div class="content">game screen</div><div class="race"><div class="ract"><svg class="ic" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>store</div><div class="ract active"><svg class="ic" viewBox="0 0 24 24" style="width:14px;height:14px"><polygon points="5 3 19 12 5 21 5 3"/></svg>earn</div><div class="ract"><svg class="ic" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/></svg>keys</div><div class="ract"><svg class="ic" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>news</div><div class="ract"><svg class="ic" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>chat</div><div class="ract"><svg class="ic" viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="12" cy="12" r="3"/></svg>admin</div></div></div></div>
+
+  <div class="phone"><div class="lab">8</div><div class="ttl">Fantasy Rune</div><div class="dsc">Ornate gold borders, serif labels, glowing rune active.</div><div class="stage"><div class="content">game screen</div><div class="rune"><div class="runet"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>store</div><div class="runet active"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><polygon points="5 3 19 12 5 21 5 3"/></svg>earn</div><div class="runet"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/></svg>keys</div><div class="runet"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>news</div><div class="runet"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>chat</div><div class="runet"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><circle cx="12" cy="12" r="3"/></svg>admin</div></div></div></div>
+
+</div>
+</body>
+</html>

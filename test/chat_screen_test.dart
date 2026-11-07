@@ -13,6 +13,7 @@ class _FakeClient implements ChatClient {
     this.signedIn = true,
     this.muted = false,
     this.mutedList = const [],
+    this.session = true,
   });
 
   @override
@@ -20,6 +21,10 @@ class _FakeClient implements ChatClient {
   final bool signedIn;
   final bool muted;
   final List<MutedUser> mutedList;
+
+  /// True ay may persisted Firebase session (fast boot path).
+  final bool session;
+
   static const myUid = 'uid-1';
 
   /// True ay hindi kailanman natatapos ang sign-in (boot timeout test).
@@ -35,6 +40,9 @@ class _FakeClient implements ChatClient {
   int subscribes = 0;
   String? sendError;
   String? muteError;
+
+  @override
+  bool get hasSession => session;
 
   @override
   Future<bool> ensureSignedIn() async {
@@ -65,6 +73,9 @@ class _FakeClient implements ChatClient {
     subscribes++;
     return _controller.stream;
   }
+
+  @override
+  Future<List<ChatMessage>> loadOlder(int beforeTsMillis) async => const [];
 
   @override
   Future<String?> send(String text, {ChatMessage? replyTo}) async {
@@ -123,7 +134,7 @@ void main() {
   });
 
   testWidgets('does not subscribe when sign-in fails', (tester) async {
-    final client = _FakeClient(signedIn: false);
+    final client = _FakeClient(signedIn: false, session: false);
     await _pump(tester, client);
     await tester.pumpAndSettle();
 
@@ -252,7 +263,7 @@ void main() {
 
   testWidgets('a hanging sign-in falls back after the boot timeout',
       (tester) async {
-    final client = _FakeClient()..hangSignIn = true;
+    final client = _FakeClient(session: false)..hangSignIn = true;
     await _pump(tester, client);
     await tester.pump();
 
@@ -262,6 +273,17 @@ void main() {
 
     expect(find.text('Chat unavailable'), findsOneWidget);
     expect(client.subscribes, 0);
+  });
+
+  testWidgets('an existing session subscribes without waiting for sign-in',
+      (tester) async {
+    // Kahit hindi matapos ang sign-in, nakakapag-subscribe dahil may session.
+    final client = _FakeClient()..hangSignIn = true;
+    await _pump(tester, client);
+    await tester.pumpAndSettle();
+
+    expect(client.subscribes, 1);
+    expect(find.text('Chat unavailable'), findsNothing);
   });
 
   testWidgets('shows loading until the first snapshot, then the empty state',

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Animated Nav Options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#020408;--panel:#060B12;--border:#1A2A3A;--cyan:#22D3EE;--cyan2:#67E8F9;--gold:#FBBF24;--text:#E8F4F8;--dim:#5A7A8A}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#000;color:var(--text);font-family:'Rajdhani','Segoe UI',sans-serif;padding:32px;min-height:100vh}
+  h1{font-family:'Orbitron',sans-serif;font-size:20px;font-weight:900;letter-spacing:.08em;margin-bottom:4px;color:var(--cyan)}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:32px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px}
+  .phone{background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:20px 16px 16px;position:relative;overflow:hidden;box-shadow:0 0 40px rgba(34,211,238,.08),0 30px 80px rgba(0,0,0,.9)}
+  .phone::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(34,211,238,.015) 2px 3px);pointer-events:none}
+  .lab{font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;letter-spacing:.2em;color:var(--cyan);margin-bottom:8px}
+  .ttl{font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;margin-bottom:4px}
+  .dsc{font-size:12px;color:var(--dim);margin-bottom:16px;line-height:1.5}
+  .stage{height:230px;display:flex;flex-direction:column;justify-content:flex-end}
+  .content{flex:1;border:1px solid rgba(34,211,238,.08);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#1A3A4A;font-size:11px;margin-bottom:12px;background:linear-gradient(180deg,rgba(34,211,238,.03),transparent)}
+  .ic{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 4px currentColor)}
+  /* A Sliding indicator */
+  .slideA{background:rgba(6,11,18,.8);border:1px solid var(--border);border-radius:999px;padding:6px;display:flex;position:relative;overflow:hidden}
+  .slideA .ind{position:absolute;top:6px;bottom:6px;left:6px;width:calc((100% - 12px)/6);border-radius:999px;background:linear-gradient(135deg,var(--cyan),var(--cyan2));box-shadow:0 0 20px rgba(34,211,238,.6);animation:slideInd 3s cubic-bezier(.32,.72,0,1) infinite}
+  @keyframes slideInd{0%{left:6px}16%{left:calc(6px + (100% - 12px)/6)}33%{left:calc(6px + (100% - 12px)/6*2)}50%{left:calc(6px + (100% - 12px)/6*3)}66%{left:calc(6px + (100% - 12px)/6*4)}83%{left:calc(6px + (100% - 12px)/6*5)}100%{left:6px}}
+  .sa{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;color:var(--dim);font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;position:relative;z-index:2}
+  /* B Morphing pill */
+  .morphB{background:rgba(6,11,18,.8);border:1px solid var(--border);border-radius:999px;padding:6px;display:flex;position:relative;overflow:hidden}
+  .morphB .pill{position:absolute;top:6px;bottom:6px;left:6px;height:auto;width:calc((100% - 12px)/6);border-radius:999px;background:linear-gradient(135deg,var(--cyan),var(--cyan2));box-shadow:0 0 24px rgba(34,211,238,.6);animation:morphPill 4s cubic-bezier(.22,1,.36,1) infinite}
+  @keyframes morphPill{0%{left:6px;width:calc((100% - 12px)/6)}20%{left:calc(6px + (100% - 12px)/6);width:calc((100% - 12px)/6*2)}40%{left:calc(6px + (100% - 12px)/6*2);width:calc((100% - 12px)/6)}60%{left:calc(6px + (100% - 12px)/6*3);width:calc((100% - 12px)/6*1.5)}80%{left:calc(6px + (100% - 12px)/6*4);width:calc((100% - 12px)/6)}100%{left:6px;width:calc((100% - 12px)/6)}}
+  .mb{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;color:var(--dim);font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;position:relative;z-index:2}
+  /* C Pulsing active */
+  .pulseC{background:rgba(6,11,18,.8);border:1px solid var(--border);border-radius:12px;padding:6px;display:flex;gap:4px}
+  .pc{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;color:var(--dim);font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;border-radius:8px;transition:all .3s;position:relative}
+  .pc.active{color:var(--cyan);background:rgba(34,211,238,.08)}
+  .pc.active .ic{animation:pulseIcon 1.4s ease-in-out infinite}
+  .pc.active::after{content:'';position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:6px;height:6px;border-radius:50%;background:var(--cyan);animation:pulseDot 1.4s ease-in-out infinite}
+  @keyframes pulseIcon{0%,100%{transform:scale(1);filter:drop-shadow(0 0 4px var(--cyan))}50%{transform:scale(1.2);filter:drop-shadow(0 0 12px var(--cyan))}}
+  @keyframes pulseDot{0%,100%{opacity:1;transform:translateX(-50%) scale(1)}50%{opacity:.4;transform:translateX(-50%) scale(1.6)}}
+  /* D Wave ripple */
+  .waveD{background:rgba(6,11,18,.8);border:1px solid var(--border);border-radius:999px;padding:6px;display:flex;gap:4px;position:relative;overflow:hidden}
+  .wd{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;color:var(--dim);font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;position:relative;z-index:2;transition:color .3s}
+  .wd.active{color:#04212A}
+  .wd.active::before{content:'';position:absolute;inset:0;background:var(--cyan);border-radius:999px;animation:waveRipple .8s ease-out;z-index:-1}
+  @keyframes waveRipple{0%{transform:scale(0);opacity:.8}100%{transform:scale(2.5);opacity:0}}
+  .waveD .ripple{position:absolute;bottom:4px;left:50%;width:8px;height:8px;border-radius:50%;background:var(--cyan);animation:waveLoop 2s ease-in-out infinite;pointer-events:none}
+  @keyframes waveLoop{0%{transform:translateX(-50%) scale(1);opacity:.6}50%{transform:translateX(calc(-50% + 60px)) scale(1.4);opacity:.3}100%{transform:translateX(-50%) scale(1);opacity:.6}}
+</style>
+</head>
+<body>
+<h1>Animated Nav Options</h1>
+<p class="sub">Cool with animation. Pick one.</p>
+<div class="grid">
+
+  <div class="phone"><div class="lab">A</div><div class="ttl">Sliding Indicator</div><div class="dsc">Neon pill slides between tabs automatically.</div><div class="stage"><div class="content">game screen</div><div class="slideA"><div class="ind"></div><div class="sa"><svg class="ic" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>store</div><div class="sa"><svg class="ic" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>earn</div><div class="sa"><svg class="ic" viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/></svg>keys</div><div class="sa"><svg class="ic" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>news</div><div class="sa"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>chat</div><div class="sa"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg>admin</div></div></div></div>
+
+  <div class="phone"><div class="lab">B</div><div class="ttl">Morphing Pill</div><div class="dsc">Indicator morphs width as it travels.</div><div class="stage"><div class="content">game screen</div><div class="morphB"><div class="pill"></div><div class="mb"><svg class="ic" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>store</div><div class="mb"><svg class="ic" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>earn</div><div class="mb"><svg class="ic" viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/></svg>keys</div><div class="mb"><svg class="ic" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>news</div><div class="mb"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>chat</div><div class="mb"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg>admin</div></div></div></div>
+
+  <div class="phone"><div class="lab">C</div><div class="ttl">Pulsing Active</div><div class="dsc">Active icon pulses and breathes glow.</div><div class="stage"><div class="content">game screen</div><div class="pulseC"><div class="pc"><svg class="ic" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>store</div><div class="pc active"><svg class="ic" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>earn</div><div class="pc"><svg class="ic" viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/></svg>keys</div><div class="pc"><svg class="ic" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>news</div><div class="pc"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>chat</div><div class="pc"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg>admin</div></div></div></div>
+
+  <div class="phone"><div class="lab">D</div><div class="ttl">Wave Ripple</div><div class="dsc">Ripple bursts on active, wave travels.</div><div class="stage"><div class="content">game screen</div><div class="waveD"><div class="wd"><svg class="ic" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>store</div><div class="wd active"><svg class="ic" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>earn</div><div class="wd"><svg class="ic" viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/></svg>keys</div><div class="wd"><svg class="ic" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>news</div><div class="wd"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>chat</div><div class="wd"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg>admin</div><div class="ripple"></div></div></div></div>
+
+</div>
+</body>
+</html>

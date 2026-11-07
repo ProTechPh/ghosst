@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>More Earn Designs 3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#020408;--panel:#060B12;--border:#1A2A3A;--cyan:#22D3EE;--cyan2:#67E8F9;--gold:#FBBF24;--text:#E8F4F8;--dim:#5A7A8A}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#000;color:var(--text);font-family:'Rajdhani','Segoe UI',sans-serif;padding:24px;min-height:100vh}
+  h1{font-family:'Orbitron',sans-serif;font-size:20px;font-weight:900;letter-spacing:.08em;margin-bottom:4px;color:var(--cyan)}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:28px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px}
+  .phone{background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:16px;overflow:hidden;box-shadow:0 0 40px rgba(34,211,238,.08),0 30px 80px rgba(0,0,0,.9);position:relative;height:520px;display:flex;flex-direction:column}
+  .phone::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(34,211,238,.015) 2px 3px);pointer-events:none}
+  .lab{font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;letter-spacing:.2em;color:var(--cyan);margin-bottom:6px}
+  .ttl{font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;margin-bottom:2px}
+  .dsc{font-size:11px;color:var(--dim);margin-bottom:10px;line-height:1.4}
+  .scroll{flex:1;overflow:auto;padding:4px}
+  .slot{background:linear-gradient(180deg,#1A1A2E,#0A0A14);border:2px solid #3A3A5A;border-radius:8px;padding:20px;text-align:center;position:relative;overflow:hidden}
+  .slot .reels{display:flex;gap:8px;justify-content:center;margin-bottom:12px}
+  .reel{width:48px;height:64px;background:#0A0A14;border:2px solid var(--cyan);border-radius:4px;display:grid;place-items:center;font-size:24px;color:var(--gold);font-family:'Orbitron',sans-serif;box-shadow:0 0 12px rgba(34,211,238,.3)}
+  .slot .btn{background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#04212A;border:none;border-radius:4px;padding:10px 20px;font-size:12px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;box-shadow:0 0 20px rgba(34,211,238,.4)}
+  .slot .bal{font-size:12px;color:var(--dim);margin-top:8px}
+  .terminal{background:#0A0F0A;border:1px solid #2A3A2A;border-radius:4px;padding:16px;font-family:'Courier New',monospace;font-size:11px;color:#34D399;position:relative;overflow:hidden}
+  .terminal::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(52,211,153,.03) 2px 3px);pointer-events:none}
+  .terminal .line{margin-bottom:4px}
+  .terminal .prompt{color:var(--cyan)}
+  .terminal .btn{background:transparent;color:var(--cyan);border:1px solid var(--cyan);border-radius:2px;padding:6px 12px;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;margin-top:8px;font-family:'Rajdhani',sans-serif}
+  .terminal .bal{color:var(--gold);font-weight:700}
+  .floatbtn{background:radial-gradient(circle at 50% 50%,rgba(34,211,238,.15),rgba(6,11,18,.9));border:1px solid rgba(34,211,238,.3);border-radius:24px;padding:24px;text-align:center;position:relative;overflow:hidden}
+  .floatbtn .bal{font-size:48px;font-weight:900;color:var(--gold);font-family:'Orbitron',sans-serif;text-shadow:0 0 30px rgba(251,191,36,.4);margin-bottom:4px}
+  .floatbtn .label{font-size:10px;color:var(--dim);letter-spacing:.2em;text-transform:uppercase;margin-bottom:16px}
+  .floatbtn .btn{background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#04212A;border:none;border-radius:999px;padding:14px 32px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 0 30px rgba(34,211,238,.5);display:inline-block}
+  .floatbtn .btn:hover{transform:scale(1.05);box-shadow:0 0 40px rgba(34,211,238,.7)}
+  .mesh{background:radial-gradient(ellipse at 30% 20%,rgba(34,211,238,.12),transparent 50%),radial-gradient(ellipse at 70% 80%,rgba(251,191,36,.08),transparent 50%),linear-gradient(180deg,#060B12,#020408);border:1px solid var(--border);border-radius:16px;padding:20px;text-align:center;position:relative;overflow:hidden}
+  .mesh .bal{font-size:44px;font-weight:900;color:var(--text);font-family:'Orbitron',sans-serif;margin-bottom:4px}
+  .mesh .label{font-size:10px;color:var(--dim);letter-spacing:.2em;text-transform:uppercase;margin-bottom:16px}
+  .mesh .btn{background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#04212A;border:none;border-radius:12px;padding:12px 24px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 0 20px rgba(34,211,238,.4);width:100%}
+  .progress{height:4px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;margin:8px 0}
+  .progress .fill{height:100%;background:linear-gradient(90deg,var(--cyan),var(--cyan2));border-radius:2px}
+</style>
+</head>
+<body>
+<h1>More Earn Designs (9–12)</h1>
+<p class="sub">Exciting, unique options. Pick one.</p>
+<div class="grid">
+
+  <div class="phone">
+    <div class="lab">Option 9</div>
+    <div class="ttl">Slot Machine</div>
+    <div class="dsc">Spinning reels, casino feel. Exciting.</div>
+    <div class="scroll">
+      <div class="slot">
+        <div class="reels"><div class="reel">💎</div><div class="reel">7</div><div class="reel">🎰</div></div>
+        <button class="btn">SPIN · +10 COINS</button>
+        <div class="bal">Balance: 1,240 coins</div>
+      </div>
+      <div style="margin-top:10px;font-size:10px;color:var(--dim);text-align:center">Cooldown: 18s remaining</div>
+      <div class="progress"><div class="fill" style="width:60%"></div></div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Option 10</div>
+    <div class="ttl">Cyberpunk Terminal</div>
+    <div class="dsc">Hacker terminal, command line. Techy.</div>
+    <div class="scroll">
+      <div class="terminal">
+        <div class="line"><span class="prompt">$</span> init reward_engine</div>
+        <div class="line">> loading ad unit... OK</div>
+        <div class="line">> verifying SSV... OK</div>
+        <div class="line">> balance: <span class="bal">1240 coins</span></div>
+        <div class="line"><span class="prompt">$</span> watch_ad --reward 10</div>
+        <button class="btn">EXECUTE</button>
+        <div class="line" style="margin-top:8px;color:var(--dim)">cooldown: 18s</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Option 11</div>
+    <div class="ttl">Floating Button</div>
+    <div class="dsc">Large floating coin button, minimal.</div>
+    <div class="scroll">
+      <div class="floatbtn">
+        <div class="label">Your balance</div>
+        <div class="bal">1,240</div>
+        <div class="label">coins</div>
+        <button class="btn">TAP TO EARN +10</button>
+      </div>
+      <div style="margin-top:10px;font-size:10px;color:var(--dim);text-align:center">Cooldown: 18s remaining</div>
+      <div class="progress"><div class="fill" style="width:60%"></div></div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Option 12</div>
+    <div class="ttl">Mesh Gradient</div>
+    <div class="dsc">Soft mesh background, clean balance.</div>
+    <div class="scroll">
+      <div class="mesh">
+        <div class="label">Balance</div>
+        <div class="bal">1,240</div>
+        <div class="label">coins</div>
+        <button class="btn">Watch ad · +10 coins</button>
+      </div>
+      <div style="margin-top:10px;font-size:10px;color:var(--dim);text-align:center">Cooldown: 18s remaining</div>
+      <div class="progress"><div class="fill" style="width:60%"></div></div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
