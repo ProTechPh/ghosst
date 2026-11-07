@@ -34,6 +34,14 @@ class _AdminScreenState extends State<AdminScreen> {
   /// (nawawala ang messages pagkatapos ng 24h cleanup).
   List<MutedUser> mutedUsers = [];
 
+  /// Banned words para sa auto-moderation (server-side, PHP cron).
+  List<BannedWord> bannedWords = [];
+  final bannedWordInput = TextEditingController();
+
+  /// Block links ba sa chat (auto-mute kapag may link).
+  bool blockLinks = false;
+  final muteHoursInput = TextEditingController();
+
   bool loading = true;
   bool busy = false;
   String message = '';
@@ -116,6 +124,8 @@ class _AdminScreenState extends State<AdminScreen> {
     productDurations.dispose();
     announcementTitle.dispose();
     announcementBody.dispose();
+    bannedWordInput.dispose();
+    muteHoursInput.dispose();
     editName.dispose();
     editCost.dispose();
     editDesc.dispose();
@@ -208,12 +218,18 @@ class _AdminScreenState extends State<AdminScreen> {
         // Best-effort: the panel still works if `keys` can't be read.
         Backend.listKeys().catchError((_) => <StockEntry>[]),
         Backend.mutedUsers().catchError((_) => <MutedUser>[]),
+        Backend.bannedWords().catchError((_) => <BannedWord>[]),
+        Backend.moderation().catchError((_) => const Moderation()),
       ]);
       if (!mounted) return;
+      final mod = results[4] as Moderation;
       setState(() {
         products = results[0] as List<Product>;
         keys = results[1] as List<StockEntry>;
         mutedUsers = results[2] as List<MutedUser>;
+        bannedWords = results[3] as List<BannedWord>;
+        blockLinks = mod.blockLinks;
+        muteHoursInput.text = '${mod.muteHours}';
         loading = false;
       });
     } catch (e) {
@@ -239,6 +255,61 @@ class _AdminScreenState extends State<AdminScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => message = 'Unmute failed: $e');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  /// Adds a banned word; the PHP cron applies it to recent messages.
+  Future<void> _addBannedWord() async {
+    final word = bannedWordInput.text.trim();
+    if (word.isEmpty) return;
+    setState(() => busy = true);
+    try {
+      await Backend.addBannedWord(word);
+      bannedWordInput.clear();
+      if (!mounted) return;
+      await _load();
+      if (!mounted) return;
+      setState(() => message = 'Banned word added.');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => message = 'Add failed: $e');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  /// Removes a banned word.
+  Future<void> _deleteBannedWord(int id) async {
+    setState(() => busy = true);
+    try {
+      await Backend.deleteBannedWord(id);
+      if (!mounted) return;
+      await _load();
+      if (!mounted) return;
+      setState(() => message = 'Banned word removed.');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => message = 'Delete failed: $e');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  /// Saves block-links + mute duration.
+  Future<void> _saveModeration() async {
+    final hours = int.tryParse(muteHoursInput.text.trim()) ?? 24;
+    setState(() => busy = true);
+    try {
+      await Backend.saveModeration(blockLinks: blockLinks, muteHours: hours);
+      if (!mounted) return;
+      await _load();
+      if (!mounted) return;
+      setState(() => message = 'Moderation settings saved.');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => message = 'Save failed: $e');
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -1734,6 +1805,97 @@ class _AdminScreenState extends State<AdminScreen> {
               ],
             ),
           ),
+        const SizedBox(height: 18),
+
+        // ---- Banned words ----
+        SectionLabel('Banned words (${bannedWords.length})'),
+        if (bannedWords.isEmpty)
+          const Text(
+            'No banned words.',
+            style: TextStyle(color: AppColors.textDim),
+          ),
+        for (final w in bannedWords)
+          GlowCard(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Row(
+              children: [
+                const Icon(Icons.block, size: 20, color: AppColors.red),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    w.word,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                TextButton(
+                  onPressed: busy ? null : () => _deleteBannedWord(w.id),
+                  child: const Text('Delete'),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 12),
+        GlowCard(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: bannedWordInput,
+                  textCapitalization: TextCapitalization.none,
+                  decoration: const InputDecoration(hintText: 'Word to ban'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton(
+                onPressed: busy ? null : _addBannedWord,
+                child: const Text('Add word'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+
+        // ---- Moderation ----
+        const SectionLabel('Moderation'),
+        GlowCard(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Block links in chat'),
+                subtitle: const Text(
+                  'Messages with links are deleted and the sender is auto-muted.',
+                  style: TextStyle(color: AppColors.textDim, fontSize: 12.5),
+                ),
+                value: blockLinks,
+                onChanged: (v) => setState(() => blockLinks = v),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: muteHoursInput,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  hintText: 'Auto-mute duration (hours)',
+                  suffixText: 'hours',
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: busy ? null : _saveModeration,
+                child: const Text('Save settings'),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 18),
 
         // ---- Products ----

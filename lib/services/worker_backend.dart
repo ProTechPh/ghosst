@@ -148,6 +148,42 @@ class Backend {
         .toList();
   }
 
+  /// Admin: ang banned word list para sa auto-moderation.
+  static Future<List<BannedWord>> bannedWords() async {
+    final res = await _api.get('/admin/banned-words');
+    return (res['words'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(BannedWord.fromJson)
+        .toList();
+  }
+
+  /// Admin: magdagdag ng banned word.
+  static Future<void> addBannedWord(String word) async {
+    await _api.post('/admin/banned-words', data: {'word': word});
+  }
+
+  /// Admin: tanggalin ang banned word.
+  static Future<void> deleteBannedWord(int id) async {
+    await _api.delete('/admin/banned-words/$id');
+  }
+
+  /// Admin: moderation settings (block links + mute duration).
+  static Future<Moderation> moderation() async {
+    final res = await _api.get('/admin/moderation');
+    return Moderation.fromJson(res);
+  }
+
+  /// Admin: i-save ang moderation settings.
+  static Future<void> saveModeration({
+    required bool blockLinks,
+    required int muteHours,
+  }) async {
+    await _api.post('/admin/moderation', data: {
+      'blockLinks': blockLinks,
+      'muteHours': muteHours,
+    });
+  }
+
   // ---- profile ----
 
   static Future<int> coins() async {

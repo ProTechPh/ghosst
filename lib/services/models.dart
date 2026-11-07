@@ -213,6 +213,32 @@ class MutedUser {
       );
 }
 
+/// Isang banned word sa auto-moderation.
+class BannedWord {
+  const BannedWord({required this.id, required this.word});
+
+  final int id;
+  final String word;
+
+  factory BannedWord.fromJson(Map<String, dynamic> json) => BannedWord(
+        id: (json['id'] as num?)?.toInt() ?? 0,
+        word: json['word'] as String? ?? '',
+      );
+}
+
+/// Ang moderation settings: block links ba, at gaano katagal ang auto-mute.
+class Moderation {
+  const Moderation({this.blockLinks = false, this.muteHours = 24});
+
+  final bool blockLinks;
+  final int muteHours;
+
+  factory Moderation.fromJson(Map<String, dynamic> json) => Moderation(
+        blockLinks: json['blockLinks'] as bool? ?? false,
+        muteHours: (json['muteHours'] as num?)?.toInt() ?? 24,
+      );
+}
+
 /// Null when there is nothing to show or the user already closed this one.
 Announcement? unreadAnnouncement(Announcement? a, String dismissedId) =>
     (a == null || a.id == dismissedId) ? null : a;
