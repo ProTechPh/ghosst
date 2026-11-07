@@ -48,6 +48,10 @@ class _ChatScreenState extends State<ChatScreen> {
   String? _myUid;
   ChatMessage? _replyTo;
 
+  /// Ang ids ng mga naka-mute user (admin lang) — pangtanggal ng hula sa
+  /// long-press dialog. Ni-refresh pagbalik sa tab at pagkatapos ng action.
+  Set<String> _mutedIds = {};
+
   @override
   void initState() {
     super.initState();
@@ -57,7 +61,17 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void didUpdateWidget(ChatScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.active && !oldWidget.active) _boot();
+    if (widget.active && !oldWidget.active) {
+      _boot();
+      if (widget.isAdmin && _sub != null) _refreshMuted();
+    }
+  }
+
+  /// Best-effort muted list refresh (admin lang); silent failure.
+  Future<void> _refreshMuted() async {
+    final users = await _client.mutedUsers();
+    if (!mounted) return;
+    setState(() => _mutedIds = {for (final u in users) u.id});
   }
 
   /// Sign in before listening: the rules deny reads to an anonymous client,
@@ -81,11 +95,13 @@ class _ChatScreenState extends State<ChatScreen> {
     }
     final uid = await _client.currentUid();
     final muted = await _client.isMuted();
+    final mutedUsers = widget.isAdmin ? await _client.mutedUsers() : const [];
     debugPrint('[ChatScreen] signed in + subscribing in ${sw.elapsedMilliseconds}ms');
     if (mounted) {
       setState(() {
         _myUid = uid;
         _muted = muted;
+        _mutedIds = {for (final u in mutedUsers) u.id};
         _subscribe();
       });
     }
@@ -123,37 +139,52 @@ class _ChatScreenState extends State<ChatScreen> {
 
   /// Long-press sa message ng ibang user (admin lang): mute/unmute dialog.
   /// Ang enforcement ay server-side (muted claim sa rules); ito ay UI lang.
+  /// Isang action button lang ang pinapakita, batay sa totoong mute state.
   Future<void> _onLongPress(ChatMessage m) async {
     if (!widget.isAdmin || m.uid == _myUid || m.name.isEmpty) return;
+    final muted = _mutedIds.contains(m.uid);
     final action = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Chat moderation'),
-        content: Text('Mute ${m.name} in world chat?'),
+        content: Text(
+          muted ? '${m.name} is muted.' : 'Mute ${m.name} in world chat?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, 'cancel'),
             child: const Text('Cancel'),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, 'unmute'),
-            child: const Text('Unmute'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, 'mute'),
-            style: TextButton.styleFrom(foregroundColor: AppColors.red),
-            child: const Text('Mute'),
-          ),
+          if (muted)
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, 'unmute'),
+              child: const Text('Unmute'),
+            )
+          else
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, 'mute'),
+              style: TextButton.styleFrom(foregroundColor: AppColors.red),
+              child: const Text('Mute'),
+            ),
         ],
       ),
     );
     if (action != 'mute' && action != 'unmute') return;
     if (!mounted) return;
-    final muted = action == 'mute';
-    final problem = await _client.setUserMuted(m.uid, muted);
+    final toMuted = action == 'mute';
+    final problem = await _client.setUserMuted(m.uid, toMuted);
     if (!mounted) return;
+    if (problem == null) {
+      setState(() {
+        if (toMuted) {
+          _mutedIds.add(m.uid);
+        } else {
+          _mutedIds.remove(m.uid);
+        }
+      });
+    }
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(problem ?? (muted ? 'User muted.' : 'User unmuted.'))),
+      SnackBar(content: Text(problem ?? (toMuted ? 'User muted.' : 'User unmuted.'))),
     );
   }
 

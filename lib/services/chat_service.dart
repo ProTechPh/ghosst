@@ -51,6 +51,9 @@ abstract class ChatClient {
   /// Admin: i-mute/unmute ang isang user sa chat. `null` = ok; string = dahilan.
   Future<String?> setUserMuted(String uid, bool muted);
 
+  /// Admin: ang listahan ng naka-mute (para sa dialog state + Admin screen).
+  Future<List<MutedUser>> mutedUsers();
+
   Stream<List<ChatMessage>> messages();
   Future<String?> send(String text, {ChatMessage? replyTo});
   Future<void> signOut();
@@ -119,6 +122,18 @@ class ChatService implements ChatClient {
     } catch (e) {
       debugPrint('[ChatService] sign-in failed: $e');
       return false;
+    }
+  }
+
+  /// Admin: lahat ng users na naka-mute sa world chat (para sa Admin screen).
+  @override
+  Future<List<MutedUser>> mutedUsers() async {
+    try {
+      return await Backend.mutedUsers();
+    } on ApiException {
+      return [];
+    } catch (_) {
+      return [];
     }
   }
 

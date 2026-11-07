@@ -10,10 +10,14 @@ import '../services/worker_backend.dart';
 import '../theme.dart';
 
 class AdminScreen extends StatefulWidget {
-  const AdminScreen({super.key, this.onAnnouncementSent});
+  const AdminScreen({super.key, this.onAnnouncementSent, this.active = true});
 
   /// Lets the shell refresh its banner right after a post.
   final VoidCallback? onAnnouncementSent;
+
+  /// True when this tab is the selected one. The muted list reloads on
+  /// entry so a mute done in Chat shows up without a manual refresh.
+  final bool active;
 
   @override
   State<AdminScreen> createState() => _AdminScreenState();
@@ -81,6 +85,23 @@ class _AdminScreenState extends State<AdminScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didUpdateWidget(AdminScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) _reloadMuted();
+  }
+
+  /// Muted list lang ang nire-refresh pagbalik sa tab — walang spinner
+  /// flash at hindi nabubura ang message banner.
+  Future<void> _reloadMuted() async {
+    try {
+      final users = await Backend.mutedUsers();
+      if (mounted) setState(() => mutedUsers = users);
+    } catch (_) {
+      // Best-effort, tulad ng keys load — ang panel ay gumagana pa rin.
+    }
   }
 
   @override

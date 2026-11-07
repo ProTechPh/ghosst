@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/screens/chat_screen.dart';
 import 'package:ghosst/services/chat_service.dart';
+import 'package:ghosst/services/worker_backend.dart';
 import 'package:ghosst/theme.dart';
 
 class _FakeClient implements ChatClient {
@@ -11,12 +12,14 @@ class _FakeClient implements ChatClient {
     this.ready = true,
     this.signedIn = true,
     this.muted = false,
+    this.mutedList = const [],
   });
 
   @override
   final bool ready;
   final bool signedIn;
   final bool muted;
+  final List<MutedUser> mutedList;
   static const myUid = 'uid-1';
 
   final _controller = StreamController<List<ChatMessage>>();
@@ -41,6 +44,9 @@ class _FakeClient implements ChatClient {
     muteCalls.add('$uid:$muted');
     return muteError;
   }
+
+  @override
+  Future<List<MutedUser>> mutedUsers() async => mutedList;
 
   @override
   Stream<List<ChatMessage>> messages() {
@@ -260,12 +266,47 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Mute Jeric in world chat?'), findsOneWidget);
+    expect(find.text('Mute'), findsOneWidget);
+    expect(find.text('Unmute'), findsNothing);
 
     await tester.tap(find.text('Mute'));
     await tester.pumpAndSettle();
 
     expect(client.muteCalls, ['uid-2:true']);
     expect(find.text('User muted.'), findsOneWidget);
+
+    // The second long-press already knows the user is muted.
+    await tester.longPress(find.text('Hello'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Jeric is muted.'), findsOneWidget);
+    expect(find.text('Unmute'), findsOneWidget);
+    expect(find.text('Mute'), findsNothing);
+  });
+
+  testWidgets('long-press on an already-muted user shows Unmute only',
+      (tester) async {
+    final client = _FakeClient(
+      mutedList: const [MutedUser(id: 'uid-2', name: 'Jeric', email: 'j@x.ph')],
+    );
+    await _pump(tester, client, isAdmin: true);
+    await tester.pumpAndSettle();
+
+    client._controller.add([_msg(uid: 'uid-2', text: 'Hello')]);
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('Hello'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Jeric is muted.'), findsOneWidget);
+    expect(find.text('Unmute'), findsOneWidget);
+    expect(find.text('Mute'), findsNothing);
+
+    await tester.tap(find.text('Unmute'));
+    await tester.pumpAndSettle();
+
+    expect(client.muteCalls, ['uid-2:false']);
+    expect(find.text('User unmuted.'), findsOneWidget);
   });
 
   testWidgets('non-admin long-press shows no dialog', (tester) async {

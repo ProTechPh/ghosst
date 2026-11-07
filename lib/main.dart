@@ -590,7 +590,7 @@ class _HomeShellState extends State<HomeShell> {
       ),
       const AnnouncementsScreen(embedded: true),
       ChatScreen(embedded: true, active: tab == 4, isAdmin: isAdmin),
-      if (isAdmin) AdminScreen(onAnnouncementSent: _refresh),
+      if (isAdmin) AdminScreen(onAnnouncementSent: _refresh, active: tab == 5),
     ];
 
     final destinations = <_NavItem>[
