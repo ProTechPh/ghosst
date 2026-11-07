@@ -20,6 +20,7 @@ require __DIR__ . '/lib/idempotency.php';
 require __DIR__ . '/lib/rewards.php';
 require __DIR__ . '/lib/cloudinary.php';
 require __DIR__ . '/lib/push.php';
+require __DIR__ . '/lib/firebase.php';
 
 foreach (glob(__DIR__ . '/routes/*.php') ?: [] as $file) {
     require $file;
@@ -35,6 +36,7 @@ const ROUTES = [
     ['GET',    '#^/v1/me$#',                               'account_me',              'required'],
     ['GET',    '#^/v1/wallet$#',                           'account_wallet',          'required'],
     ['DELETE', '#^/v1/account$#',                          'account_remove',          'required'],
+    ['GET',    '#^/v1/firebase/token$#',                   'account_firebase_token',  'required'],
 
     ['GET',    '#^/v1/products$#',                         'products_list',           'optional'],
     ['GET',    '#^/v1/products/([\w.-]+)$#',               'products_get',            'optional'],
@@ -53,6 +55,17 @@ const ROUTES = [
     ['GET',    '#^/v1/announcements$#',                    'announcements_latest',    'required'],
     ['GET',    '#^/v1/announcements/history$#',            'announcements_list',      'required'],
     ['POST',   '#^/v1/admin/announcements$#',              'announcements_create',    'required'],
+    ['POST',   '#^/v1/admin/chat/mute$#',                  'chat_mute_user',          'required'],
+    ['GET',    '#^/v1/admin/chat/muted$#',                 'chat_muted_list',         'required'],
+    ['GET',    '#^/v1/admin/moderators$#',                 'moderators_list',         'required'],
+    ['GET',    '#^/v1/admin/users$#',                      'admin_users_search',      'required'],
+    ['POST',   '#^/v1/admin/moderators/([\w.-]+)$#',       'moderator_promote',       'required'],
+    ['DELETE', '#^/v1/admin/moderators/([\w.-]+)$#',       'moderator_demote',        'required'],
+    ['GET',    '#^/v1/admin/banned-words$#',               'banned_words_list',       'required'],
+    ['POST',   '#^/v1/admin/banned-words$#',               'banned_word_add',         'required'],
+    ['DELETE', '#^/v1/admin/banned-words/([\w.-]+)$#',     'banned_word_remove',      'required'],
+    ['GET',    '#^/v1/admin/moderation$#',                 'moderation_get',          'required'],
+    ['POST',   '#^/v1/admin/moderation$#',                 'moderation_save',         'required'],
 
     ['POST',   '#^/v1/uploads/presign$#',                  'uploads_presign',         'required'],
     ['POST',   '#^/v1/uploads/complete$#',                 'uploads_complete',        'required'],

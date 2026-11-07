@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Bento Admin Variants</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#050B0E;--panel:#08151A;--border:#1A3740;--cyan:#22D3EE;--cyan2:#67E8F9;--gold:#FBBF24;--text:#F1FAFC;--dim:#8DA6AF;--red:#F43F5E;--green:#34D399}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#020608;color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:24px;min-height:100vh}
+  h1{font-size:20px;font-weight:700;letter-spacing:-.02em;margin-bottom:4px;color:var(--cyan)}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:28px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:24px}
+  .phone{background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:16px;overflow:hidden;box-shadow:0 0 40px rgba(34,211,238,.08),0 30px 80px rgba(0,0,0,.9);position:relative}
+  .phone::before{content:'';position:absolute;inset:0;background:radial-gradient(400px 200px at 50% 0%,rgba(34,211,238,.06),transparent);pointer-events:none}
+  .lab{font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--cyan);margin-bottom:8px}
+  .ttl{font-size:15px;font-weight:700;margin-bottom:4px}
+  .dsc{font-size:12px;color:var(--dim);margin-bottom:14px;line-height:1.5}
+  .stage{height:460px;overflow:auto;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px}
+  .bento{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .bcard{background:rgba(8,21,26,.7);border:1px solid var(--border);border-radius:14px;padding:12px;backdrop-filter:blur(8px);box-shadow:0 0 20px rgba(34,211,238,.08),inset 0 1px 0 rgba(255,255,255,.06)}
+  .bcard.wide{grid-column:1/-1}
+  .btitle{font-size:11px;font-weight:700;margin-bottom:6px;color:var(--cyan);text-transform:uppercase;letter-spacing:.1em}
+  .bvalue{font-size:22px;font-weight:800;color:var(--text);margin-bottom:2px}
+  .bsub{font-size:10px;color:var(--dim)}
+  .btn{background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#04212A;border:none;border-radius:8px;padding:6px 10px;font-size:10px;font-weight:700;cursor:pointer}
+  .btn.ghost{background:rgba(255,255,255,.04);color:var(--text);border:1px solid var(--border)}
+  .row{display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:11px}
+  .row:last-child{border-bottom:none}
+  .badge{font-size:9px;padding:2px 6px;border-radius:999px;background:rgba(34,211,238,.15);color:var(--cyan);font-weight:600}
+  .badge.key{background:rgba(251,191,36,.15);color:#FBBF24}
+  .input{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text);font-size:11px;width:100%;margin-bottom:6px}
+  .hero{background:linear-gradient(135deg,rgba(34,211,238,.15),rgba(8,21,26,.8));border:1px solid rgba(34,211,238,.3);border-radius:14px;padding:12px;margin-bottom:8px;display:flex;align-items:center;gap:10px}
+  .heroic{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--cyan),var(--cyan2));display:grid;place-items:center;color:#04212A;font-size:16px}
+</style>
+</head>
+<body>
+<h1>Bento Variants (V1–V4)</h1>
+<p class="sub">Different bento arrangements. Pick one.</p>
+<div class="grid">
+
+  <div class="phone">
+    <div class="lab">V1</div>
+    <div class="ttl">Hero + Stats Row</div>
+    <div class="dsc">Hero header on top, then 4 stat tiles, then wide panels.</div>
+    <div class="stage">
+      <div class="hero"><div class="heroic">A</div><div><div style="font-size:14px;font-weight:800">Admin Panel</div><div style="font-size:10px;color:var(--dim)">Manage your Ghosst app</div></div></div>
+      <div class="bento">
+        <div class="bcard"><div class="btitle">Products</div><div class="bvalue">24</div><div class="bsub">active</div></div>
+        <div class="bcard"><div class="btitle">Keys</div><div class="bvalue">1540</div><div class="bsub">stock</div></div>
+        <div class="bcard"><div class="btitle">Muted</div><div class="bvalue">3</div><div class="bsub">users</div></div>
+        <div class="bcard"><div class="btitle">Banned</div><div class="bvalue">0</div><div class="bsub">words</div></div>
+        <div class="bcard wide">
+          <div class="btitle">Announcement</div>
+          <input class="input" placeholder="Title" /><input class="input" placeholder="Message" />
+          <button class="btn" style="width:100%">Send</button>
+        </div>
+        <div class="bcard wide">
+          <div class="btitle">Products</div>
+          <div class="row"><span style="flex:1">Ghosst Premium V4</span><span class="badge key">KEY</span><button class="btn ghost" style="padding:3px 6px;font-size:9px">Edit</button></div>
+          <div class="row"><span style="flex:1">CODM APK</span><span class="badge apk">APK</span><button class="btn ghost" style="padding:3px 6px;font-size:9px">Edit</button></div>
+          <button class="btn" style="width:100%;margin-top:6px">+ New</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">V2</div>
+    <div class="ttl">Tall Stat + Wide Panels</div>
+    <div class="dsc">One tall stat card on left, panels on right.</div>
+    <div class="stage">
+      <div class="bento" style="grid-template-columns:1fr 2fr">
+        <div class="bcard tall" style="display:flex;flex-direction:column;justify-content:space-between">
+          <div><div class="btitle">Overview</div><div class="bvalue" style="font-size:32px">24</div><div class="bsub">products</div></div>
+          <div><div class="bvalue" style="font-size:20px;color:var(--gold)">1540</div><div class="bsub">keys</div></div>
+          <div><div class="bvalue" style="font-size:20px;color:var(--red)">3</div><div class="bsub">muted</div></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="bcard"><div class="btitle">Announcement</div><input class="input" placeholder="Title" /><button class="btn" style="width:100%">Send</button></div>
+          <div class="bcard"><div class="btitle">Products</div><div class="row"><span style="flex:1">Ghosst Premium V4</span><span class="badge key">KEY</span></div><div class="row"><span style="flex:1">CODM APK</span><span class="badge apk">APK</span></div></div>
+          <div class="bcard"><div class="btitle">Muted</div><div class="row"><span style="flex:1">troll2@mail.com</span><button class="btn ghost" style="padding:3px 6px;font-size:9px;color:var(--red);border-color:var(--red)">Unmute</button></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">V3</div>
+    <div class="ttl">Masonry Mixed</div>
+    <div class="dsc">Mixed card sizes, more visual rhythm.</div>
+    <div class="stage">
+      <div class="bento">
+        <div class="bcard wide" style="background:linear-gradient(135deg,rgba(34,211,238,.12),rgba(8,21,26,.8))">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div><div class="btitle">Admin Panel</div><div style="font-size:16px;font-weight:800">Welcome back</div></div>
+            <button class="btn">+ New</button>
+          </div>
+        </div>
+        <div class="bcard"><div class="btitle">Products</div><div class="bvalue">24</div></div>
+        <div class="bcard"><div class="btitle">Keys</div><div class="bvalue">1540</div></div>
+        <div class="bcard wide">
+          <div class="btitle">Announcement</div>
+          <input class="input" placeholder="Title" /><input class="input" placeholder="Message" />
+          <button class="btn" style="width:100%">Send</button>
+        </div>
+        <div class="bcard">
+          <div class="btitle">Muted</div>
+          <div class="bvalue" style="color:var(--red)">3</div>
+        </div>
+        <div class="bcard">
+          <div class="btitle">Banned</div>
+          <div class="bvalue" style="color:var(--green)">0</div>
+        </div>
+        <div class="bcard wide">
+          <div class="btitle">Products</div>
+          <div class="row"><span style="flex:1">Ghosst Premium V4</span><span class="badge key">KEY</span><button class="btn ghost" style="padding:3px 6px;font-size:9px">Edit</button></div>
+          <div class="row"><span style="flex:1">CODM APK</span><span class="badge apk">APK</span><button class="btn ghost" style="padding:3px 6px;font-size:9px">Edit</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">V4</div>
+    <div class="ttl">Compact Dense</div>
+    <div class="dsc">Smaller gaps, more info per screen.</div>
+    <div class="stage">
+      <div class="bento" style="gap:6px">
+        <div class="bcard" style="padding:8px"><div class="btitle" style="margin-bottom:2px">Products</div><div style="font-size:18px;font-weight:800">24</div></div>
+        <div class="bcard" style="padding:8px"><div class="btitle" style="margin-bottom:2px">Keys</div><div style="font-size:18px;font-weight:800">1540</div></div>
+        <div class="bcard" style="padding:8px"><div class="btitle" style="margin-bottom:2px">Muted</div><div style="font-size:18px;font-weight:800;color:var(--red)">3</div></div>
+        <div class="bcard" style="padding:8px"><div class="btitle" style="margin-bottom:2px">Banned</div><div style="font-size:18px;font-weight:800;color:var(--green)">0</div></div>
+        <div class="bcard wide" style="padding:8px">
+          <div class="btitle" style="margin-bottom:4px">Announcement</div>
+          <div style="display:flex;gap:6px"><input class="input" style="margin:0;flex:1" placeholder="Title" /><button class="btn" style="padding:6px 10px">Send</button></div>
+        </div>
+        <div class="bcard wide" style="padding:8px">
+          <div class="btitle" style="margin-bottom:4px">Products</div>
+          <div class="row" style="padding:4px 0"><span style="flex:1;font-size:10px">Ghosst Premium V4</span><span class="badge key" style="font-size:8px">KEY</span></div>
+          <div class="row" style="padding:4px 0"><span style="flex:1;font-size:10px">CODM APK</span><span class="badge apk" style="font-size:8px">APK</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

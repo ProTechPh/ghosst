@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' show ImageFilter;
+
 
 import 'package:flutter/material.dart';
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/services.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
@@ -13,6 +14,7 @@ import 'premium.dart';
 import 'screens/adblock_screen.dart';
 import 'screens/admin_screen.dart';
 import 'screens/announcements_screen.dart';
+import 'screens/chat_screen.dart';
 import 'screens/earn_screen.dart';
 import 'screens/landing_screen.dart';
 import 'screens/my_keys_screen.dart';
@@ -24,6 +26,7 @@ import 'screens/wallet_screen.dart';
 import 'services/ad_service.dart';
 import 'services/adblock_detector.dart';
 import 'services/announcement_store.dart';
+import 'services/chat_service.dart';
 import 'services/worker_backend.dart';
 import 'services/consent_service.dart';
 import 'services/distribution.dart';
@@ -37,6 +40,7 @@ import 'theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   unawaited(Push.init());
+  unawaited(ChatService.init().then((_) => ChatService.warm()));
   await Distribution.initialize();
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
@@ -280,6 +284,7 @@ class _HomeState extends State<Home> {
     super.initState();
     // A dead refresh token drops the UI back to the landing page.
     Backend.onSignedOut = () {
+      unawaited(ChatService().signOut());
       if (mounted) setState(() => signedIn = false);
     };
     _load();
@@ -302,6 +307,7 @@ class _HomeState extends State<Home> {
     try {
       await Backend.signOut();
     } catch (_) {}
+    await ChatService().signOut();
     if (mounted) setState(() => signedIn = false);
   }
 
@@ -335,8 +341,10 @@ class _HomeShellState extends State<HomeShell> {
   int tab = 0;
   int coins = 0;
   bool isAdmin = false;
+  bool isModerator = false;
   bool loading = true;
   String display = '';
+  bool _chatUnread = false;
   Announcement? announcement;
 
   /// Passive formats (banner + interstitial) — profit only, no coins.
@@ -471,10 +479,11 @@ class _HomeShellState extends State<HomeShell> {
       balance = await Backend.coins();
     } catch (e) {
       // Keep the last known balance; a blip must not read as "0 coins".
-      reason = e is ApiException ? e.userMessage : 'Walang sagot ang server.';
+      reason = e is ApiException ? e.userMessage : 'The server did not respond.';
     }
     final results = await Future.wait<Object>([
       Backend.isAdmin().catchError((_) => false),
+      Backend.isModerator().catchError((_) => false),
       Backend.currentUser()
           .then(
             (u) => (u?.name.isNotEmpty ?? false) ? u!.name : (u?.email ?? ''),
@@ -493,7 +502,8 @@ class _HomeShellState extends State<HomeShell> {
     setState(() {
       coins = balance;
       isAdmin = results[0] as bool;
-      display = results[1] as String;
+      isModerator = results[1] as bool;
+      display = results[2] as String;
       announcement = fresh;
       loading = false;
     });
@@ -501,7 +511,7 @@ class _HomeShellState extends State<HomeShell> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           // The server's own reason, not a generic "something failed".
-          content: Text('Hindi ma-refresh ang balance. $reason'),
+          content: Text('Could not refresh the balance. $reason'),
           action: SnackBarAction(label: 'Retry', onPressed: _refresh),
         ),
       );
@@ -584,7 +594,16 @@ class _HomeShellState extends State<HomeShell> {
         onGoToStore: () => setState(() => tab = 0),
       ),
       const AnnouncementsScreen(embedded: true),
-      if (isAdmin) AdminScreen(onAnnouncementSent: _refresh),
+      ChatScreen(
+        embedded: true,
+        active: tab == 4,
+        isAdmin: isAdmin,
+        isModerator: isModerator,
+        onUnreadChanged: (v) {
+          if (_chatUnread != v) setState(() => _chatUnread = v);
+        },
+      ),
+      if (isAdmin) AdminScreen(onAnnouncementSent: _refresh, active: tab == 5),
     ];
 
     final destinations = <_NavItem>[
@@ -592,6 +611,7 @@ class _HomeShellState extends State<HomeShell> {
       _NavItem(Icons.play_circle_outline, Icons.play_circle, 'Earn'),
       _NavItem(Icons.shopping_bag_outlined, Icons.shopping_bag, 'Purchases'),
       _NavItem(Icons.campaign_outlined, Icons.campaign, 'News'),
+      _NavItem(Icons.chat_bubble_outline, Icons.chat_bubble, 'Chat'),
       if (isAdmin)
         _NavItem(
           Icons.admin_panel_settings_outlined,
@@ -740,6 +760,7 @@ class _HomeShellState extends State<HomeShell> {
               _GlassNavBar(
                 index: safeIndex,
                 items: destinations,
+                badges: _chatUnread ? {4} : const {},
                 onSelected: (i) {
                   // Re-tapping the current tab is not a tab switch — it must
                   // not count towards (or fire) the interstitial.
@@ -766,187 +787,204 @@ class _NavItem {
 
 /// Floating, backdrop-blurred pill navigation. Active tab widens into a
 /// tinted pill with its label; inactive tabs stay icon-only.
-class _GlassNavBar extends StatelessWidget {
+
+class _GlassNavBar extends StatefulWidget {
   const _GlassNavBar({
     required this.index,
     required this.items,
     required this.onSelected,
+    this.badges = const {},
   });
 
   final int index;
   final List<_NavItem> items;
   final ValueChanged<int> onSelected;
+  final Set<int> badges;
 
-  /// Width of an icon-only slot; the active tab takes what is left over.
-  static const double _slot = 56;
+  @override
+  State<_GlassNavBar> createState() => _GlassNavBarState();
+}
+
+class _GlassNavBarState extends State<_GlassNavBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  int _fromIndex = 0;
+  int _toIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _fromIndex = widget.index;
+    _toIndex = widget.index;
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _GlassNavBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.index != widget.index) {
+      _fromIndex = oldWidget.index;
+      _toIndex = widget.index;
+      _controller.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(AppRadius.pill);
-
     return SafeArea(
       top: false,
       minimum: const EdgeInsets.fromLTRB(
         AppSpace.lg,
         0,
         AppSpace.lg,
-        AppSpace.md,
+        AppSpace.lg,
       ),
       child: Container(
-        // 1 px lit rim: cyan at the top-left, fading out along the pill.
-        padding: const EdgeInsets.all(1),
+        margin: const EdgeInsets.only(bottom: AppSpace.xs),
         decoration: BoxDecoration(
-          borderRadius: radius,
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppColors.primary.withValues(alpha: 0.45),
-              Colors.white.withValues(alpha: 0.10),
-              AppColors.primary.withValues(alpha: 0.18),
-            ],
+          color: AppColors.bgSoft.withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          border: Border.all(
+            color: AppColors.primary.withValues(alpha: 0.35),
+            width: 1,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.30),
+              blurRadius: 28,
+              spreadRadius: -6,
+              offset: const Offset(0, 12),
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.45),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(AppRadius.pill - 1),
+          borderRadius: BorderRadius.circular(AppRadius.pill),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-            child: Container(
-              padding: const EdgeInsets.all(AppSpace.sm - 2),
-              decoration: BoxDecoration(
-                // True glass: the blurred page shows through, never a flat bar.
-                color: AppColors.bgSoft.withValues(alpha: 0.66),
-                borderRadius: BorderRadius.circular(AppRadius.pill - 1),
-                boxShadow: [
-                  // 1px inner top highlight — the pill is lit from above.
-                  BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.12),
-                    offset: const Offset(0, 1),
-                    blurRadius: 1,
-                    blurStyle: BlurStyle.inner,
-                  ),
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.40),
-                    blurRadius: 28,
-                    offset: const Offset(0, 12),
-                  ),
-                ],
-              ),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  // Five tabs on a 320px phone: never wider than the pill.
-                  final slot = math.min(_slot, constraints.maxWidth / items.length);
-                  final activeWidth = math.max(
-                    slot,
-                    constraints.maxWidth - slot * (items.length - 1),
-                  );
-                  return Row(
-                    children: [
-                      for (var i = 0; i < items.length; i++)
-                        _GlassNavItem(
-                          item: items[i],
-                          selected: i == index,
-                          width: i == index ? activeWidth : slot,
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+          final tabWidth = constraints.maxWidth / widget.items.length;
+          return SizedBox(
+            height: 64,
+            child: Stack(
+              children: [
+                // Morphing pill indicator.
+                AnimatedBuilder(
+                  animation: _controller,
+                  builder: (context, _) {
+                    final t = Curves.easeInOutCubic.transform(_controller.value);
+                    final fromLeft = _fromIndex * tabWidth;
+                    final toLeft = _toIndex * tabWidth;
+                    final left = fromLeft + (toLeft - fromLeft) * t;
+                    final distance = (_toIndex - _fromIndex).abs();
+                    final stretch =
+                        distance * tabWidth * (math.sin(math.pi * t));
+                    final width = tabWidth + stretch;
+                    return Positioned(
+                      left: left,
+                      top: 8,
+                      width: width,
+                      height: 48,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Color(0xFF67E8F9), Color(0xFF22D3EE)],
+                          ),
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primary.withValues(alpha: 0.5),
+                              blurRadius: 24,
+                              spreadRadius: -4,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                Row(
+                  children: [
+                    for (var i = 0; i < widget.items.length; i++)
+                      Expanded(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
                           onTap: () {
                             HapticFeedback.selectionClick();
-                            onSelected(i);
+                            widget.onSelected(i);
                           },
+                          child: SizedBox(
+                            height: 64,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    Icon(
+                                      i == widget.index
+                                          ? widget.items[i].selectedIcon
+                                          : widget.items[i].icon,
+                                      size: 20,
+                                      color: i == widget.index
+                                          ? const Color(0xFF04212A)
+                                          : AppColors.textDim,
+                                    ),
+                                    if (widget.badges.contains(i))
+                                      Positioned(
+                                        top: -2,
+                                        right: -4,
+                                        child: Container(
+                                          width: 8,
+                                          height: 8,
+                                          decoration: const BoxDecoration(
+                                            color: Colors.red,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  widget.items[i].label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppText.caption.copyWith(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    color: i == widget.index
+                                        ? const Color(0xFF04212A)
+                                        : AppColors.textDim,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GlassNavItem extends StatelessWidget {
-  const _GlassNavItem({
-    required this.item,
-    required this.selected,
-    required this.width,
-    required this.onTap,
-  });
-
-  final _NavItem item;
-  final bool selected;
-  final double width;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = selected ? AppColors.primary : AppColors.textDim;
-
-    return AnimatedContainer(
-      duration: kMotionStandard,
-      curve: kPremiumCurve,
-      width: width,
-      decoration: BoxDecoration(
-        // Active slot is lit from the top, not flatly tinted.
-        gradient: selected
-            ? LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  AppColors.primary.withValues(alpha: 0.24),
-                  AppColors.primary.withValues(alpha: 0.07),
-                ],
-              )
-            : null,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-        border: Border.all(
-          color: selected
-              ? AppColors.primary.withValues(alpha: 0.34)
-              : Colors.transparent,
-        ),
-        boxShadow: selected
-            ? [
-                BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.16),
-                  blurRadius: 18,
-                  spreadRadius: -6,
-                ),
-              ]
-            : null,
-      ),
-      child: Semantics(
-        button: true,
-        selected: selected,
-        label: item.label,
-        child: Pressable(
-          onTap: onTap,
-          scale: 0.90,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpace.md + 2),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  selected ? item.selectedIcon : item.icon,
-                  size: 21,
-                  color: color,
-                ),
-                if (selected) ...[
-                  const SizedBox(width: AppSpace.sm - 2),
-                  Flexible(
-                    child: Text(
-                      item.label,
-                      maxLines: 1,
-                      softWrap: false,
-                      overflow: TextOverflow.clip,
-                      style: AppText.caption.copyWith(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: color,
                       ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ],
+            ),
+          );
+        },
             ),
           ),
         ),

@@ -57,35 +57,69 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
             separatorBuilder: (_, _) => const SizedBox(height: AppSpace.sm),
             itemBuilder: (_, i) {
               final a = items[i];
-              return GlowCard(
-                padding: const EdgeInsets.all(AppSpace.md),
-                onTap: () => showAnnouncementSheet(context, a),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(a.title, style: AppText.subtitle.copyWith(fontSize: 15)),
-                    if (a.createdAt.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        a.createdAt,
-                        style: AppText.caption.copyWith(
-                          fontSize: 11,
-                          color: AppColors.textDim.withValues(alpha: 0.8),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: AppSpace.xs),
-                    Text(
-                      a.body,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppText.caption.copyWith(
-                        height: 1.4,
-                        color: AppColors.textDim,
+              return Stack(
+                children: [
+                  // Vertical timeline line.
+                  if (i != items.length - 1)
+                    Positioned(
+                      left: 6,
+                      top: 20,
+                      bottom: 0,
+                      child: Container(width: 2, color: AppColors.border),
+                    ),
+                  // Glowing dot.
+                  Positioned(
+                    left: 2,
+                    top: 14,
+                    child: Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.primary,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withValues(alpha: 0.7),
+                            blurRadius: 8,
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 24),
+                    child: GlowCard(
+                      padding: const EdgeInsets.all(AppSpace.md),
+                      onTap: () => showAnnouncementSheet(context, a),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(a.title, style: AppText.subtitle.copyWith(fontSize: 15)),
+                          if (a.createdAt.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              a.createdAt,
+                              style: AppText.caption.copyWith(
+                                fontSize: 11,
+                                color: AppColors.textDim.withValues(alpha: 0.8),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: AppSpace.xs),
+                          Text(
+                            a.body,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppText.caption.copyWith(
+                              height: 1.4,
+                              color: AppColors.textDim,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               );
             },
           );

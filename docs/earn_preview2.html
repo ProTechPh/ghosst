@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>More Earn Designs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#020408;--panel:#060B12;--border:#1A2A3A;--cyan:#22D3EE;--cyan2:#67E8F9;--gold:#FBBF24;--text:#E8F4F8;--dim:#5A7A8A}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#000;color:var(--text);font-family:'Rajdhani','Segoe UI',sans-serif;padding:24px;min-height:100vh}
+  h1{font-family:'Orbitron',sans-serif;font-size:20px;font-weight:900;letter-spacing:.08em;margin-bottom:4px;color:var(--cyan)}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:28px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px}
+  .phone{background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:16px;overflow:hidden;box-shadow:0 0 40px rgba(34,211,238,.08),0 30px 80px rgba(0,0,0,.9);position:relative;height:520px;display:flex;flex-direction:column}
+  .phone::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(34,211,238,.015) 2px 3px);pointer-events:none}
+  .lab{font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;letter-spacing:.2em;color:var(--cyan);margin-bottom:6px}
+  .ttl{font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;margin-bottom:2px}
+  .dsc{font-size:11px;color:var(--dim);margin-bottom:10px;line-height:1.4}
+  .scroll{flex:1;overflow:auto;padding:4px}
+  .arcade{background:radial-gradient(ellipse at center,rgba(34,211,238,.12),rgba(6,11,18,.9));border:2px solid var(--cyan);border-radius:16px;padding:20px;text-align:center;position:relative;overflow:hidden;box-shadow:0 0 40px rgba(34,211,238,.3)}
+  .arcade::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 3px,rgba(34,211,238,.03) 3px 4px);pointer-events:none}
+  .arcade .bal{font-size:42px;font-weight:900;color:var(--gold);font-family:'Orbitron',sans-serif;text-shadow:0 0 30px rgba(251,191,36,.5);margin-bottom:4px}
+  .arcade .label{font-size:10px;color:var(--dim);letter-spacing:.2em;text-transform:uppercase;margin-bottom:12px}
+  .arcade .btn{background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#04212A;border:none;border-radius:8px;padding:12px 24px;font-size:13px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;box-shadow:0 0 24px rgba(34,211,238,.5);display:inline-block;margin-bottom:8px}
+  .quest{background:linear-gradient(180deg,rgba(251,191,36,.08),rgba(6,11,18,.9));border:1px solid rgba(251,191,36,.3);border-radius:16px;padding:16px;margin-bottom:10px}
+  .quest .title{font-size:14px;font-weight:700;color:var(--gold);margin-bottom:4px}
+  .quest .desc{font-size:11px;color:var(--dim);margin-bottom:10px}
+  .quest .reward{display:inline-block;background:rgba(251,191,36,.15);border:1px solid var(--gold);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;color:var(--gold)}
+  .chest{width:80px;height:80px;margin:0 auto 10px;background:linear-gradient(135deg,#FBBF24,#F59E0B);border-radius:12px;display:grid;place-items:center;font-size:36px;box-shadow:0 0 30px rgba(251,191,36,.4);border:2px solid #FDE68A}
+  .luxury{background:#050505;border:1px solid #2A2518;border-radius:4px;padding:20px;text-align:center}
+  .luxury .bal{font-size:48px;font-weight:300;color:var(--gold);font-family:'Rajdhani',sans-serif;letter-spacing:-2px;margin-bottom:4px}
+  .luxury .label{font-size:9px;color:#5A5030;letter-spacing:.3em;text-transform:uppercase;margin-bottom:16px}
+  .luxury .btn{background:transparent;color:var(--gold);border:1px solid var(--gold);border-radius:0;padding:10px 24px;font-size:11px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;cursor:pointer;width:100%}
+  .luxury .btn:hover{background:var(--gold);color:#050505}
+  .holo{background:linear-gradient(135deg,rgba(103,232,249,.15),rgba(34,211,238,.05),rgba(14,116,144,.15));border:1px solid rgba(103,232,249,.3);border-radius:20px;padding:20px;text-align:center;backdrop-filter:blur(12px);position:relative;overflow:hidden}
+  .holo::before{content:'';position:absolute;inset:0;background:linear-gradient(120deg,transparent 30%,rgba(255,255,255,.08) 50%,transparent 70%);pointer-events:none}
+  .holo .bal{font-size:40px;font-weight:900;color:#fff;text-shadow:0 0 20px rgba(103,232,249,.5);margin-bottom:4px;position:relative;z-index:2}
+  .holo .label{font-size:10px;color:var(--cyan2);letter-spacing:.2em;text-transform:uppercase;margin-bottom:12px;position:relative;z-index:2}
+  .holo .btn{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:10px 24px;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;position:relative;z-index:2;width:100%}
+  .holo .btn:hover{background:rgba(255,255,255,.2)}
+  .progress{height:4px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;margin:8px 0}
+  .progress .fill{height:100%;background:linear-gradient(90deg,var(--cyan),var(--cyan2));border-radius:2px}
+</style>
+</head>
+<body>
+<h1>More Earn Designs (5–8)</h1>
+<p class="sub">Exciting, non-generic options. Pick one.</p>
+<div class="grid">
+
+  <div class="phone">
+    <div class="lab">Option 5</div>
+    <div class="ttl">Arcade Cabinet</div>
+    <div class="dsc">Big glowing button, arcade feel. Exciting.</div>
+    <div class="scroll">
+      <div class="arcade">
+        <div class="label">Your balance</div>
+        <div class="bal">1,240</div>
+        <div class="label">coins</div>
+        <button class="btn">▶ INSERT COIN</button>
+        <div style="font-size:10px;color:var(--dim)">+10 coins per ad</div>
+      </div>
+      <div style="margin-top:10px">
+        <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;font-weight:600">How it works</div>
+        <div style="font-size:11px;color:var(--dim);line-height:1.6">Watch an ad → earn 10 coins → claim keys in store.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Option 6</div>
+    <div class="ttl">Quest + Chest</div>
+    <div class="dsc">RPG quest card with reward chest. Gamified.</div>
+    <div class="scroll">
+      <div class="chest">🎁</div>
+      <div class="quest">
+        <div class="title">Daily Quest</div>
+        <div class="desc">Watch 3 rewarded ads to earn bonus coins.</div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:10px;color:var(--dim)">Progress: 1/3</div>
+          <div class="reward">+15 bonus</div>
+        </div>
+        <div class="progress" style="margin-top:6px"><div class="fill" style="width:33%"></div></div>
+      </div>
+      <button class="btn">▶ Watch ad · +10 coins</button>
+      <div style="text-align:center;font-size:11px;color:var(--dim);margin-top:4px">Balance: 1,240 coins</div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Option 7</div>
+    <div class="ttl">Luxury Minimal</div>
+    <div class="dsc">Black & gold, elegant typography. Premium feel.</div>
+    <div class="scroll">
+      <div class="luxury">
+        <div class="label">Balance</div>
+        <div class="bal">1,240</div>
+        <div class="label">coins</div>
+        <button class="btn">Earn coins</button>
+      </div>
+      <div style="margin-top:10px;font-size:10px;color:#5A5030;text-align:center;letter-spacing:.1em">WATCH AD · +10 COINS · 30S COOLDOWN</div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Option 8</div>
+    <div class="ttl">Holographic</div>
+    <div class="dsc">Iridescent glass, floating, shimmer.</div>
+    <div class="scroll">
+      <div class="holo">
+        <div class="label">Your balance</div>
+        <div class="bal">1,240</div>
+        <div class="label">coins</div>
+        <button class="btn">▶ Watch ad · +10</button>
+      </div>
+      <div style="margin-top:10px;font-size:10px;color:var(--dim);text-align:center">Cooldown: 18s remaining</div>
+      <div class="progress"><div class="fill" style="width:60%"></div></div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

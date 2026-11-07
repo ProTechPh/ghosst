@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Floating Nav Options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#020408;--panel:#060B12;--border:#1A2A3A;--cyan:#22D3EE;--cyan2:#67E8F9;--gold:#FBBF24;--text:#E8F4F8;--dim:#5A7A8A}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#000;color:var(--text);font-family:'Rajdhani','Segoe UI',sans-serif;padding:32px;min-height:100vh}
+  h1{font-family:'Orbitron',sans-serif;font-size:20px;font-weight:900;letter-spacing:.08em;margin-bottom:4px;color:var(--cyan)}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:32px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px}
+  .phone{background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:20px 16px 16px;position:relative;overflow:hidden;box-shadow:0 0 40px rgba(34,211,238,.08),0 30px 80px rgba(0,0,0,.9)}
+  .phone::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(34,211,238,.015) 2px 3px);pointer-events:none}
+  .lab{font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;letter-spacing:.2em;color:var(--cyan);margin-bottom:8px}
+  .ttl{font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;margin-bottom:4px}
+  .dsc{font-size:12px;color:var(--dim);margin-bottom:16px;line-height:1.5}
+  .stage{height:230px;display:flex;flex-direction:column;justify-content:flex-end;position:relative}
+  .content{flex:1;border:1px solid rgba(34,211,238,.08);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#1A3A4A;font-size:11px;margin-bottom:12px;background:linear-gradient(180deg,rgba(34,211,238,.03),transparent)}
+  .ic{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 4px currentColor)}
+  .float1{margin:0 12px 8px;padding:8px 6px;background:rgba(6,11,18,.7);border:1px solid rgba(34,211,238,.35);border-radius:999px;backdrop-filter:blur(16px);box-shadow:0 12px 40px rgba(0,0,0,.6),0 0 20px rgba(34,211,238,.15),inset 0 1px 0 rgba(255,255,255,.1);display:flex;gap:4px}
+  .f1{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;color:var(--dim);font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;transition:all .3s}
+  .f1.active{color:#04212A;background:linear-gradient(135deg,var(--cyan2),var(--cyan));box-shadow:0 0 18px rgba(34,211,238,.5);transform:translateY(-4px)}
+  .float2{margin:0 8px 8px;padding:6px;background:rgba(8,21,26,.6);border:1px solid var(--border);border-radius:16px;box-shadow:0 16px 48px rgba(0,0,0,.7),0 0 0 1px rgba(34,211,238,.1);display:flex;gap:6px;justify-content:center}
+  .f2{width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--dim);font-size:8px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;transition:all .3s}
+  .f2.active{background:linear-gradient(135deg,rgba(34,211,238,.25),rgba(34,211,238,.08));color:var(--cyan);border-color:var(--cyan);box-shadow:0 0 20px rgba(34,211,238,.4);transform:translateY(-6px) scale(1.05)}
+  .float3{margin:0 20px 8px;padding:10px 8px;background:linear-gradient(180deg,rgba(6,11,18,.85),rgba(2,4,8,.95));border:1px solid rgba(34,211,238,.25);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.8),0 0 30px rgba(34,211,238,.12);display:flex;justify-content:space-around;position:relative}
+  .float3::before{content:'';position:absolute;top:0;left:10%;right:10%;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent)}
+  .f3{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--dim);font-size:9px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;transition:all .3s;position:relative;padding:4px 8px}
+  .f3.active{color:var(--cyan);text-shadow:0 0 8px var(--cyan)}
+  .f3.active::after{content:'';position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  .float4{margin:0 16px 8px;padding:6px;background:rgba(10,10,20,.7);border:1px solid rgba(255,255,255,.08);border-radius:999px;box-shadow:0 14px 44px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.04);display:flex;gap:2px;position:relative;overflow:hidden}
+  .float4::before{content:'';position:absolute;inset:0;background:linear-gradient(120deg,transparent 40%,rgba(255,255,255,.06) 50%,transparent 60%);pointer-events:none}
+  .f4{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;color:var(--dim);font-size:9px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;border-radius:999px;transition:all .3s;position:relative;z-index:2}
+  .f4.active{color:#fff;background:rgba(255,255,255,.1);box-shadow:inset 0 0 0 1px rgba(255,255,255,.15)}
+</style>
+</head>
+<body>
+<h1>Floating Nav Options</h1>
+<p class="sub">Lumulutang (floating) variants. Pick one.</p>
+<div class="grid">
+
+  <div class="phone"><div class="lab">F1</div><div class="ttl">Floating Pill Glow</div><div class="dsc">Classic floating pill, active lifts up with glow.</div><div class="stage"><div class="content">game screen</div><div class="float1"><div class="f1"><svg class="ic" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>store</div><div class="f1 active"><svg class="ic" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>earn</div><div class="f1"><svg class="ic" viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/></svg>keys</div><div class="f1"><svg class="ic" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>news</div><div class="f1"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>chat</div><div class="f1"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg>admin</div></div></div></div>
+
+  <div class="phone"><div class="lab">F2</div><div class="ttl">Floating Tile Dock</div><div class="dsc">Detached square tiles, active pops up.</div><div class="stage"><div class="content">game screen</div><div class="float2"><div class="f2"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>store</div><div class="f2 active"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><polygon points="5 3 19 12 5 21 5 3"/></svg>earn</div><div class="f2"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/></svg>keys</div><div class="f2"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>news</div><div class="f2"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>chat</div><div class="f2"><svg class="ic" viewBox="0 0 24 24" style="width:16px;height:16px"><circle cx="12" cy="12" r="3"/></svg>admin</div></div></div></div>
+
+  <div class="phone"><div class="lab">F3</div><div class="ttl">Floating HUD Bar</div><div class="dsc">Dark panel with cyan top line, active dot below.</div><div class="stage"><div class="content">game screen</div><div class="float3"><div class="f3"><svg class="ic" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>store</div><div class="f3 active"><svg class="ic" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>earn</div><div class="f3"><svg class="ic" viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/></svg>keys</div><div class="f3"><svg class="ic" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>news</div><div class="f3"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>chat</div><div class="f3"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg>admin</div></div></div></div>
+
+  <div class="phone"><div class="lab">F4</div><div class="ttl">Floating Glass Shimmer</div><div class="dsc">Glass pill with shimmer sweep, active brightens.</div><div class="stage"><div class="content">game screen</div><div class="float4"><div class="f4"><svg class="ic" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>store</div><div class="f4 active"><svg class="ic" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>earn</div><div class="f4"><svg class="ic" viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/></svg>keys</div><div class="f4"><svg class="ic" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>news</div><div class="f4"><svg class="ic" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>chat</div><div class="f4"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg>admin</div></div></div></div>
+
+</div>
+</body>
+</html>

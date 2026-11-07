@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Admin Dialog Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0A0A0A;--panel:#111;--border:#222;--text:#E5E5E5;--dim:#888;--accent:#3B82F6;--red:#EF4444;--green:#22C55E}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#000;color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:24px;min-height:100vh}
+  h1{font-size:20px;font-weight:700;letter-spacing:-.02em;margin-bottom:4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:28px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:24px}
+  .phone{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.8);position:relative}
+  .lab{font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+  .ttl{font-size:15px;font-weight:700;margin-bottom:4px}
+  .dsc{font-size:12px;color:var(--dim);margin-bottom:14px;line-height:1.5}
+  .stage{height:460px;overflow:auto;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px;position:relative}
+  .btn{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:11px;font-weight:600;cursor:pointer}
+  .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
+  .btn.danger{background:transparent;color:var(--red);border:1px solid var(--red)}
+  .input{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px;width:100%;margin-bottom:6px}
+  .overlay{position:absolute;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:12px;backdrop-filter:blur(4px)}
+  .dialog{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;width:100%;max-height:90%;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.8)}
+  .dialog h3{font-size:14px;font-weight:700;margin-bottom:12px}
+  .tabs{display:flex;gap:2px;margin-bottom:10px;background:rgba(255,255,255,.03);border-radius:6px;padding:3px}
+  .tab{flex:1;padding:6px;font-size:10px;font-weight:600;text-align:center;border-radius:4px;color:var(--dim)}
+  .tab.active{background:var(--accent);color:#fff}
+  .row{display:flex;gap:6px;margin-top:8px}
+  .bottomsheet{position:absolute;bottom:0;left:0;right:0;background:var(--bg);border-top:1px solid var(--border);border-radius:16px 16px 0 0;padding:16px;box-shadow:0 -10px 40px rgba(0,0,0,.6)}
+  .sheet-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 12px}
+  .fullscreen{position:absolute;inset:0;background:var(--bg);padding:16px;overflow:auto}
+  .fshead{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+</style>
+</head>
+<body>
+<h1>Add/Edit Dialog Variants</h1>
+<p class="sub">Preview of dialog designs. Pick one.</p>
+<div class="grid">
+
+  <div class="phone">
+    <div class="lab">Dialog A</div>
+    <div class="ttl">Standard Dialog</div>
+    <div class="dsc">Centered dialog with form fields. Current style.</div>
+    <div class="stage">
+      <div class="topbar" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)"><h2 style="font-size:13px">Products</h2><button class="btn" style="font-size:10px">+ New</button></div>
+      <div class="overlay">
+        <div class="dialog">
+          <h3>Edit product</h3>
+          <input class="input" value="Ghosst Premium V4" />
+          <input class="input" value="10" />
+          <div class="tabs"><div class="tab active">Key</div><div class="tab">APK</div><div class="tab">File</div></div>
+          <input class="input" placeholder="Duration options" />
+          <input class="input" placeholder="YouTube URL" />
+          <div class="row">
+            <button class="btn ghost" style="flex:1">Cancel</button>
+            <button class="btn" style="flex:1">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Dialog B</div>
+    <div class="ttl">Bottom Sheet</div>
+    <div class="dsc">Slides up from bottom. Mobile-native feel.</div>
+    <div class="stage">
+      <div style="font-size:12px;color:var(--dim);padding:8px">Products list behind...</div>
+      <div class="bottomsheet">
+        <div class="sheet-handle"></div>
+        <h3 style="font-size:14px;font-weight:700;margin-bottom:12px">Edit product</h3>
+        <input class="input" value="Ghosst Premium V4" />
+        <input class="input" value="10" />
+        <div class="tabs"><div class="tab active">Key</div><div class="tab">APK</div><div class="tab">File</div></div>
+        <input class="input" placeholder="Duration options" />
+        <div class="row">
+          <button class="btn ghost" style="flex:1">Cancel</button>
+          <button class="btn" style="flex:1">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Dialog C</div>
+    <div class="ttl">Full-Screen Editor</div>
+    <div class="dsc">Full screen with header bar. More space for long forms.</div>
+    <div class="stage">
+      <div class="fullscreen">
+        <div class="fshead">
+          <button class="btn ghost" style="padding:4px 8px;font-size:10px">Cancel</button>
+          <span style="font-size:13px;font-weight:700">Edit product</span>
+          <button class="btn" style="padding:4px 8px;font-size:10px">Save</button>
+        </div>
+        <input class="input" value="Ghosst Premium V4" />
+        <input class="input" value="10" />
+        <div class="tabs"><div class="tab active">Key</div><div class="tab">APK</div><div class="tab">File</div></div>
+        <input class="input" placeholder="Description" />
+        <input class="input" placeholder="YouTube URL" />
+        <input class="input" placeholder="Version" />
+        <input class="input" placeholder="File size" />
+        <input class="input" placeholder="Duration options" />
+      </div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Dialog D</div>
+    <div class="ttl">Stepped Wizard</div>
+    <div class="dsc">Multi-step: Basic → Pricing → Media → Review.</div>
+    <div class="stage">
+      <div class="overlay">
+        <div class="dialog">
+          <h3>New product — Step 1 of 4</h3>
+          <div style="display:flex;gap:4px;margin-bottom:12px">
+            <div style="flex:1;height:3px;background:var(--accent);border-radius:2px"></div>
+            <div style="flex:1;height:3px;background:var(--border);border-radius:2px"></div>
+            <div style="flex:1;height:3px;background:var(--border);border-radius:2px"></div>
+            <div style="flex:1;height:3px;background:var(--border);border-radius:2px"></div>
+          </div>
+          <div class="tabs"><div class="tab active">Key</div><div class="tab">APK</div><div class="tab">File</div></div>
+          <input class="input" placeholder="Product name" />
+          <input class="input" placeholder="Cost in coins" />
+          <div class="row">
+            <button class="btn ghost" style="flex:1">Cancel</button>
+            <button class="btn" style="flex:1">Next →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

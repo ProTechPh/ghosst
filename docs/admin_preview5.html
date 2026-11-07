@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Astig Dialog Options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#020408;--panel:#060B12;--border:#1A2A3A;--cyan:#22D3EE;--cyan2:#67E8F9;--gold:#FBBF24;--text:#E8F4F8;--dim:#5A7A8A;--red:#F43F5E}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#000;color:var(--text);font-family:'Rajdhani','Segoe UI',sans-serif;padding:24px;min-height:100vh}
+  h1{font-family:'Orbitron',sans-serif;font-size:20px;font-weight:900;letter-spacing:.08em;margin-bottom:4px;color:var(--cyan)}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:28px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:24px}
+  .phone{background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:16px;overflow:hidden;box-shadow:0 0 40px rgba(34,211,238,.08),0 30px 80px rgba(0,0,0,.9);position:relative}
+  .phone::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(34,211,238,.015) 2px 3px);pointer-events:none}
+  .lab{font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;letter-spacing:.2em;color:var(--cyan);margin-bottom:8px}
+  .ttl{font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;margin-bottom:4px}
+  .dsc{font-size:12px;color:var(--dim);margin-bottom:14px;line-height:1.5}
+  .stage{height:460px;overflow:auto;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:10px;position:relative}
+  .input{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:4px;padding:6px 8px;color:var(--text);font-size:12px;width:100%;margin-bottom:6px;font-family:'Rajdhani',sans-serif}
+  .btn{background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#04212A;border:none;border-radius:4px;padding:6px 10px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+  .btn.ghost{background:transparent;color:var(--cyan);border:1px solid var(--cyan)}
+  .tabs{display:flex;gap:2px;margin-bottom:8px}
+  .tab{flex:1;padding:6px;font-size:10px;font-weight:700;text-align:center;border-radius:2px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
+  .tab.active{color:#04212A;background:var(--cyan)}
+  .overlay{position:absolute;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:12px;backdrop-filter:blur(6px)}
+  .hud-dialog{background:linear-gradient(180deg,rgba(34,211,238,.08),rgba(6,11,18,.95));border:1px solid var(--cyan);border-radius:4px;padding:14px;width:100%;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);box-shadow:0 0 30px rgba(34,211,238,.3)}
+  .hud-dialog h3{font-family:'Orbitron',sans-serif;font-size:12px;font-weight:700;color:var(--cyan);letter-spacing:.12em;margin-bottom:10px}
+  .neon-dialog{background:rgba(6,11,18,.9);border:1px solid rgba(34,211,238,.4);border-radius:12px;padding:14px;width:100%;box-shadow:0 0 40px rgba(34,211,238,.2),inset 0 0 20px rgba(34,211,238,.05);position:relative;overflow:hidden}
+  .neon-dialog::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent)}
+  .neon-dialog h3{font-size:13px;font-weight:700;margin-bottom:10px;color:var(--cyan2)}
+  .glass-dialog{background:linear-gradient(135deg,rgba(255,255,255,.08),rgba(34,211,238,.05));border:1px solid rgba(255,255,255,.15);border-radius:16px;padding:14px;width:100%;backdrop-filter:blur(20px);box-shadow:0 20px 60px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.1)}
+  .glass-dialog h3{font-size:13px;font-weight:600;margin-bottom:10px}
+  .split-dialog{display:flex;gap:0;width:100%;height:320px;background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .split-left{width:110px;background:linear-gradient(180deg,rgba(34,211,238,.08),rgba(6,11,18,.9));padding:12px;border-right:1px solid var(--border);display:flex;flex-direction:column;gap:6px}
+  .split-left .preview{flex:1;background:rgba(0,0,0,.4);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:10px}
+  .split-right{flex:1;padding:12px;overflow:auto}
+  .split-right h3{font-size:13px;font-weight:700;margin-bottom:10px}
+  .row{display:flex;gap:6px;margin-top:8px}
+</style>
+</head>
+<body>
+<h1>Astig Dialog Options (E–H)</h1>
+<p class="sub">Cool dialog designs. Pick one.</p>
+<div class="grid">
+
+  <div class="phone">
+    <div class="lab">Dialog E</div>
+    <div class="ttl">Cyberpunk HUD Dialog</div>
+    <div class="dsc">Angular clipped, cyan glow, tactical readout.</div>
+    <div class="stage">
+      <div class="overlay">
+        <div class="hud-dialog">
+          <h3>EDIT PRODUCT</h3>
+          <div class="tabs"><div class="tab active">KEY</div><div class="tab">APK</div><div class="tab">FILE</div></div>
+          <input class="input" value="Ghosst Premium V4" />
+          <input class="input" value="10" />
+          <input class="input" placeholder="Duration options" />
+          <input class="input" placeholder="YouTube URL" />
+          <div class="row">
+            <button class="btn ghost" style="flex:1">Cancel</button>
+            <button class="btn" style="flex:1">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Dialog F</div>
+    <div class="ttl">Neon Modal</div>
+    <div class="dsc">Dark modal with neon top line and inner glow.</div>
+    <div class="stage">
+      <div class="overlay">
+        <div class="neon-dialog">
+          <h3>Edit product</h3>
+          <div class="tabs"><div class="tab active">KEY</div><div class="tab">APK</div><div class="tab">FILE</div></div>
+          <input class="input" value="Ghosst Premium V4" />
+          <input class="input" value="10" />
+          <input class="input" placeholder="Duration options" />
+          <input class="input" placeholder="YouTube URL" />
+          <div class="row">
+            <button class="btn ghost" style="flex:1">Cancel</button>
+            <button class="btn" style="flex:1">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Dialog G</div>
+    <div class="ttl">Glass Floating</div>
+    <div class="dsc">Frosted glass, soft blur, light sheen.</div>
+    <div class="stage">
+      <div class="overlay">
+        <div class="glass-dialog">
+          <h3>Edit product</h3>
+          <div class="tabs"><div class="tab active">KEY</div><div class="tab">APK</div><div class="tab">FILE</div></div>
+          <input class="input" value="Ghosst Premium V4" />
+          <input class="input" value="10" />
+          <input class="input" placeholder="Duration options" />
+          <input class="input" placeholder="YouTube URL" />
+          <div class="row">
+            <button class="btn ghost" style="flex:1">Cancel</button>
+            <button class="btn" style="flex:1">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Dialog H</div>
+    <div class="ttl">Split Panel</div>
+    <div class="dsc">Left preview/thumbnail, right form.</div>
+    <div class="stage">
+      <div class="overlay">
+        <div class="split-dialog">
+          <div class="split-left">
+            <div class="preview">IMG</div>
+            <button class="btn ghost" style="font-size:9px;padding:4px">Upload</button>
+          </div>
+          <div class="split-right">
+            <h3>Edit product</h3>
+            <input class="input" value="Ghosst Premium V4" />
+            <input class="input" value="10" />
+            <div class="tabs"><div class="tab active">KEY</div><div class="tab">APK</div><div class="tab">FILE</div></div>
+            <input class="input" placeholder="Duration options" />
+            <div class="row">
+              <button class="btn ghost" style="flex:1">Cancel</button>
+              <button class="btn" style="flex:1">Save</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

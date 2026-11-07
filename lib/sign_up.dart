@@ -66,9 +66,9 @@ class _SignUpState extends State<SignUp> {
       if (mounted) {
         setState(() {
           error = switch (e.code) {
-            'email_taken' => 'May account na ang email na ito.',
-            'invalid_email' => 'Hindi valid ang email.',
-            'weak_password' => 'Masyadong maikli ang password.',
+            'email_taken' => 'That email is already registered.',
+            'invalid_email' => "That email doesn't look right.",
+            'weak_password' => 'Password must be at least 8 characters.',
             _ => e.userMessage,
           };
         });

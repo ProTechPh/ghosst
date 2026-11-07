@@ -40,7 +40,7 @@ class CloudinaryUpload {
       );
       final url = res.data?['secure_url'] as String?;
       if (url == null || url.isEmpty) {
-        throw const CloudinaryException('Walang URL sa sagot ng Cloudinary.');
+        throw const CloudinaryException('No URL in the Cloudinary response.');
       }
       return url;
     } on DioException catch (e) {
@@ -57,7 +57,7 @@ class CloudinaryUpload {
       if (m is String && m.isNotEmpty) return m;
     }
     return e.type == DioExceptionType.connectionError
-        ? 'Walang internet connection.'
+        ? 'No internet connection.'
         : 'Upload failed (${e.response?.statusCode ?? 'network'}).';
   }
 }

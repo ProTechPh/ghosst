@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -10,10 +12,14 @@ import '../services/worker_backend.dart';
 import '../theme.dart';
 
 class AdminScreen extends StatefulWidget {
-  const AdminScreen({super.key, this.onAnnouncementSent});
+  const AdminScreen({super.key, this.onAnnouncementSent, this.active = true});
 
   /// Lets the shell refresh its banner right after a post.
   final VoidCallback? onAnnouncementSent;
+
+  /// True when this tab is the selected one. The muted list reloads on
+  /// entry so a mute done in Chat shows up without a manual refresh.
+  final bool active;
 
   @override
   State<AdminScreen> createState() => _AdminScreenState();
@@ -25,6 +31,19 @@ class _AdminScreenState extends State<AdminScreen> {
   /// Key stock across all products (the `keys` collection is admins-only),
   /// so each key product can show what's available vs already claimed.
   List<StockEntry> keys = [];
+
+  /// Users muted in world chat — ang unmute path ay dito, hindi sa long-press
+  /// (nawawala ang messages pagkatapos ng 24h cleanup).
+  List<MutedUser> mutedUsers = [];
+  List<Map<String, dynamic>> moderators = [];
+
+  /// Banned words para sa auto-moderation (server-side, PHP cron).
+  List<BannedWord> bannedWords = [];
+  final bannedWordInput = TextEditingController();
+
+  /// Block links ba sa chat (auto-mute kapag may link).
+  bool blockLinks = false;
+  final muteHoursInput = TextEditingController();
 
   bool loading = true;
   bool busy = false;
@@ -80,6 +99,180 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   @override
+  void didUpdateWidget(AdminScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) {
+      _reloadMuted();
+      _reloadModerators();
+    }
+  }
+
+  /// Muted list lang ang nire-refresh pagbalik sa tab — walang spinner
+  /// flash at hindi nabubura ang message banner.
+  Future<void> _reloadMuted() async {
+    try {
+      final users = await Backend.mutedUsers();
+      if (mounted) setState(() => mutedUsers = users);
+    } catch (_) {
+      // Best-effort, tulad ng keys load — ang panel ay gumagana pa rin.
+    }
+  }
+
+  Future<void> _reloadModerators() async {
+    try {
+      final rows = await Backend.moderators();
+      if (mounted) setState(() => moderators = rows);
+    } catch (_) {}
+  }
+
+  Future<void> _manageModerators() async {
+    if (!mounted) return;
+    final input = TextEditingController();
+    List<Map<String, dynamic>> searchResults = [];
+    bool searching = false;
+    bool loadingMods = true;
+    Timer? searchDebounce;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) {
+          if (loadingMods) {
+            loadingMods = false;
+            _reloadModerators().then((_) {
+              if (ctx.mounted) setD(() {});
+            });
+          }
+          return AlertDialog(
+            title: const Text('Moderators'),
+            content: SizedBox(
+              width: 400,
+              height: 440,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: input,
+                      decoration: const InputDecoration(
+                        hintText: 'Search user by name or email',
+                        prefixIcon: Icon(Icons.search),
+                      ),
+                      onChanged: (v) {
+                        searchDebounce?.cancel();
+                        final q = v.trim();
+                        if (q.length < 2) {
+                          setD(() => searchResults = []);
+                          return;
+                        }
+                        setD(() => searching = true);
+                        searchDebounce = Timer(const Duration(milliseconds: 400), () async {
+                          try {
+                            final rows = await Backend.searchUsers(q);
+                            if (ctx.mounted) {
+                              setD(() {
+                                searchResults = rows;
+                                searching = false;
+                              });
+                            }
+                          } catch (_) {
+                            if (ctx.mounted) setD(() => searching = false);
+                          }
+                        });
+                      },
+                    ),
+                    if (searching)
+                      const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                    for (final u in searchResults)
+                      ListTile(
+                        title: Text(
+                          (u['displayName'] as String?)?.isNotEmpty == true
+                              ? u['displayName'] as String
+                              : (u['email'] as String? ?? ''),
+                        ),
+                        subtitle: Text(u['email'] as String? ?? ''),
+                        trailing: (u['isModerator'] as bool? ?? false)
+                            ? const Icon(Icons.check, color: AppColors.green)
+                            : TextButton(
+                                onPressed: () async {
+                                  try {
+                                    await Backend.promoteModerator(
+                                      u['id'] as String,
+                                    );
+                                    await _reloadModerators();
+                                    setD(() {});
+                                  } catch (e) {
+                                    if (ctx.mounted) {
+                                      ScaffoldMessenger.of(ctx).showSnackBar(
+                                        SnackBar(content: Text('Failed: $e')),
+                                      );
+                                    }
+                                  }
+                                },
+                                child: const Text('Promote'),
+                              ),
+                      ),
+                    const Divider(),
+                    Text(
+                      'Current moderators (${moderators.length})',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    if (moderators.isEmpty)
+                      const Text(
+                        'No moderators yet.',
+                        style: TextStyle(color: AppColors.textDim),
+                      )
+                    else
+                      for (final m in moderators)
+                        ListTile(
+                          title: Text(
+                            (m['displayName'] as String?)?.isNotEmpty == true
+                                ? m['displayName'] as String
+                                : (m['email'] as String? ?? ''),
+                          ),
+                          subtitle: Text(m['id'] as String? ?? ''),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.remove_circle_outline),
+                            onPressed: () async {
+                              try {
+                                await Backend.demoteModerator(
+                                  m['id'] as String,
+                                );
+                                await _reloadModerators();
+                                setD(() {});
+                              } catch (e) {
+                                if (ctx.mounted) {
+                                  ScaffoldMessenger.of(ctx).showSnackBar(
+                                    SnackBar(content: Text('Failed: $e')),
+                                  );
+                                }
+                              }
+                            },
+                          ),
+                        ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  searchDebounce?.cancel();
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  @override
   void dispose() {
     productName.dispose();
     productCost.dispose();
@@ -91,6 +284,8 @@ class _AdminScreenState extends State<AdminScreen> {
     productDurations.dispose();
     announcementTitle.dispose();
     announcementBody.dispose();
+    bannedWordInput.dispose();
+    muteHoursInput.dispose();
     editName.dispose();
     editCost.dispose();
     editDesc.dispose();
@@ -182,11 +377,19 @@ class _AdminScreenState extends State<AdminScreen> {
         Backend.allProducts(),
         // Best-effort: the panel still works if `keys` can't be read.
         Backend.listKeys().catchError((_) => <StockEntry>[]),
+        Backend.mutedUsers().catchError((_) => <MutedUser>[]),
+        Backend.bannedWords().catchError((_) => <BannedWord>[]),
+        Backend.moderation().catchError((_) => const Moderation()),
       ]);
       if (!mounted) return;
+      final mod = results[4] as Moderation;
       setState(() {
         products = results[0] as List<Product>;
         keys = results[1] as List<StockEntry>;
+        mutedUsers = results[2] as List<MutedUser>;
+        bannedWords = results[3] as List<BannedWord>;
+        blockLinks = mod.blockLinks;
+        muteHoursInput.text = '${mod.muteHours}';
         loading = false;
       });
     } catch (e) {
@@ -195,6 +398,80 @@ class _AdminScreenState extends State<AdminScreen> {
         message = 'Load failed: $e';
         loading = false;
       });
+    }
+  }
+
+  /// Unmutes a user in world chat, then reloads the panel (the muted list
+  /// is the source of truth — see [mutedUsers]).
+  Future<void> _unmuteUser(MutedUser user) async {
+    setState(() => busy = true);
+    try {
+      await Backend.setChatMuted(user.id, false);
+      if (!mounted) return;
+      await _load();
+      // _load() clears `message` - set the banner after it so it survives.
+      if (!mounted) return;
+      setState(() => message = 'Unmuted ${user.name.isNotEmpty ? user.name : user.email}.');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => message = 'Unmute failed: $e');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  /// Adds a banned word; the PHP cron applies it to recent messages.
+  Future<void> _addBannedWord() async {
+    final word = bannedWordInput.text.trim();
+    if (word.isEmpty) return;
+    setState(() => busy = true);
+    try {
+      await Backend.addBannedWord(word);
+      bannedWordInput.clear();
+      if (!mounted) return;
+      await _load();
+      if (!mounted) return;
+      setState(() => message = 'Banned word added.');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => message = 'Add failed: $e');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  /// Removes a banned word.
+  Future<void> _deleteBannedWord(int id) async {
+    setState(() => busy = true);
+    try {
+      await Backend.deleteBannedWord(id);
+      if (!mounted) return;
+      await _load();
+      if (!mounted) return;
+      setState(() => message = 'Banned word removed.');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => message = 'Delete failed: $e');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  /// Saves block-links + mute duration.
+  Future<void> _saveModeration() async {
+    final hours = int.tryParse(muteHoursInput.text.trim()) ?? 24;
+    setState(() => busy = true);
+    try {
+      await Backend.saveModeration(blockLinks: blockLinks, muteHours: hours);
+      if (!mounted) return;
+      await _load();
+      if (!mounted) return;
+      setState(() => message = 'Moderation settings saved.');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => message = 'Save failed: $e');
+    } finally {
+      if (mounted) setState(() => busy = false);
     }
   }
 
@@ -326,19 +603,28 @@ class _AdminScreenState extends State<AdminScreen> {
     editDurations.text = [for (final d in p.durations) '${d.label}: ${d.cost}']
         .join('\n');
     var type = p.type;
-    // MediaFire links are admin-only — fetch the current one before the
-    // dialog opens so saving doesn't silently wipe it.
-    var linkLoaded = true;
-    try {
-      editLink.text = await Backend.appFileFor(p.id);
-    } catch (_) {
-      // Couldn't read it. Never sync blind: the save below must not clear it.
-      linkLoaded = false;
-    }
+    // MediaFire links are admin-only. Fetch in the background so the dialog
+    // opens instantly; saving is gated on [linkLoaded] so a slow/failed fetch
+    // can never wipe a paid download.
+    var linkLoaded = false;
+    var dialogOpen = false;
+    editLink.text = '';
     if (!mounted) return;
+    void Function(void Function()) setDialogState = (_) {};
+    Backend.appFileFor(p.id).then((v) {
+      if (!mounted) return;
+      editLink.text = v;
+      linkLoaded = true;
+      if (dialogOpen) setDialogState(() {});
+    }).catchError((_) {
+      if (!mounted) return;
+      linkLoaded = false;
+      if (dialogOpen) setDialogState(() {});
+    });
     var remoteIds = <String>[...p.imageIds];
     var localPaths = <String>[];
 
+    dialogOpen = true;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) {
@@ -346,6 +632,7 @@ class _AdminScreenState extends State<AdminScreen> {
         var err = '';
         return StatefulBuilder(
           builder: (ctx, setD) {
+            setDialogState = setD;
             Future<void> save() async {
               final n = editName.text.trim();
               final c = int.tryParse(editCost.text.trim());
@@ -655,6 +942,7 @@ class _AdminScreenState extends State<AdminScreen> {
     // NOTE: edit* controllers are NOT disposed here — the dialog route is
     // still animating out and its TextFields are still mounted. They are
     // disposed with this State (see dispose()).
+    dialogOpen = false;
     if (ok == true && mounted) {
       // _load() clears `message` — set the banner after it so it survives.
       await _load();
@@ -1541,6 +1829,42 @@ class _AdminScreenState extends State<AdminScreen> {
     ],
   );
 
+  Widget _dashTile(String label, String value, IconData icon) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        decoration: BoxDecoration(
+          color: AppColors.bgSoft.withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.border.withValues(alpha: 0.6)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 16, color: AppColors.cyan),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: AppColors.text,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 9,
+                color: AppColors.textDim,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (loading) return const Center(child: CircularProgressIndicator());
@@ -1562,16 +1886,184 @@ class _AdminScreenState extends State<AdminScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
       children: [
-        const SectionLabel('Admin panel'),
-        const Text(
-          'Manage products',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w900,
-            letterSpacing: -0.3,
+        // Hero header
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppColors.primary.withValues(alpha: 0.18),
+                AppColors.bgSoft.withValues(alpha: 0.6),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: AppColors.primary.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  gradient: kNeonGradient,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.admin_panel_settings,
+                    color: Color(0xFF04212A), size: 24),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Admin Panel',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Manage products, keys, users & more',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: AppColors.textDim,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 14),
+        // Dashboard KPIs
+        Row(
+          children: [
+            _dashTile('Products', '${products.length}', Icons.inventory_2_outlined),
+            const SizedBox(width: 8),
+            _dashTile('Keys', '${keys.length}', Icons.vpn_key_outlined),
+            const SizedBox(width: 8),
+            _dashTile('Muted', '${mutedUsers.length}', Icons.block),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // Bar chart: keys per product
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.bgSoft.withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Keys per product',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 100,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    for (final p in products.take(6))
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Container(
+                                height: (availCount[p.id] ?? 0).clamp(4, 70).toDouble(),
+                                decoration: BoxDecoration(
+                                  gradient: kNeonGradient,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                p.name.length > 6
+                                    ? '${p.name.substring(0, 6)}…'
+                                    : p.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 8,
+                                  color: AppColors.textDim,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Recent activity
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.bgSoft.withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Recent activity',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              if (mutedUsers.isEmpty)
+                const Text(
+                  'No recent activity.',
+                  style: TextStyle(color: AppColors.textDim, fontSize: 11),
+                ),
+              for (final u in mutedUsers.take(3))
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.block, size: 14, color: AppColors.red),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          u.name.isNotEmpty ? u.name : u.email,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                      ),
+                      const Text(
+                        'muted',
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: AppColors.red,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        const SectionLabel('Admin panel'),
+        const SizedBox(height: 8),
 
         if (message.isNotEmpty) ...[
           Container(
@@ -1605,6 +2097,11 @@ class _AdminScreenState extends State<AdminScreen> {
           const SizedBox(height: 14),
         ],
 
+        _Accordion(
+          title: 'Announcement',
+          icon: Icons.campaign_outlined,
+          child: Column(
+            children: [
         // ---- Announcement ----
         SectionLabel('Announcement'),
         GlowCard(
@@ -1617,7 +2114,7 @@ class _AdminScreenState extends State<AdminScreen> {
                 maxLength: 120,
                 textCapitalization: TextCapitalization.sentences,
                 decoration: const InputDecoration(
-                  hintText: 'Title (e.g. Bagong stock: Netflix)',
+                  hintText: 'Title (e.g. New stock: Netflix)',
                   counterText: '',
                 ),
               ),
@@ -1639,7 +2136,191 @@ class _AdminScreenState extends State<AdminScreen> {
           ),
         ),
         const SizedBox(height: 18),
+            ],
+          ),
+        ),
 
+        _Accordion(
+          title: 'Muted users',
+          icon: Icons.block,
+          child: Column(
+            children: [
+        // ---- Moderators ----
+        SectionLabel('Moderators (${moderators.length})'),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: _manageModerators,
+            icon: const Icon(Icons.shield_outlined),
+            label: const Text('Manage moderators'),
+          ),
+        ),
+        const SizedBox(height: 8),
+        // ---- Muted chat users ----
+        SectionLabel('Muted chat users (${mutedUsers.length})'),
+        if (mutedUsers.isEmpty)
+          const Text(
+            'No muted users.',
+            style: TextStyle(color: AppColors.textDim),
+          ),
+        for (final u in mutedUsers)
+          GlowCard(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Row(
+              children: [
+                const Icon(Icons.block, size: 20, color: AppColors.red),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        u.name.isNotEmpty ? u.name : u.email,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${u.email} · ${u.id.length > 8 ? u.id.substring(0, 8) : u.id}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.textDim,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                TextButton(
+                  onPressed: busy ? null : () => _unmuteUser(u),
+                  child: const Text('Unmute'),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 18),
+            ],
+          ),
+        ),
+
+        _Accordion(
+          title: 'Banned words',
+          icon: Icons.gavel,
+          child: Column(
+            children: [
+        // ---- Banned words ----
+        SectionLabel('Banned words (${bannedWords.length})'),
+        if (bannedWords.isEmpty)
+          const Text(
+            'No banned words.',
+            style: TextStyle(color: AppColors.textDim),
+          ),
+        for (final w in bannedWords)
+          GlowCard(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Row(
+              children: [
+                const Icon(Icons.block, size: 20, color: AppColors.red),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    w.word,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                TextButton(
+                  onPressed: busy ? null : () => _deleteBannedWord(w.id),
+                  child: const Text('Delete'),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 12),
+        GlowCard(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: bannedWordInput,
+                  textCapitalization: TextCapitalization.none,
+                  decoration: const InputDecoration(hintText: 'Word to ban'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton(
+                onPressed: busy ? null : _addBannedWord,
+                child: const Text('Add word'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+            ],
+          ),
+        ),
+
+        _Accordion(
+          title: 'Moderation',
+          icon: Icons.tune,
+          child: Column(
+            children: [
+        // ---- Moderation ----
+        const SectionLabel('Moderation'),
+        GlowCard(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Block links in chat'),
+                subtitle: const Text(
+                  'Messages with links are deleted and the sender is auto-muted.',
+                  style: TextStyle(color: AppColors.textDim, fontSize: 12.5),
+                ),
+                value: blockLinks,
+                onChanged: (v) => setState(() => blockLinks = v),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: muteHoursInput,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  hintText: 'Auto-mute duration (hours)',
+                  suffixText: 'hours',
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: busy ? null : _saveModeration,
+                child: const Text('Save settings'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+            ],
+          ),
+        ),
+
+        _Accordion(
+          title: 'Products',
+          icon: Icons.inventory_2_outlined,
+          child: Column(
+            children: [
         // ---- Products ----
         SectionLabel('Products (${products.length})'),
         if (products.isEmpty)
@@ -1744,7 +2425,15 @@ class _AdminScreenState extends State<AdminScreen> {
         ],
 
         const SizedBox(height: 16),
+            ],
+          ),
+        ),
 
+        _Accordion(
+          title: 'New product',
+          icon: Icons.add_box_outlined,
+          child: Column(
+            children: [
         // ---- New product — the form stays collapsed behind its toggle ----
         NeonButton(
           expand: true,
@@ -1915,7 +2604,107 @@ class _AdminScreenState extends State<AdminScreen> {
             ),
           ),
         ],
+            ],
+          ),
+        ),
       ],
     );
   }
 }
+
+
+class _Accordion extends StatefulWidget {
+  const _Accordion({
+    required this.title,
+    required this.icon,
+    required this.child,
+  });
+
+  final String title;
+  final IconData icon;
+  final Widget child;
+
+  @override
+  State<_Accordion> createState() => _AccordionState();
+}
+
+class _AccordionState extends State<_Accordion> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.10),
+          width: 1,
+        ),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.bgSoft.withValues(alpha: 0.85),
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.white10,
+              offset: Offset(0, 1),
+              blurRadius: 1,
+              blurStyle: BlurStyle.inner,
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            InkWell(
+              onTap: () => setState(() => _expanded = !_expanded),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        gradient: kNeonGradient,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(widget.icon,
+                          size: 18, color: const Color(0xFF04212A)),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        widget.title,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      _expanded ? Icons.expand_less : Icons.expand_more,
+                      size: 20,
+                      color: AppColors.textDim,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_expanded) ...[
+              const Divider(height: 1, color: AppColors.border),
+              Padding(
+                padding: const EdgeInsets.all(14),
+                child: widget.child,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+

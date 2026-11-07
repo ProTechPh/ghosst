@@ -345,8 +345,8 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
           children: [
             _hero(inCooldown),
             const SizedBox(height: AppSpace.lg),
-            _statsRow(success),
-            const SizedBox(height: AppSpace.xl),
+            _statsGrid(inCooldown),
+            const SizedBox(height: AppSpace.lg),
             if (status.isNotEmpty) ...[
               _statusPanel(statusColor, success),
               const SizedBox(height: AppSpace.md),
@@ -359,6 +359,20 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
               const SizedBox(height: AppSpace.md),
               _secondAction(inCooldown),
             ],
+            const SizedBox(height: AppSpace.md),
+            if (inCooldown) ...[
+              _cooldownProgress(cooldownFill),
+              const SizedBox(height: 6),
+              Text(
+                'Cooldown: ${_remainingCooldown}s remaining',
+                textAlign: TextAlign.center,
+                style: AppText.caption.copyWith(
+                  fontSize: 10,
+                  color: AppColors.textDim,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
             const SizedBox(height: AppSpace.lg),
             Text(
               inCooldown
@@ -370,21 +384,9 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
             const SizedBox(height: AppSpace.xxl),
             const SectionHeader(title: 'How it works'),
             const SizedBox(height: AppSpace.sm),
-            _stepRow(
-              '01',
-              'Watch an ad',
-              'One rewarded ad pays $_rewardCoins coins.',
-            ),
-            _stepRow(
-              '02',
-              'Earn coins',
-              'Verified before they land in your balance.',
-            ),
-            _stepRow(
-              '03',
-              'Claim keys',
-              'Spend them in the store on a key or app.',
-            ),
+            _stepRow('1', 'Watch an ad', 'One rewarded ad pays $_rewardCoins coins.'),
+            _stepRow('2', 'Earn coins', 'Verified before they land in your balance.'),
+            _stepRow('3', 'Claim keys', 'Spend them in the store on a key or app.'),
           ],
         ),
       ],
@@ -394,88 +396,180 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
   // ---- hero -------------------------------------------------------------
 
   Widget _hero(bool inCooldown) {
-    return CardFrame(
-      radius: AppRadius.hero,
-      glow: true,
-      child: Stack(
-        children: [
-          // Ambient cyan light pooling behind the balance figure.
-          Positioned(
-            top: -70,
-            left: -40,
-            child: IgnorePointer(
-              child: Container(
-                width: 300,
-                height: 300,
+    return Column(
+      children: [
+        Row(
+          children: [
+            Text(
+              'EARN COINS',
+              style: AppText.label.copyWith(
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 2,
+                color: AppColors.cyan,
+              ),
+            ),
+            const Spacer(),
+            if (!inCooldown)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.green.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: AppColors.green.withValues(alpha: 0.6)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: AppColors.green,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'LIVE',
+                      style: AppText.label.copyWith(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.green,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpace.lg),
+        Container(
+          width: 140,
+          height: 140,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const RadialGradient(
+              center: Alignment(-0.3, -0.3),
+              colors: [Color(0xFFFDE68A), Color(0xFFF59E0B), Color(0xFFB45309)],
+              stops: [0.0, 0.4, 0.85],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.gold.withValues(alpha: 0.4),
+                blurRadius: 60,
+                spreadRadius: -10,
+              ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                margin: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      AppColors.primary.withValues(alpha: 0.20),
-                      AppColors.primary.withValues(alpha: 0),
-                    ],
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    width: 2,
                   ),
                 ),
               ),
+              Text(
+                'G',
+                style: AppText.figure.copyWith(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                  color: const Color(0xFF422006),
+                  height: 1,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpace.lg),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            groupDigits(widget.coins),
+            maxLines: 1,
+            style: AppText.figure.copyWith(
+              fontSize: 52,
+              fontWeight: FontWeight.w900,
+              height: 1,
+              letterSpacing: -2,
+              color: AppColors.gold,
+              shadows: [
+                Shadow(
+                  color: AppColors.gold.withValues(alpha: 0.4),
+                  blurRadius: 30,
+                ),
+              ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpace.xl,
-              AppSpace.lg,
-              AppSpace.xl,
-              AppSpace.xl,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'COINS READY TO SPEND',
+          style: AppText.label.copyWith(
+            fontSize: 10,
+            color: AppColors.textDim,
+            letterSpacing: 2.5,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ---- stats grid -------------------------------------------------------
+
+  Widget _statsGrid(bool inCooldown) {
+    return Row(
+      children: [
+        Expanded(child: _statCard(value: '$_rewardCoins', label: 'PER AD')),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _statCard(
+            value: inCooldown ? '${_remainingCooldown}s' : '30s',
+            label: 'COOLDOWN',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _statCard({required String value, required String label}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+      decoration: BoxDecoration(
+        color: AppColors.bgSoft.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: AppText.figure.copyWith(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: AppColors.cyan,
+              height: 1,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.monetization_on_rounded,
-                      size: 15,
-                      color: AppColors.gold,
-                    ),
-                    const SizedBox(width: AppSpace.xs + 2),
-                    Text(
-                      'YOUR BALANCE',
-                      style: AppText.label.copyWith(color: AppColors.textDim),
-                    ),
-                    const Spacer(),
-                    if (!inCooldown)
-                      const NeonPill(
-                        icon: Icons.bolt_rounded,
-                        label: 'LIVE',
-                        color: AppColors.cyan,
-                      ),
-                  ],
-                ),
-                const SizedBox(height: AppSpace.lg),
-                const CoinMedallion(size: 96),
-                const SizedBox(height: AppSpace.md),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.center,
-                  child: Text(
-                    groupDigits(widget.coins),
-                    maxLines: 1,
-                    style: AppText.figure.copyWith(
-                      fontSize: 58,
-                      fontWeight: FontWeight.w800,
-                      height: 1,
-                      letterSpacing: -2,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: AppSpace.sm),
-                Container(
-                  width: 54,
-                  height: 1,
-                  color: AppColors.gold.withValues(alpha: 0.5),
-                ),
-                const SizedBox(height: AppSpace.sm),
-                Text('coins ready to spend', style: AppText.caption),
-              ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: AppText.label.copyWith(
+              fontSize: 9,
+              color: AppColors.textDim,
+              letterSpacing: 1,
             ),
           ),
         ],
@@ -483,46 +577,29 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
     );
   }
 
-  // ---- live stats -------------------------------------------------------
-
-  Widget _statsRow(bool success) {
-    final inCooldown = _remainingCooldown > 0;
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpace.sm,
-        vertical: AppSpace.md,
-      ),
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
-          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+  Widget _cooldownProgress(double fill) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(2),
+      child: Container(
+        height: 4,
+        color: Colors.white.withValues(alpha: 0.08),
+        child: FractionallySizedBox(
+          alignment: Alignment.centerLeft,
+          widthFactor: fill.clamp(0.0, 1.0),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [AppColors.cyan, Color(0xFF67E8F9), AppColors.gold],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.cyan.withValues(alpha: 0.5),
+                  blurRadius: 8,
+                ),
+              ],
+            ),
+          ),
         ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: StatCell(
-              label: 'Cooldown',
-              value: inCooldown ? '${_remainingCooldown}s' : 'ready',
-              icon: Icons.timer_outlined,
-              color: inCooldown ? AppColors.textDim : AppColors.green,
-            ),
-          ),
-          Container(width: 1, height: 30, color: AppColors.border),
-          const SizedBox(width: AppSpace.lg),
-          Expanded(
-            child: StatCell(
-              label: 'Verification',
-              value: verifying
-                  ? '${(verifyProgress * 100).round()}%'
-                  : (success ? 'done' : '—'),
-              icon: Icons.verified_outlined,
-              color: verifying
-                  ? AppColors.cyan
-                  : (success ? AppColors.green : AppColors.textDim),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -533,10 +610,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(
-        AppSpace.lg,
-        AppSpace.md,
-        AppSpace.lg,
-        AppSpace.md,
+        AppSpace.lg, AppSpace.md, AppSpace.lg, AppSpace.md,
       ),
       decoration: BoxDecoration(
         color: statusColor.withValues(alpha: 0.07),
@@ -553,9 +627,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
                 Icon(
                   success
                       ? Icons.check_circle_rounded
-                      : (busy
-                            ? Icons.hourglass_top_rounded
-                            : Icons.info_outline_rounded),
+                      : (busy ? Icons.hourglass_top_rounded : Icons.info_outline_rounded),
                   size: 17,
                   color: statusColor,
                 ),
@@ -591,10 +663,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
                 Expanded(
                   child: Text(
                     'Your coins will be added automatically once your reward is confirmed.',
-                    style: AppText.caption.copyWith(
-                      fontSize: 11.5,
-                      height: 1.45,
-                    ),
+                    style: AppText.caption.copyWith(fontSize: 11.5, height: 1.45),
                   ),
                 ),
                 const SizedBox(width: AppSpace.sm),
@@ -626,53 +695,23 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.2,
-                    color: Colors.white,
-                  ),
+                  width: 16, height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
                 ),
                 const SizedBox(width: AppSpace.sm + 2),
-                Text(
-                  status == 'Loading ad…' ? 'Loading ad…' : 'Verifying reward…',
-                ),
+                Text(status == 'Loading ad…' ? 'Loading ad…' : 'Verifying reward…'),
               ],
             )
           : inCooldown
-          ? Column(
+          ? Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.timer_outlined,
-                      size: 17,
-                      color: AppColors.textDim,
-                    ),
-                    const SizedBox(width: AppSpace.sm),
-                    const Text('Next ad in'),
-                    const SizedBox(width: AppSpace.xs + 2),
-                    Text(
-                      '${_remainingCooldown}s',
-                      style: monoStyle(fontWeight: FontWeight.w800),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpace.sm + 2),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                  child: LinearProgressIndicator(
-                    value: cooldownFill,
-                    minHeight: 3,
-                    backgroundColor: AppColors.border,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      AppColors.primary.withValues(alpha: 0.55),
-                    ),
-                  ),
-                ),
+                const Icon(Icons.timer_outlined, size: 17, color: AppColors.textDim),
+                const SizedBox(width: AppSpace.sm),
+                const Text('Next ad in'),
+                const SizedBox(width: AppSpace.xs + 2),
+                Text('${_remainingCooldown}s', style: monoStyle(fontWeight: FontWeight.w800)),
               ],
             )
           : Padding(
@@ -681,18 +720,11 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
-                    Icons.play_circle_fill_rounded,
-                    size: 19,
-                    color: AppColors.bg,
-                  ),
+                  const Icon(Icons.play_circle_fill_rounded, size: 19, color: AppColors.bg),
                   const SizedBox(width: AppSpace.sm),
                   const Text('Watch ad'),
                   const SizedBox(width: AppSpace.xs + 2),
-                  Text(
-                    '· +$_rewardCoins coins',
-                    style: monoStyle(fontWeight: FontWeight.w800),
-                  ),
+                  Text('· +$_rewardCoins coins', style: monoStyle(fontWeight: FontWeight.w800)),
                 ],
               ),
             ),
@@ -719,28 +751,9 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
           if (inCooldown) ...[
             const Text('Cooldown'),
             const SizedBox(width: AppSpace.xs + 2),
-            Text(
-              '${_remainingCooldown}s',
-              style: monoStyle(
-                fontWeight: FontWeight.w700,
-                color: AppColors.textDim,
-              ),
-            ),
+            Text('${_remainingCooldown}s', style: monoStyle(fontWeight: FontWeight.w700, color: AppColors.textDim)),
           ] else ...[
-            Text(
-              'Instant ad',
-              style: TextStyle(
-                color: enabled ? AppColors.cyan : AppColors.textDim,
-              ),
-            ),
-            const SizedBox(width: AppSpace.xs + 2),
-            Text(
-              '· +$_rewardCoins coins',
-              style: monoStyle(
-                fontWeight: FontWeight.w700,
-                color: enabled ? AppColors.cyan : AppColors.textDim,
-              ),
-            ),
+            Text('Watch another ad', style: TextStyle(color: enabled ? AppColors.cyan : AppColors.textDim)),
           ],
         ],
       ),
@@ -748,40 +761,29 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
   }
 
   Widget _stepRow(String n, String title, String caption) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: AppSpace.md),
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
-        ),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          Container(
+            width: 24, height: 24,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.primary.withValues(alpha: 0.1),
+              border: Border.all(color: AppColors.cyan.withValues(alpha: 0.6)),
+            ),
+            alignment: Alignment.center,
+            child: Text(n, style: AppText.label.copyWith(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.cyan)),
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: AppText.subtitle.copyWith(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(caption, style: AppText.caption.copyWith(height: 1.45)),
+                Text(title, style: AppText.subtitle.copyWith(fontSize: 12, fontWeight: FontWeight.w600)),
+                Text(caption, style: AppText.caption.copyWith(fontSize: 10, height: 1.4)),
               ],
-            ),
-          ),
-          const SizedBox(width: AppSpace.md),
-          Text(
-            n,
-            style: monoStyle(
-              fontSize: 30,
-              fontWeight: FontWeight.w800,
-              color: AppColors.primary.withValues(alpha: 0.18),
-              height: 1,
             ),
           ),
         ],

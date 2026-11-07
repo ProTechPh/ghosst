@@ -215,40 +215,6 @@ class _MyKeysScreenState extends State<MyKeysScreen> {
   }
 
   /// 48px cover — product art when we have it, gradient tile otherwise.
-  Widget _thumb(Claim c) {
-    const fallback = Icon(
-      Icons.shopping_bag_outlined,
-      color: Colors.white,
-      size: 20,
-    );
-    return Container(
-      width: 44,
-      height: 44,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        gradient: c.isDownload
-            ? (c.keyText == 'apk' ? kNeonGradient : kGoldGradient)
-            : kTealGradient,
-        borderRadius: BorderRadius.circular(AppRadius.input),
-      ),
-      child: () {
-        final url = productArt[c.productId];
-        if (url == null) {
-          return c.isDownload
-              ? fallback
-              : const Icon(Icons.key_rounded, color: Colors.white, size: 20);
-        }
-        return Image.network(
-          url,
-          fit: BoxFit.cover,
-          errorBuilder: (ctx, e, st) => c.isDownload
-              ? fallback
-              : const Icon(Icons.key_rounded, color: Colors.white, size: 20),
-        );
-      }(),
-    );
-  }
-
   /// APP / KEY category tag so the list reads like a purchase history.
   Widget _catBadge(Claim c) {
     final color = c.isDownload ? AppColors.primary : AppColors.cyan;
@@ -373,10 +339,7 @@ class _MyKeysScreenState extends State<MyKeysScreen> {
     final name = c.productName.isEmpty
         ? (c.isDownload ? 'Download' : 'License key')
         : c.productName;
-    final meta =
-        '${_date(c.createdAt)}'
-        '${c.duration.isEmpty ? '' : ' · ${c.duration}'}'
-        '${c.isDownload ? ' · ${c.keyText == 'apk' ? 'APK' : 'FILE'}' : ''}';
+    final date = _date(c.createdAt);
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.sm + 2),
       child: Pressable(
@@ -390,96 +353,122 @@ class _MyKeysScreenState extends State<MyKeysScreen> {
               color: edgeColor(tierForCost(c.cost)).withValues(alpha: 0.30),
             ),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _thumb(c),
-              const SizedBox(width: AppSpace.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppText.title.copyWith(fontSize: 16),
-                          ),
-                        ),
-                        const SizedBox(width: AppSpace.sm),
-                        _catBadge(c),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpace.xs + 2),
-                    if (c.isDownload)
-                      Text(
-                        'Ready to download',
-                        style: AppText.caption.copyWith(color: AppColors.cyan),
-                      )
-                    else
-                      Text(
-                        c.keyText,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: monoStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1.2,
-                          color: AppColors.textDim,
-                        ),
-                      ),
-                    const SizedBox(height: AppSpace.xs),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            meta,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppText.caption,
-                          ),
-                        ),
-                        const SizedBox(width: AppSpace.sm),
-                        Text(
-                          '${c.cost} coins',
-                          style: monoStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.gold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: AppSpace.sm),
-              Pressable(
-                onTap: () => c.isDownload ? _openDownload(c) : _copyKey(c),
-                child: Container(
-                  width: 38,
-                  height: 38,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: AppColors.cyan.withValues(alpha: 0.10),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: AppColors.cyan.withValues(alpha: 0.30),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppText.title.copyWith(fontSize: 16),
                     ),
                   ),
-                  child: Icon(
-                    c.isDownload ? Icons.download_rounded : Icons.copy_rounded,
-                    size: 17,
-                    color: AppColors.cyan,
+                  const SizedBox(width: AppSpace.sm),
+                  _catBadge(c),
+                ],
+              ),
+              const SizedBox(height: AppSpace.xs),
+              _dottedDivider(),
+              const SizedBox(height: AppSpace.xs),
+              _receiptLine('Date', date),
+              if (c.duration.isNotEmpty) _receiptLine('Duration', c.duration),
+              if (c.isDownload)
+                _receiptLine('Type', c.keyText == 'apk' ? 'APK' : 'FILE'),
+              _receiptLine('Cost', '${c.cost} coins'),
+              const SizedBox(height: AppSpace.xs),
+              _dottedDivider(),
+              const SizedBox(height: AppSpace.xs),
+              if (c.isDownload)
+                Text(
+                  'Ready to download',
+                  style: AppText.caption.copyWith(color: AppColors.cyan),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpace.sm,
+                    vertical: AppSpace.xs,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceHigh,
+                    borderRadius: BorderRadius.circular(AppRadius.chip),
+                  ),
+                  child: Text(
+                    c.keyText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: monoStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.2,
+                      color: AppColors.textDim,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: AppSpace.sm),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Pressable(
+                  onTap: () => c.isDownload ? _openDownload(c) : _copyKey(c),
+                  child: Container(
+                    width: 34,
+                    height: 34,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppColors.cyan.withValues(alpha: 0.10),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppColors.cyan.withValues(alpha: 0.30),
+                      ),
+                    ),
+                    child: Icon(
+                      c.isDownload ? Icons.download_rounded : Icons.copy_rounded,
+                      size: 16,
+                      color: AppColors.cyan,
+                    ),
                   ),
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _dottedDivider() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final count = (constraints.maxWidth / 6).floor().clamp(4, 60);
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: List.generate(
+            count,
+            (_) => Container(width: 3, height: 1, color: AppColors.border),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _receiptLine(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        children: [
+          Text(label, style: AppText.caption.copyWith(fontSize: 11)),
+          const Spacer(),
+          Text(
+            value,
+            style: AppText.caption.copyWith(
+              fontSize: 11,
+              color: AppColors.text,
+            ),
+          ),
+        ],
       ),
     );
   }

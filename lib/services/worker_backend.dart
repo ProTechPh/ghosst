@@ -17,12 +17,14 @@ class AppUser {
     required this.email,
     required this.name,
     this.createdAt = '',
+    this.chatMuted = false,
   });
 
   final String id;
   final String email;
   final String name;
   final String createdAt;
+  final bool chatMuted;
 }
 
 /// Same surface the screens already used, served by the `ghosst-api` Worker.
@@ -35,6 +37,8 @@ class Backend {
 
   static AppUser? _user;
   static bool? _isAdmin;
+  static bool? _isModerator;
+  static bool? _chatMuted;
 
   /// Set once by main.dart: the refresh token died, go back to sign-in.
   static set onSignedOut(void Function()? cb) => _api.onSignedOut = cb;
@@ -70,29 +74,43 @@ class Backend {
     );
     _user = null;
     _isAdmin = null;
+    _isModerator = null;
+    _chatMuted = null;
   }
 
   static Future<void> signOut() async {
     await _api.logout();
     _user = null;
     _isAdmin = null;
+    _isModerator = null;
+    _chatMuted = null;
   }
+
+  /// Custom token para sa world chat (503 `chat_disabled` kapag hindi
+  /// naka-setup ang service account sa API).
+  static Future<String> firebaseToken() async =>
+      (await _api.get('/firebase/token'))['token'] as String;
 
   static Future<void> deleteAccount() async {
     await _api.delete('/account', data: {'confirm': 'DELETE'});
     await _session.clear();
     _user = null;
     _isAdmin = null;
+    _isModerator = null;
+    _chatMuted = null;
   }
 
   static Future<AppUser> _me() async {
     final u = (await _api.get('/me'))['user'] as Map<String, dynamic>;
     _isAdmin = u['isAdmin'] as bool? ?? false;
+    _isModerator = u['isModerator'] as bool? ?? false;
+    _chatMuted = u['chatMuted'] as bool? ?? false;
     return AppUser(
       id: u['id'] as String,
       email: u['email'] as String? ?? '',
       name: u['displayName'] as String? ?? '',
       createdAt: u['createdAt'] as String? ?? '',
+      chatMuted: _chatMuted!,
     );
   }
 
@@ -107,6 +125,85 @@ class Backend {
     } on ApiException {
       return false;
     }
+  }
+
+  static Future<bool> isModerator() async {
+    final cached = _isModerator;
+    if (cached != null) return cached;
+    try {
+      await currentUser();
+      return _isModerator ?? false;
+    } on ApiException {
+      return false;
+    }
+  }
+
+  /// Mute status sa world chat, mula sa cached `/me` payload (tulad ng isAdmin).
+  /// Ang `refresh: true` ay binubura ang cache para sa totoong status ngayon —
+  /// kailangan kapag pwedeng nagbago ang mute habang naka-bukas ang app.
+  static Future<bool> chatMuted({bool refresh = false}) async {
+    if (refresh) {
+      _user = null;
+      _chatMuted = null;
+    }
+    final cached = _chatMuted;
+    if (cached != null) return cached;
+    try {
+      await currentUser();
+      return _chatMuted ?? false;
+    } on ApiException {
+      return false;
+    }
+  }
+
+  /// Admin: i-mute/unmute ang isang user sa world chat.
+  static Future<void> setChatMuted(String userId, bool muted) async {
+    await _api.post('/admin/chat/mute', data: {'userId': userId, 'muted': muted});
+  }
+
+  /// Admin: lahat ng users na naka-mute sa world chat (para sa Admin screen).
+  static Future<List<MutedUser>> mutedUsers() async {
+    final res = await _api.get('/admin/chat/muted');
+    return (res['users'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(MutedUser.fromJson)
+        .toList();
+  }
+
+  /// Admin: ang banned word list para sa auto-moderation.
+  static Future<List<BannedWord>> bannedWords() async {
+    final res = await _api.get('/admin/banned-words');
+    return (res['words'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(BannedWord.fromJson)
+        .toList();
+  }
+
+  /// Admin: magdagdag ng banned word.
+  static Future<void> addBannedWord(String word) async {
+    await _api.post('/admin/banned-words', data: {'word': word});
+  }
+
+  /// Admin: tanggalin ang banned word.
+  static Future<void> deleteBannedWord(int id) async {
+    await _api.delete('/admin/banned-words/$id');
+  }
+
+  /// Admin: moderation settings (block links + mute duration).
+  static Future<Moderation> moderation() async {
+    final res = await _api.get('/admin/moderation');
+    return Moderation.fromJson(res);
+  }
+
+  /// Admin: i-save ang moderation settings.
+  static Future<void> saveModeration({
+    required bool blockLinks,
+    required int muteHours,
+  }) async {
+    await _api.post('/admin/moderation', data: {
+      'blockLinks': blockLinks,
+      'muteHours': muteHours,
+    });
   }
 
   // ---- profile ----
@@ -177,7 +274,7 @@ class Backend {
     if (key == null || key.isEmpty) {
       throw const ApiException(
         kind: ApiErrorKind.badResponse,
-        message: 'Walang key sa sagot ng server',
+        message: 'No key in the server response',
       );
     }
     return key;
@@ -189,7 +286,7 @@ class Backend {
     if (url == null || url.trim().isEmpty) {
       throw const ApiException(
         kind: ApiErrorKind.conflict,
-        message: 'Wala pang download link ang produktong ito.',
+        message: 'This product has no download link yet.',
       );
     }
     return (url: url, sha256: res['sha256'] as String?);
@@ -391,7 +488,7 @@ class Backend {
     if (id is! String || id.isEmpty) {
       throw const ApiException(
         kind: ApiErrorKind.badResponse,
-        message: 'Walang id sa sagot ng server',
+        message: 'No id in the server response',
       );
     }
     return id;
@@ -443,6 +540,28 @@ class Backend {
 
   static Future<void> deleteAppFile(String productId) =>
       _api.patch('/products/$productId', data: {'fileUrl': ''});
+
+  // ---- moderators (admin only) ----
+
+  static Future<List<Map<String, dynamic>>> moderators() async {
+    final res = await _api.get('/admin/moderators');
+    final rows = (res['users'] as List?) ?? const [];
+    return rows.map((e) => (e as Map).cast<String, dynamic>()).toList();
+  }
+
+  static Future<void> promoteModerator(String userId) async {
+    await _api.post('/admin/moderators/$userId');
+  }
+
+  static Future<void> demoteModerator(String userId) async {
+    await _api.delete('/admin/moderators/$userId');
+  }
+
+  static Future<List<Map<String, dynamic>>> searchUsers(String query) async {
+    final res = await _api.get('/admin/users', query: {'search': query});
+    final rows = (res['users'] as List?) ?? const [];
+    return rows.map((e) => (e as Map).cast<String, dynamic>()).toList();
+  }
 
   // ---- images ----
 

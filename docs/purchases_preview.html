@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Purchases Design Options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#050B0E;--panel:#08151A;--border:#1A3740;--cyan:#22D3EE;--cyan2:#67E8F9;--gold:#FBBF24;--text:#F1FAFC;--dim:#8DA6AF;--surface:#0C1D23;--green:#34D399}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#020608;color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:24px;min-height:100vh}
+  h1{font-size:20px;font-weight:700;letter-spacing:-.02em;margin-bottom:4px;color:var(--cyan)}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:28px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px}
+  .phone{background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:12px;overflow:hidden;box-shadow:0 0 40px rgba(34,211,238,.08),0 30px 80px rgba(0,0,0,.9);position:relative;height:520px;display:flex;flex-direction:column}
+  .phone::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(34,211,238,.015) 2px 3px);pointer-events:none}
+  .lab{font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--cyan);margin-bottom:6px}
+  .ttl{font-size:14px;font-weight:700;margin-bottom:2px}
+  .dsc{font-size:11px;color:var(--dim);margin-bottom:10px;line-height:1.4}
+  .scroll{flex:1;overflow:auto;padding:4px}
+  .card{background:rgba(8,21,26,.7);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px;display:flex;gap:10px}
+  .thumb{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#0C1D23,#1A3740);flex-shrink:0;display:grid;place-items:center;font-size:18px}
+  .info{flex:1;min-width:0}
+  .name{font-size:13px;font-weight:700;margin-bottom:2px}
+  .meta{font-size:10px;color:var(--dim);margin-bottom:4px}
+  .key{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--dim);letter-spacing:1px}
+  .badge{font-size:9px;padding:2px 6px;border-radius:999px;background:rgba(34,211,238,.15);color:var(--cyan);font-weight:600}
+  .badge.key{background:rgba(251,191,36,.15);color:#FBBF24}
+  .badge.apk{background:rgba(52,211,153,.15);color:#34D399}
+  /* Option 2 grid */
+  .pgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .pcard{background:rgba(8,21,26,.7);border:1px solid var(--border);border-radius:12px;padding:10px}
+  .pcard .thumb{width:100%;height:60px;margin-bottom:8px;border-radius:8px}
+  .pcard .name{font-size:12px;font-weight:700;margin-bottom:2px}
+  .pcard .meta{font-size:9px;color:var(--dim);margin-bottom:4px}
+  /* Option 3 receipt */
+  .receipt{background:rgba(8,21,26,.7);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px;font-family:'JetBrains Mono',monospace}
+  .receipt .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px dashed var(--border)}
+  .receipt .head .name{font-size:12px;font-weight:700;font-family:'Inter',sans-serif}
+  .receipt .line{display:flex;justify-content:space-between;font-size:10px;color:var(--dim);margin-bottom:2px}
+  .receipt .key{font-size:11px;color:var(--cyan);margin-top:6px;padding:4px 6px;background:rgba(34,211,238,.08);border-radius:4px;text-align:center}
+  /* Option 4 minimal */
+  .minrow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+  .minrow:last-child{border-bottom:none}
+  .minrow .info{flex:1;min-width:0}
+  .minrow .name{font-size:12px;font-weight:600;margin-bottom:1px}
+  .minrow .meta{font-size:9px;color:var(--dim)}
+  .minrow .cost{font-size:11px;font-weight:700;color:var(--gold);font-family:'JetBrains Mono',monospace}
+</style>
+</head>
+<body>
+<h1>Purchases Design Options</h1>
+<p class="sub">Pick a style for the purchases tab.</p>
+<div class="grid">
+
+  <div class="phone">
+    <div class="lab">Option 1</div>
+    <div class="ttl">Card List</div>
+    <div class="dsc">Cards with thumbnail, name, key, meta. Current style.</div>
+    <div class="scroll">
+      <div class="card"><div class="thumb">🗝</div><div class="info"><div class="name">Ghosst Premium V4</div><div class="meta">Oct 31 · 1 Hour · KEY</div><div class="key">CODM-QZPDBT7STG</div></div><div class="badge key">KEY</div></div>
+      <div class="card"><div class="thumb" style="background:linear-gradient(135deg,#2d1b00,#5a3a00)">📦</div><div class="info"><div class="name">CODM APK</div><div class="meta">Oct 30 · APK · 45MB</div><div style="font-size:10px;color:var(--cyan)">Ready to download</div></div><div class="badge apk">APK</div></div>
+      <div class="card"><div class="thumb">🗝</div><div class="info"><div class="name">Netflix Key</div><div class="meta">Oct 29 · 1 Day · KEY</div><div class="key">NFLX-ABCD1234</div></div><div class="badge key">KEY</div></div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Option 2</div>
+    <div class="ttl">Grid Cards</div>
+    <div class="dsc">2-column grid with cover art and compact info.</div>
+    <div class="scroll">
+      <div class="pgrid">
+        <div class="pcard"><div class="thumb">🗝</div><div class="name">Ghosst Premium V4</div><div class="meta">KEY · 10 coins</div><div class="key" style="font-size:9px">CODM-QZPD...</div></div>
+        <div class="pcard"><div class="thumb" style="background:linear-gradient(135deg,#2d1b00,#5a3a00)">📦</div><div class="name">CODM APK</div><div class="meta">APK · 15 coins</div><div style="font-size:9px;color:var(--cyan)">Download</div></div>
+        <div class="pcard"><div class="thumb">🗝</div><div class="name">Netflix Key</div><div class="meta">KEY · 25 coins</div><div class="key" style="font-size:9px">NFLX-ABCD...</div></div>
+        <div class="pcard"><div class="thumb" style="background:linear-gradient(135deg,#1a2a1a,#2a4a2a)">📄</div><div class="name">Config File</div><div class="meta">FILE · 5 coins</div><div style="font-size:9px;color:var(--cyan)">Download</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Option 3</div>
+    <div class="ttl">Receipt Style</div>
+    <div class="dsc">Receipt-like cards with dotted dividers.</div>
+    <div class="scroll">
+      <div class="receipt">
+        <div class="head"><span class="name">Ghosst Premium V4</span><span class="badge key">KEY</span></div>
+        <div class="line"><span>Date</span><span>Oct 31, 2026</span></div>
+        <div class="line"><span>Duration</span><span>1 Hour</span></div>
+        <div class="line"><span>Cost</span><span>10 coins</span></div>
+        <div class="key">CODM-QZPDBT7STG</div>
+      </div>
+      <div class="receipt">
+        <div class="head"><span class="name">CODM APK</span><span class="badge apk">APK</span></div>
+        <div class="line"><span>Date</span><span>Oct 30, 2026</span></div>
+        <div class="line"><span>Version</span><span>v1.2.3</span></div>
+        <div class="line"><span>Cost</span><span>15 coins</span></div>
+        <div class="key" style="color:var(--cyan);background:rgba(34,211,238,.08)">Ready to download</div>
+      </div>
+      <div class="receipt">
+        <div class="head"><span class="name">Netflix Key</span><span class="badge key">KEY</span></div>
+        <div class="line"><span>Date</span><span>Oct 29, 2026</span></div>
+        <div class="line"><span>Duration</span><span>1 Day</span></div>
+        <div class="line"><span>Cost</span><span>25 coins</span></div>
+        <div class="key">NFLX-ABCD1234</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Option 4</div>
+    <div class="ttl">Minimal Rows</div>
+    <div class="dsc">No cards — just rows with left accent. Clean.</div>
+    <div class="scroll">
+      <div style="font-size:12px;font-weight:700;margin-bottom:8px">My purchases (3)</div>
+      <div class="minrow" style="border-left:2px solid var(--gold);padding-left:8px">
+        <div class="info"><div class="name">Ghosst Premium V4</div><div class="meta">Oct 31 · 1 Hour · KEY</div></div>
+        <div class="cost">10c</div>
+      </div>
+      <div class="minrow" style="border-left:2px solid var(--green);padding-left:8px">
+        <div class="info"><div class="name">CODM APK</div><div class="meta">Oct 30 · APK · 45MB</div></div>
+        <div class="cost">15c</div>
+      </div>
+      <div class="minrow" style="border-left:2px solid var(--gold);padding-left:8px">
+        <div class="info"><div class="name">Netflix Key</div><div class="meta">Oct 29 · 1 Day · KEY</div></div>
+        <div class="cost">25c</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

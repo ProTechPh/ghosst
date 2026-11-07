@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>More Store Designs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#020408;--panel:#060B12;--border:#1A2A3A;--cyan:#22D3EE;--cyan2:#67E8F9;--gold:#FBBF24;--text:#E8F4F8;--dim:#5A7A8A;--green:#34D399}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#000;color:var(--text);font-family:'Rajdhani','Segoe UI',sans-serif;padding:24px;min-height:100vh}
+  h1{font-family:'Orbitron',sans-serif;font-size:20px;font-weight:900;letter-spacing:.08em;margin-bottom:4px;color:var(--cyan)}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:28px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:24px}
+  .phone{background:linear-gradient(180deg,#060B12,#020408);border:1px solid var(--border);border-radius:28px;padding:16px;overflow:hidden;box-shadow:0 0 60px rgba(34,211,238,.08),0 40px 100px rgba(0,0,0,.9);position:relative;height:620px;display:flex;flex-direction:column}
+  .phone::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(34,211,238,.015) 2px 3px);pointer-events:none}
+  .lab{font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;letter-spacing:.2em;color:var(--cyan);margin-bottom:6px}
+  .ttl{font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;margin-bottom:2px}
+  .dsc{font-size:11px;color:var(--dim);margin-bottom:10px;line-height:1.4}
+  .scroll{flex:1;overflow:auto;padding:4px}
+  .eyebrow{font-size:9px;color:var(--dim);letter-spacing:.2em;text-transform:uppercase;font-weight:700;margin-bottom:4px}
+  .title{font-size:26px;font-weight:900;line-height:1.05}
+  .grad{background:linear-gradient(135deg,var(--cyan),var(--cyan2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .seg{display:flex;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:999px;padding:3px;margin-bottom:12px}
+  .seg button{flex:1;background:transparent;border:none;color:var(--dim);font-size:11px;font-weight:700;padding:6px;border-radius:999px;cursor:pointer}
+  .seg button.on{background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#04212A;box-shadow:0 0 16px rgba(34,211,238,.3)}
+  .bal{background:linear-gradient(135deg,rgba(34,211,238,.08),rgba(6,11,18,.8));border:1px solid rgba(34,211,238,.2);border-radius:16px;padding:12px;margin-bottom:12px;display:flex;align-items:center;gap:10px}
+  .bal .coin{width:36px;height:36px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#FDE68A,#F59E0B 40%,#B45309 80%);box-shadow:0 0 20px rgba(251,191,36,.3);display:grid;place-items:center;font-size:14px;font-weight:900;color:#422006}
+  .bal .info{flex:1}
+  .bal .lbl{font-size:9px;color:var(--dim);letter-spacing:.2em;text-transform:uppercase}
+  .bal .val{font-size:24px;font-weight:900;color:var(--gold);font-family:'Orbitron',sans-serif}
+  .bal .topup{font-size:9px;color:var(--cyan);letter-spacing:.15em;font-weight:700}
+  .card{background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:12px;overflow:hidden;position:relative}
+  .card .img{height:80px;background:linear-gradient(135deg,rgba(34,211,238,.1),rgba(6,11,18,.8));position:relative;display:grid;place-items:center}
+  .card .img .icon{font-size:24px;opacity:.6}
+  .card .idx{position:absolute;top:6px;left:6px;background:rgba(0,0,0,.6);border:1px solid var(--cyan);border-radius:4px;padding:1px 4px;font-size:8px;font-weight:700;color:var(--cyan)}
+  .card .info{padding:8px}
+  .card .name{font-size:12px;font-weight:700;margin-bottom:2px}
+  .card .meta{font-size:9px;color:var(--dim)}
+  .card .price{font-size:10px;color:var(--gold);font-weight:700;margin-top:4px;display:flex;align-items:center;gap:3px}
+  .footer{text-align:center;font-size:9px;color:var(--dim);letter-spacing:.15em;margin-top:8px}
+</style>
+</head>
+<body>
+<h1>More Store Designs (7–12)</h1>
+<p class="sub">Pick a style for the store tab.</p>
+<div class="grid">
+
+  <!-- Option 7: Magazine Editorial -->
+  <div class="phone">
+    <div class="lab">Option 7</div>
+    <div class="ttl">Magazine Editorial</div>
+    <div class="dsc">Big typography, editorial layout. Premium.</div>
+    <div class="scroll">
+      <div style="margin-bottom:16px">
+        <div class="eyebrow">Issue 042 · Store</div>
+        <div style="font-size:36px;font-weight:900;line-height:.95;margin-bottom:8px">Spend<br>coins,<br><span class="grad">claim keys.</span></div>
+        <div style="font-size:11px;color:var(--dim);line-height:1.5">Every claim gives you a fresh, unused license key. Buy APKs and files with your ad coins.</div>
+      </div>
+      <div class="bal"><div class="coin">G</div><div class="info"><div class="lbl">Your balance</div><div class="val">1,240</div></div><div class="topup">EARN ▶</div></div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button style="flex:1;background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#04212A;border:none;border-radius:8px;padding:8px;font-size:11px;font-weight:700;cursor:pointer">Keys</button>
+        <button style="flex:1;background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:8px;padding:8px;font-size:11px;font-weight:700;cursor:pointer">Apps</button>
+      </div>
+      <div style="background:linear-gradient(135deg,rgba(34,211,238,.12),rgba(6,11,18,.9));border:1px solid var(--cyan);border-radius:16px;padding:14px;margin-bottom:10px;position:relative">
+        <div style="position:absolute;top:10px;right:10px;font-size:9px;font-weight:700;color:var(--cyan);letter-spacing:.1em">FEATURED</div>
+        <div style="font-size:36px;margin-bottom:6px">🔑</div>
+        <div style="font-size:15px;font-weight:800;margin-bottom:2px">Premium Key Pack</div>
+        <div style="font-size:10px;color:var(--dim);margin-bottom:8px">License · 5 left</div>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:16px;font-weight:900;color:var(--gold)">🪙 250</div>
+          <button style="background:rgba(34,211,238,.15);border:1px solid var(--cyan);color:var(--cyan);border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer">Claim ▶</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="card"><div class="img"><div class="idx">100</div><span class="icon">🔑</span></div><div class="info"><div class="name">Basic Key</div><div class="meta">License</div><div class="price">🪙 100</div></div></div>
+        <div class="card"><div class="img"><div class="idx">150</div><span class="icon">📱</span></div><div class="info"><div class="name">App Pack</div><div class="meta">Download</div><div class="price">🪙 150</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option 8: Compact Dense -->
+  <div class="phone">
+    <div class="lab">Option 8</div>
+    <div class="ttl">Compact Dense</div>
+    <div class="dsc">More products visible. Efficient.</div>
+    <div class="scroll">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:18px;font-weight:900">Store</div>
+        <div style="background:rgba(251,191,36,.15);border:1px solid var(--gold);border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;color:var(--gold)">🪙 1,240</div>
+      </div>
+      <div class="seg" style="margin-bottom:8px"><button class="on">Keys</button><button>Apps</button></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+        <div style="background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:8px;padding:6px;text-align:center">
+          <div style="font-size:20px;margin-bottom:2px">🔑</div>
+          <div style="font-size:9px;font-weight:700;margin-bottom:1px">Premium</div>
+          <div style="font-size:8px;color:var(--dim)">5 left</div>
+          <div style="font-size:10px;color:var(--gold);font-weight:700;margin-top:3px">🪙 250</div>
+        </div>
+        <div style="background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:8px;padding:6px;text-align:center">
+          <div style="font-size:20px;margin-bottom:2px">🔑</div>
+          <div style="font-size:9px;font-weight:700;margin-bottom:1px">Basic</div>
+          <div style="font-size:8px;color:var(--dim)">12 left</div>
+          <div style="font-size:10px;color:var(--gold);font-weight:700;margin-top:3px">🪙 100</div>
+        </div>
+        <div style="background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:8px;padding:6px;text-align:center">
+          <div style="font-size:20px;margin-bottom:2px">📱</div>
+          <div style="font-size:9px;font-weight:700;margin-bottom:1px">App Pack</div>
+          <div style="font-size:8px;color:var(--dim)">Owned</div>
+          <div style="font-size:10px;color:var(--gold);font-weight:700;margin-top:3px">🪙 150</div>
+        </div>
+        <div style="background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:8px;padding:6px;text-align:center">
+          <div style="font-size:20px;margin-bottom:2px">📦</div>
+          <div style="font-size:9px;font-weight:700;margin-bottom:1px">Bundle</div>
+          <div style="font-size:8px;color:var(--dim)">Sold out</div>
+          <div style="font-size:10px;color:var(--gold);font-weight:700;margin-top:3px">🪙 500</div>
+        </div>
+        <div style="background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:8px;padding:6px;text-align:center">
+          <div style="font-size:20px;margin-bottom:2px">🔑</div>
+          <div style="font-size:9px;font-weight:700;margin-bottom:1px">Elite</div>
+          <div style="font-size:8px;color:var(--dim)">3 left</div>
+          <div style="font-size:10px;color:var(--gold);font-weight:700;margin-top:3px">🪙 300</div>
+        </div>
+        <div style="background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:8px;padding:6px;text-align:center">
+          <div style="font-size:20px;margin-bottom:2px">📱</div>
+          <div style="font-size:9px;font-weight:700;margin-bottom:1px">Tools</div>
+          <div style="font-size:8px;color:var(--dim)">Fresh</div>
+          <div style="font-size:10px;color:var(--gold);font-weight:700;margin-top:3px">🪙 200</div>
+        </div>
+      </div>
+      <div style="margin-top:8px;text-align:center;font-size:9px;color:var(--dim);letter-spacing:.15em">FRESH DROPS · DELIVERED INSTANTLY</div>
+    </div>
+  </div>
+
+  <!-- Option 9: Card Stack -->
+  <div class="phone">
+    <div class="lab">Option 9</div>
+    <div class="ttl">Card Stack</div>
+    <div class="dsc">Overlapping cards, Tinder-like. Fun.</div>
+    <div class="scroll">
+      <div style="text-align:center;margin-bottom:12px">
+        <div class="eyebrow">License store</div>
+        <div style="font-size:22px;font-weight:900">Pick your key</div>
+      </div>
+      <div style="position:relative;height:220px;margin-bottom:16px">
+        <div style="position:absolute;bottom:0;left:8px;right:8px;height:180px;background:rgba(6,11,18,.6);border:1px solid var(--border);border-radius:16px;transform:rotate(-3deg);opacity:.5"></div>
+        <div style="position:absolute;bottom:4px;left:4px;right:4px;height:190px;background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:16px;transform:rotate(2deg);opacity:.7"></div>
+        <div style="position:absolute;bottom:8px;left:0;right:0;height:200px;background:linear-gradient(135deg,rgba(34,211,238,.12),rgba(6,11,18,.9));border:1px solid var(--cyan);border-radius:16px;padding:16px;box-shadow:0 0 40px rgba(34,211,238,.2)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div style="font-size:9px;font-weight:700;color:var(--cyan);letter-spacing:.1em;background:rgba(34,211,238,.15);border:1px solid var(--cyan);border-radius:4px;padding:2px 6px">KEY</div>
+            <div style="font-size:9px;color:var(--dim)">5 left</div>
+          </div>
+          <div style="font-size:60px;text-align:center;margin:10px 0">🔑</div>
+          <div style="font-size:16px;font-weight:800;margin-bottom:2px">Premium Key Pack</div>
+          <div style="font-size:10px;color:var(--dim);margin-bottom:8px">License · Fresh drop</div>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div style="font-size:18px;font-weight:900;color:var(--gold)">🪙 250</div>
+            <button style="background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#04212A;border:none;border-radius:8px;padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer">Claim ▶</button>
+          </div>
+        </div>
+      </div>
+      <div style="text-align:center;font-size:10px;color:var(--dim);margin-bottom:8px">Swipe to browse more</div>
+      <div style="display:flex;gap:8px;justify-content:center">
+        <div style="width:8px;height:8px;border-radius:50%;background:var(--cyan)"></div>
+        <div style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.2)"></div>
+        <div style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.2)"></div>
+        <div style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.2)"></div>
+      </div>
+      <div class="bal" style="margin-top:12px"><div class="coin">G</div><div class="info"><div class="lbl">Balance</div><div class="val">1,240</div></div><div class="topup">EARN ▶</div></div>
+    </div>
+  </div>
+
+  <!-- Option 10: Timeline Store -->
+  <div class="phone">
+    <div class="lab">Option 10</div>
+    <div class="ttl">Timeline Store</div>
+    <div class="dsc">Vertical timeline, newest first. Storytelling.</div>
+    <div class="scroll">
+      <div style="margin-bottom:12px">
+        <div class="eyebrow">Store · New drops</div>
+        <div style="font-size:22px;font-weight:900">Latest arrivals</div>
+      </div>
+      <div style="position:relative;padding-left:20px">
+        <div style="position:absolute;left:6px;top:0;bottom:0;width:2px;background:linear-gradient(180deg,var(--cyan),transparent)"></div>
+        <div style="margin-bottom:12px;position:relative">
+          <div style="position:absolute;left:-17px;top:4px;width:10px;height:10px;border-radius:50%;background:var(--cyan);box-shadow:0 0 12px var(--cyan)"></div>
+          <div style="background:linear-gradient(135deg,rgba(34,211,238,.12),rgba(6,11,18,.9));border:1px solid var(--cyan);border-radius:12px;padding:10px">
+            <div style="font-size:9px;color:var(--cyan);font-weight:700;letter-spacing:.1em;margin-bottom:4px">TODAY · KEY</div>
+            <div style="font-size:13px;font-weight:800;margin-bottom:2px">Premium Key Pack</div>
+            <div style="font-size:9px;color:var(--dim);margin-bottom:6px">5 left · License</div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div style="font-size:14px;font-weight:900;color:var(--gold)">🪙 250</div>
+              <button style="background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#04212A;border:none;border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer">Claim</button>
+            </div>
+          </div>
+        </div>
+        <div style="margin-bottom:12px;position:relative">
+          <div style="position:absolute;left:-17px;top:4px;width:10px;height:10px;border-radius:50%;background:var(--border)"></div>
+          <div style="background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:12px;padding:10px">
+            <div style="font-size:9px;color:var(--dim);font-weight:700;letter-spacing:.1em;margin-bottom:4px">YESTERDAY · APP</div>
+            <div style="font-size:13px;font-weight:800;margin-bottom:2px">App Pack</div>
+            <div style="font-size:9px;color:var(--dim);margin-bottom:6px">Download · Owned</div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div style="font-size:14px;font-weight:900;color:var(--gold)">🪙 150</div>
+              <button style="background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer">Owned ✓</button>
+            </div>
+          </div>
+        </div>
+        <div style="margin-bottom:12px;position:relative">
+          <div style="position:absolute;left:-17px;top:4px;width:10px;height:10px;border-radius:50%;background:var(--border)"></div>
+          <div style="background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:12px;padding:10px;opacity:.6">
+            <div style="font-size:9px;color:var(--dim);font-weight:700;letter-spacing:.1em;margin-bottom:4px">3 DAYS AGO · KEY</div>
+            <div style="font-size:13px;font-weight:800;margin-bottom:2px">Basic Key</div>
+            <div style="font-size:9px;color:var(--dim);margin-bottom:6px">12 left · License</div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div style="font-size:14px;font-weight:900;color:var(--gold)">🪙 100</div>
+              <button style="background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer">Sold out</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="bal" style="margin-top:8px"><div class="coin">G</div><div class="info"><div class="lbl">Balance</div><div class="val">1,240</div></div><div class="topup">EARN ▶</div></div>
+    </div>
+  </div>
+
+  <!-- Option 11: Split Panel -->
+  <div class="phone">
+    <div class="lab">Option 11</div>
+    <div class="ttl">Split Panel</div>
+    <div class="dsc">Left: balance + filters. Right: products.</div>
+    <div class="scroll">
+      <div style="display:flex;gap:8px;height:100%">
+        <div style="width:110px;flex-shrink:0;background:rgba(6,11,18,.8);border:1px solid var(--border);border-radius:12px;padding:10px">
+          <div style="text-align:center;margin-bottom:10px">
+            <div style="width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#FDE68A,#F59E0B 40%,#B45309 80%);display:grid;place-items:center;font-size:14px;font-weight:900;color:#422006;margin:0 auto 4px">G</div>
+            <div style="font-size:16px;font-weight:900;color:var(--gold)">1,240</div>
+            <div style="font-size:8px;color:var(--dim);letter-spacing:.1em">BALANCE</div>
+          </div>
+          <div style="font-size:9px;color:var(--dim);letter-spacing:.1em;margin-bottom:4px;font-weight:700">FILTER</div>
+          <div style="background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#04212A;border-radius:6px;padding:4px 6px;font-size:9px;font-weight:700;text-align:center;margin-bottom:4px">Keys</div>
+          <div style="background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:4px 6px;font-size:9px;font-weight:700;text-align:center;margin-bottom:4px">Apps</div>
+          <div style="background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:4px 6px;font-size:9px;font-weight:700;text-align:center">All</div>
+          <div style="margin-top:10px;font-size:9px;color:var(--dim);letter-spacing:.1em;margin-bottom:4px;font-weight:700">SORT</div>
+          <div style="font-size:9px;color:var(--dim)">Price ↑</div>
+          <div style="font-size:9px;color:var(--cyan)">Price ↓</div>
+          <div style="font-size:9px;color:var(--dim)">Newest</div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+          <div style="background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:10px;padding:8px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+              <div style="font-size:18px">🔑</div>
+              <div style="flex:1"><div style="font-size:11px;font-weight:700">Premium Key</div><div style="font-size:8px;color:var(--dim)">5 left</div></div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div style="font-size:12px;font-weight:900;color:var(--gold)">🪙 250</div>
+              <button style="background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#04212A;border:none;border-radius:4px;padding:3px 8px;font-size:9px;font-weight:700;cursor:pointer">Claim</button>
+            </div>
+          </div>
+          <div style="background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:10px;padding:8px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+              <div style="font-size:18px">🔑</div>
+              <div style="flex:1"><div style="font-size:11px;font-weight:700">Basic Key</div><div style="font-size:8px;color:var(--dim)">12 left</div></div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div style="font-size:12px;font-weight:900;color:var(--gold)">🪙 100</div>
+              <button style="background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#04212A;border:none;border-radius:4px;padding:3px 8px;font-size:9px;font-weight:700;cursor:pointer">Claim</button>
+            </div>
+          </div>
+          <div style="background:rgba(6,11,18,.7);border:1px solid var(--border);border-radius:10px;padding:8px;opacity:.5">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+              <div style="font-size:18px">📦</div>
+              <div style="flex:1"><div style="font-size:11px;font-weight:700">Bundle</div><div style="font-size:8px;color:var(--dim)">Sold out</div></div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div style="font-size:12px;font-weight:900;color:var(--gold)">🪙 500</div>
+              <button style="background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:4px;padding:3px 8px;font-size:9px;font-weight:700;cursor:pointer">Sold out</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option 12: Minimal Luxury -->
+  <div class="phone">
+    <div class="lab">Option 12</div>
+    <div class="ttl">Minimal Luxury</div>
+    <div class="dsc">Black & gold, elegant. Premium feel.</div>
+    <div class="scroll">
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-size:9px;color:#5A5030;letter-spacing:.3em;margin-bottom:8px">STORE</div>
+        <div style="font-size:32px;font-weight:300;color:var(--gold);font-family:'Rajdhani',sans-serif;letter-spacing:-1px">Products</div>
+      </div>
+      <div style="border:1px solid #2A2518;border-radius:4px;padding:12px;margin-bottom:16px;text-align:center">
+        <div style="font-size:9px;color:#5A5030;letter-spacing:.2em;margin-bottom:4px">BALANCE</div>
+        <div style="font-size:28px;font-weight:300;color:var(--gold)">1,240</div>
+        <div style="font-size:9px;color:#5A5030;letter-spacing:.15em;margin-top:4px">EARN ▶</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;justify-content:center">
+        <button style="background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:0;padding:6px 16px;font-size:10px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;cursor:pointer">Keys</button>
+        <button style="background:transparent;border:1px solid #2A2518;color:#5A5030;border-radius:0;padding:6px 16px;font-size:10px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;cursor:pointer">Apps</button>
+      </div>
+      <div style="border:1px solid #2A2518;border-radius:4px;padding:14px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+          <div style="font-size:32px">🔑</div>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:600;color:var(--gold)">Premium Key Pack</div>
+            <div style="font-size:9px;color:#5A5030;letter-spacing:.1em">License · 5 left</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid #2A2518;padding-top:8px">
+          <div style="font-size:16px;font-weight:300;color:var(--gold)">🪙 250</div>
+          <button style="background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:0;padding:6px 14px;font-size:10px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;cursor:pointer">Claim</button>
+        </div>
+      </div>
+      <div style="border:1px solid #2A2518;border-radius:4px;padding:14px;margin-bottom:10px;opacity:.7">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+          <div style="font-size:32px">🔑</div>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:600;color:var(--gold)">Basic Key</div>
+            <div style="font-size:9px;color:#5A5030;letter-spacing:.1em">License · 12 left</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid #2A2518;padding-top:8px">
+          <div style="font-size:16px;font-weight:300;color:var(--gold)">🪙 100</div>
+          <button style="background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:0;padding:6px 14px;font-size:10px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;cursor:pointer">Claim</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Balanced Admin Designs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#050B0E;--panel:#08151A;--border:#1A3740;--cyan:#22D3EE;--cyan2:#67E8F9;--gold:#FBBF24;--text:#F1FAFC;--dim:#8DA6AF;--red:#F43F5E;--green:#34D399}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#020608;color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:24px;min-height:100vh}
+  h1{font-size:20px;font-weight:700;letter-spacing:-.02em;margin-bottom:4px;color:var(--cyan)}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:28px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:24px}
+  .phone{background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:16px;overflow:hidden;box-shadow:0 0 40px rgba(34,211,238,.08),0 30px 80px rgba(0,0,0,.9);position:relative}
+  .phone::before{content:'';position:absolute;inset:0;background:radial-gradient(400px 200px at 50% 0%,rgba(34,211,238,.06),transparent);pointer-events:none}
+  .lab{font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--cyan);margin-bottom:8px}
+  .ttl{font-size:15px;font-weight:700;margin-bottom:4px}
+  .dsc{font-size:12px;color:var(--dim);margin-bottom:14px;line-height:1.5}
+  .stage{height:440px;overflow:auto;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px}
+  .btn{background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#04212A;border:none;border-radius:8px;padding:7px 12px;font-size:11px;font-weight:700;cursor:pointer;box-shadow:0 0 16px rgba(34,211,238,.3)}
+  .btn.ghost{background:rgba(255,255,255,.04);color:var(--text);border:1px solid var(--border);box-shadow:none}
+  .btn.danger{background:transparent;color:var(--red);border:1px solid var(--red);box-shadow:none}
+  .input{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px;width:100%;margin-bottom:8px}
+  .input:focus{outline:none;border-color:var(--cyan)}
+  .card{background:rgba(8,21,26,.7);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;backdrop-filter:blur(8px)}
+  .card.glow{box-shadow:0 0 20px rgba(34,211,238,.1),inset 0 1px 0 rgba(255,255,255,.06)}
+  .row{display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px}
+  .row:last-child{border-bottom:none}
+  .badge{font-size:9px;padding:2px 6px;border-radius:999px;background:rgba(34,211,238,.15);color:var(--cyan);font-weight:600}
+  .badge.key{background:rgba(251,191,36,.15);color:#FBBF24}
+  .badge.apk{background:rgba(52,211,153,.15);color:#34D399}
+  .tabs{display:flex;gap:4px;margin-bottom:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:999px;padding:3px}
+  .tab{flex:1;padding:6px;font-size:10px;font-weight:600;text-align:center;border-radius:999px;color:var(--dim);cursor:pointer;transition:all .2s}
+  .tab.active{background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#04212A;box-shadow:0 0 12px rgba(34,211,238,.3)}
+  .statrow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+  .stat{background:rgba(34,211,238,.06);border:1px solid rgba(34,211,238,.2);border-radius:10px;padding:10px;text-align:center}
+  .stat .v{font-size:18px;font-weight:800;color:var(--cyan)}
+  .stat .l{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-top:2px}
+  .overlay{position:absolute;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(8px)}
+  .dialog{background:rgba(8,21,26,.85);border:1px solid var(--border);border-radius:16px;padding:16px;width:100%;backdrop-filter:blur(12px);box-shadow:0 20px 60px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.06)}
+  .dialog h3{font-size:14px;font-weight:700;margin-bottom:12px}
+  .sec{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin:10px 0 6px;font-weight:600}
+  .mono{font-family:'JetBrains Mono',monospace;font-size:10px}
+</style>
+</head>
+<body>
+<h1>Balanced Admin Designs (M–P)</h1>
+<p class="sub">Matches the nav bar vibe: floating glass, subtle cyan, clean. Pick one.</p>
+<div class="grid">
+
+  <div class="phone">
+    <div class="lab">Option M</div>
+    <div class="ttl">Floating Glass Panels</div>
+    <div class="dsc">Glass cards with soft glow, stat row, sections. Balanced.</div>
+    <div class="stage">
+      <div class="statrow">
+        <div class="stat"><div class="v">24</div><div class="l">Products</div></div>
+        <div class="stat"><div class="v">1540</div><div class="l">Keys</div></div>
+        <div class="stat"><div class="v">3</div><div class="l">Muted</div></div>
+      </div>
+      <div class="card glow">
+        <div class="sec">Announcement</div>
+        <input class="input" placeholder="Title" />
+        <input class="input" placeholder="Message" />
+        <button class="btn" style="width:100%">Send announcement</button>
+      </div>
+      <div class="card">
+        <div class="sec">Muted users (1)</div>
+        <div class="row"><span style="color:var(--red)">●</span><span style="flex:1">troll2@mail.com</span><button class="btn danger" style="padding:4px 8px;font-size:10px">Unmute</button></div>
+      </div>
+      <div class="card">
+        <div class="sec">Products</div>
+        <div class="row"><span style="flex:1">Ghosst Premium V4</span><span class="badge key">KEY</span><button class="btn ghost" style="padding:4px 8px;font-size:10px">Edit</button></div>
+        <div class="row"><span style="flex:1">CODM APK</span><span class="badge apk">APK</span><button class="btn ghost" style="padding:4px 8px;font-size:10px">Edit</button></div>
+        <button class="btn" style="width:100%;margin-top:8px">+ New product</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Option N</div>
+    <div class="ttl">Clean Cards, No Glow</div>
+    <div class="dsc">Soft shadow only, accent underline on active. Minimal.</div>
+    <div class="stage">
+      <div class="tabs">
+        <div class="tab active">Products</div>
+        <div class="tab">Keys</div>
+        <div class="tab">Users</div>
+        <div class="tab">Chat</div>
+        <div class="tab">Settings</div>
+      </div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-size:13px;font-weight:700">Ghosst Premium V4</span>
+          <span class="badge key">KEY</span>
+        </div>
+        <div style="font-size:11px;color:var(--dim);margin-bottom:8px">10 coins · 12/20 stock · 1hr</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn ghost" style="padding:4px 8px;font-size:10px">Edit</button>
+          <button class="btn ghost" style="padding:4px 8px;font-size:10px">Stock</button>
+          <button class="btn danger" style="padding:4px 8px;font-size:10px">Delete</button>
+        </div>
+      </div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-size:13px;font-weight:700">CODM APK</span>
+          <span class="badge apk">APK</span>
+        </div>
+        <div style="font-size:11px;color:var(--dim);margin-bottom:8px">15 coins · v1.2.3 · 45MB</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn ghost" style="padding:4px 8px;font-size:10px">Edit</button>
+          <button class="btn danger" style="padding:4px 8px;font-size:10px">Delete</button>
+        </div>
+      </div>
+      <button class="btn" style="width:100%">+ New product</button>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Option O</div>
+    <div class="ttl">Segmented Tabs + Glass</div>
+    <div class="dsc">Segmented control top, glass content below. Balanced.</div>
+    <div class="stage">
+      <div class="tabs">
+        <div class="tab active">Products</div>
+        <div class="tab">Keys</div>
+        <div class="tab">Users</div>
+        <div class="tab">Chat</div>
+      </div>
+      <div class="card glow">
+        <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;font-weight:600">Announcement</div>
+        <input class="input" placeholder="Title" />
+        <input class="input" placeholder="Message" />
+        <button class="btn" style="width:100%">Send</button>
+      </div>
+      <div class="card">
+        <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;font-weight:600">Muted (1)</div>
+        <div class="row"><span style="color:var(--red)">●</span><span style="flex:1">troll2@mail.com</span><button class="btn danger" style="padding:4px 8px;font-size:10px">Unmute</button></div>
+      </div>
+      <div class="card">
+        <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;font-weight:600">New product</div>
+        <button class="btn ghost" style="width:100%">+ Add product</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="lab">Option P</div>
+    <div class="ttl">Minimal + Accent Border</div>
+    <div class="dsc">No cards — rows with left accent border. Very clean.</div>
+    <div class="stage">
+      <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin:4px 0 6px;font-weight:600">Announcement</div>
+      <div style="border-left:2px solid var(--cyan);padding:8px 10px;margin-bottom:10px;background:rgba(34,211,238,.04);border-radius:0 8px 8px 0">
+        <input class="input" placeholder="Title" style="margin-bottom:6px" />
+        <input class="input" placeholder="Message" style="margin-bottom:6px" />
+        <button class="btn" style="font-size:10px;padding:5px 10px">Send</button>
+      </div>
+      <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin:4px 0 6px;font-weight:600">Products</div>
+      <div style="border-left:2px solid var(--gold);padding:8px 10px;margin-bottom:6px;background:rgba(251,191,36,.04);border-radius:0 8px 8px 0;display:flex;align-items:center;gap:8px">
+        <span style="flex:1;font-size:12px">Ghosst Premium V4</span><span class="badge key">KEY</span><button class="btn ghost" style="padding:3px 6px;font-size:10px">Edit</button>
+      </div>
+      <div style="border-left:2px solid var(--green);padding:8px 10px;margin-bottom:6px;background:rgba(52,211,153,.04);border-radius:0 8px 8px 0;display:flex;align-items:center;gap:8px">
+        <span style="flex:1;font-size:12px">CODM APK</span><span class="badge apk">APK</span><button class="btn ghost" style="padding:3px 6px;font-size:10px">Edit</button>
+      </div>
+      <button class="btn" style="width:100%;margin-top:6px">+ New product</button>
+      <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin:10px 0 6px;font-weight:600">Muted (1)</div>
+      <div style="border-left:2px solid var(--red);padding:8px 10px;background:rgba(244,63,94,.04);border-radius:0 8px 8px 0;display:flex;align-items:center;gap:8px">
+        <span style="flex:1;font-size:12px">troll2@mail.com</span><button class="btn danger" style="padding:3px 6px;font-size:10px">Unmute</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

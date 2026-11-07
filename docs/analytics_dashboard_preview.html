@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Analytics Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#F7F8FA;--panel:#FFFFFF;--border:#E5E7EB;--text:#111827;--dim:#6B7280;--accent:#3B82F6;--green:#10B981;--red:#EF4444;--amber:#F59E0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;display:flex;min-height:100vh}
+  .sidebar{width:220px;background:var(--panel);border-right:1px solid var(--border);padding:20px 16px;flex-shrink:0}
+  .logo{font-size:16px;font-weight:700;margin-bottom:24px;color:var(--accent)}
+  .nav a{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;color:var(--dim);font-size:13px;font-weight:500;text-decoration:none;margin-bottom:2px}
+  .nav a.active{background:rgba(59,130,246,.08);color:var(--accent);font-weight:600}
+  .nav a:hover{background:rgba(0,0,0,.03);color:var(--text)}
+  .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .header{background:var(--panel);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:16px}
+  .search{flex:1;max-width:360px;position:relative}
+  .search input{width:100%;padding:8px 12px 8px 34px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg)}
+  .search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:16px;height:16px;stroke:var(--dim);fill:none;stroke-width:2}
+  .header-right{display:flex;align-items:center;gap:12px;margin-left:auto}
+  .avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#3B82F6,#8B5CF6);display:grid;place-items:center;color:#fff;font-size:12px;font-weight:700}
+  .content{padding:24px;overflow:auto}
+  .title{font-size:20px;font-weight:700;margin-bottom:4px}
+  .subtitle{font-size:13px;color:var(--dim);margin-bottom:20px}
+  .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
+  .kpi{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .kpi .label{font-size:12px;color:var(--dim);font-weight:500;margin-bottom:6px}
+  .kpi .value{font-size:24px;font-weight:700;margin-bottom:4px}
+  .kpi .change{font-size:12px;font-weight:600}
+  .kpi .change.up{color:var(--green)}
+  .kpi .change.down{color:var(--red)}
+  .charts{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:20px}
+  .chart-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .chart-card h3{font-size:14px;font-weight:600;margin-bottom:12px}
+  .area-chart{height:200px;position:relative}
+  .area-chart svg{width:100%;height:100%}
+  .bar-chart{height:200px;display:flex;align-items:flex-end;gap:8px;padding:8px 0}
+  .bar{flex:1;background:var(--accent);border-radius:4px 4px 0 0;min-height:4px;position:relative}
+  .bar-label{position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);font-size:9px;color:var(--dim);white-space:nowrap}
+  .table-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .table-card h3{font-size:14px;font-weight:600;margin-bottom:12px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;padding:10px 12px;color:var(--dim);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border)}
+  td{padding:10px 12px;border-bottom:1px solid #F3F4F6}
+  tr:hover td{background:#F9FAFB}
+  .status{font-size:11px;padding:3px 8px;border-radius:999px;font-weight:600}
+  .status.completed{background:rgba(16,185,129,.1);color:var(--green)}
+  .status.pending{background:rgba(245,158,11,.1);color:var(--amber)}
+  .status.failed{background:rgba(239,68,68,.1);color:var(--red)}
+  @media (max-width:768px){.sidebar{display:none}.kpi-grid{grid-template-columns:1fr 1fr}.charts{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="logo">Analytics</div>
+    <nav class="nav">
+      <a class="active" href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Dashboard</a>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Users</a>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 0 0 7H6"/></svg>Revenue</a>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Messages</a>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+    </nav>
+  </aside>
+  <div class="main">
+    <header class="header">
+      <div class="search">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" placeholder="Search..." />
+      </div>
+      <div class="header-right">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--dim)" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <div class="avatar">JD</div>
+      </div>
+    </header>
+    <div class="content">
+      <div class="title">Dashboard</div>
+      <div class="subtitle">Welcome back, here's what's happening today.</div>
+      <div class="kpi-grid">
+        <div class="kpi">
+          <div class="label">Revenue</div>
+          <div class="value">$48,290</div>
+          <div class="change up">↑ 12.5% vs last month</div>
+        </div>
+        <div class="kpi">
+          <div class="label">Users</div>
+          <div class="value">12,847</div>
+          <div class="change up">↑ 8.2% vs last month</div>
+        </div>
+        <div class="kpi">
+          <div class="label">Conversion rate</div>
+          <div class="value">3.24%</div>
+          <div class="change down">↓ 0.4% vs last month</div>
+        </div>
+        <div class="kpi">
+          <div class="label">Active sessions</div>
+          <div class="value">1,429</div>
+          <div class="change up">↑ 22.1% vs last month</div>
+        </div>
+      </div>
+      <div class="charts">
+        <div class="chart-card">
+          <h3>Revenue trend</h3>
+          <div class="area-chart">
+            <svg viewBox="0 0 500 200" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.3"/>
+                  <stop offset="100%" stop-color="#3B82F6" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,160 L50,140 L100,150 L150,110 L200,120 L250,80 L300,90 L350,60 L400,70 L450,40 L500,50 L500,200 L0,200 Z" fill="url(#areaGrad)"/>
+              <path d="M0,160 L50,140 L100,150 L150,110 L200,120 L250,80 L300,90 L350,60 L400,70 L450,40 L500,50" fill="none" stroke="#3B82F6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3>Comparison</h3>
+          <div class="bar-chart">
+            <div class="bar" style="height:60%"><span class="bar-label">Jan</span></div>
+            <div class="bar" style="height:80%"><span class="bar-label">Feb</span></div>
+            <div class="bar" style="height:45%"><span class="bar-label">Mar</span></div>
+            <div class="bar" style="height:90%"><span class="bar-label">Apr</span></div>
+            <div class="bar" style="height:70%"><span class="bar-label">May</span></div>
+            <div class="bar" style="height:85%"><span class="bar-label">Jun</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="table-card">
+        <h3>Recent activity</h3>
+        <table>
+          <thead><tr><th>User</th><th>Action</th><th>Status</th><th>Time</th></tr></thead>
+          <tbody>
+            <tr><td>Sarah Chen</td><td>Purchased Pro plan</td><td><span class="status completed">Completed</span></td><td>2 min ago</td></tr>
+            <tr><td>Mike Ross</td><td>Updated profile</td><td><span class="status completed">Completed</span></td><td>15 min ago</td></tr>
+            <tr><td>Anna Lee</td><td>Payment failed</td><td><span class="status failed">Failed</span></td><td>1 hr ago</td></tr>
+            <tr><td>Tom Hardy</td><td>Signed up</td><td><span class="status pending">Pending</span></td><td>2 hr ago</td></tr>
+            <tr><td>Lisa Wang</td><td>Cancelled subscription</td><td><span class="status completed">Completed</span></td><td>3 hr ago</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

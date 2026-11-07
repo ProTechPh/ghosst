@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Premium Earn Design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#020408;--panel:#060B12;--border:#1A2A3A;--cyan:#22D3EE;--cyan2:#67E8F9;--gold:#FBBF24;--text:#E8F4F8;--dim:#5A7A8A}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:radial-gradient(ellipse at 50% 0%,rgba(34,211,238,.08),transparent 60%),#000;color:var(--text);font-family:'Rajdhani','Segoe UI',sans-serif;padding:24px;min-height:100vh;display:flex;align-items:center;justify-content:center}
+  .phone{background:linear-gradient(180deg,#060B12,#020408);border:1px solid var(--border);border-radius:28px;padding:20px;width:360px;position:relative;overflow:hidden;box-shadow:0 0 60px rgba(34,211,238,.12),0 40px 100px rgba(0,0,0,.9)}
+  .phone::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(34,211,238,.02) 2px 3px);pointer-events:none}
+  .glow{position:absolute;top:-100px;left:50%;transform:translateX(-50%);width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(34,211,238,.25),transparent 70%);filter:blur(40px);pointer-events:none}
+  .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;position:relative;z-index:2}
+  .title{font-family:'Orbitron',sans-serif;font-size:14px;font-weight:900;letter-spacing:.15em;color:var(--cyan)}
+  .live{background:rgba(52,211,153,.15);border:1px solid var(--green);border-radius:999px;padding:3px 8px;font-size:9px;font-weight:700;color:var(--green);letter-spacing:.1em}
+  .coin3d{width:140px;height:140px;margin:0 auto 16px;position:relative;perspective:800px}
+  .coin-inner{width:100%;height:100%;border-radius:50%;background:radial-gradient(circle at 30% 30%,#FDE68A,#F59E0B 40%,#B45309 80%);box-shadow:0 0 60px rgba(251,191,36,.4),inset 0 -10px 20px rgba(0,0,0,.3),inset 0 10px 20px rgba(255,255,255,.3);display:grid;place-items:center;font-family:'Orbitron',sans-serif;font-size:28px;font-weight:900;color:#422006;text-shadow:0 2px 4px rgba(0,0,0,.3);animation:float 3s ease-in-out infinite;position:relative}
+  .coin-inner::before{content:'';position:absolute;inset:6px;border-radius:50%;border:2px solid rgba(255,255,255,.2);pointer-events:none}
+  @keyframes float{0%,100%{transform:translateY(0) rotateY(0deg)}50%{transform:translateY(-8px) rotateY(10deg)}}
+  .balance{font-size:48px;font-weight:900;color:var(--gold);font-family:'Orbitron',sans-serif;text-shadow:0 0 30px rgba(251,191,36,.4);text-align:center;margin-bottom:2px}
+  .label{font-size:10px;color:var(--dim);letter-spacing:.25em;text-transform:uppercase;text-align:center;margin-bottom:20px}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+  .stat{background:rgba(6,11,18,.8);border:1px solid rgba(34,211,238,.2);border-radius:12px;padding:10px;text-align:center;backdrop-filter:blur(8px)}
+  .stat .v{font-size:16px;font-weight:800;color:var(--cyan)}
+  .stat .l{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-top:2px}
+  .btn{background:linear-gradient(135deg,var(--cyan),var(--cyan2));color:#04212A;border:none;border-radius:12px;padding:14px;font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;box-shadow:0 0 30px rgba(34,211,238,.4),inset 0 1px 0 rgba(255,255,255,.3);width:100%;margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s;position:relative;overflow:hidden}
+  .btn:hover{transform:translateY(-2px);box-shadow:0 0 40px rgba(34,211,238,.6)}
+  .btn.ghost{background:rgba(255,255,255,.04);color:var(--text);border:1px solid var(--border);box-shadow:none}
+  .btn.ghost:hover{background:rgba(255,255,255,.08);transform:none}
+  .progress{height:4px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;margin:8px 0}
+  .progress .fill{height:100%;background:linear-gradient(90deg,var(--cyan),var(--cyan2),var(--gold));border-radius:2px;box-shadow:0 0 8px var(--cyan)}
+  .cooldown{font-size:10px;color:var(--dim);text-align:center;margin-top:4px;letter-spacing:.05em}
+  .steps{margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+  .step{display:flex;gap:10px;padding:6px 0;align-items:center}
+  .step .num{width:22px;height:22px;border-radius:50%;background:rgba(34,211,238,.1);border:1px solid var(--cyan);display:grid;place-items:center;font-size:9px;font-weight:700;color:var(--cyan);flex-shrink:0}
+  .step .txt{flex:1}
+  .step .t{font-size:11px;font-weight:600}
+  .step .s{font-size:9px;color:var(--dim);margin-top:1px}
+</style>
+</head>
+<body>
+  <div class="phone">
+    <div class="glow"></div>
+    <div class="header">
+      <div class="title">EARN COINS</div>
+      <div class="live">● LIVE</div>
+    </div>
+    <div class="coin3d"><div class="coin-inner">G</div></div>
+    <div class="balance">1,240</div>
+    <div class="label">coins ready to spend</div>
+    <div class="stats">
+      <div class="stat"><div class="v">10</div><div class="l">Per ad</div></div>
+      <div class="stat"><div class="v">30s</div><div class="l">Cooldown</div></div>
+    </div>
+    <button class="btn">▶ Watch ad · +10 coins</button>
+    <button class="btn ghost">Watch another ad</button>
+    <div class="progress"><div class="fill" style="width:60%"></div></div>
+    <div class="cooldown">Cooldown: 18s remaining</div>
+    <div class="steps">
+      <div class="step"><div class="num">1</div><div class="txt"><div class="t">Watch an ad</div><div class="s">One rewarded ad pays 10 coins.</div></div></div>
+      <div class="step"><div class="num">2</div><div class="txt"><div class="t">Earn coins</div><div class="s">Verified before crediting.</div></div></div>
+      <div class="step"><div class="num">3</div><div class="txt"><div class="t">Claim keys</div><div class="s">Spend them in the store.</div></div></div>
+    </div>
+  </div>
+</body>
+</html>
