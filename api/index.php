@@ -55,6 +55,7 @@ const ROUTES = [
     ['GET',    '#^/v1/announcements$#',                    'announcements_latest',    'required'],
     ['GET',    '#^/v1/announcements/history$#',            'announcements_list',      'required'],
     ['POST',   '#^/v1/admin/announcements$#',              'announcements_create',    'required'],
+    ['POST',   '#^/v1/admin/chat/mute$#',                  'chat_mute_user',          'required'],
 
     ['POST',   '#^/v1/uploads/presign$#',                  'uploads_presign',         'required'],
     ['POST',   '#^/v1/uploads/complete$#',                 'uploads_complete',        'required'],
