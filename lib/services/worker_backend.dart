@@ -139,6 +139,15 @@ class Backend {
     await _api.post('/admin/chat/mute', data: {'userId': userId, 'muted': muted});
   }
 
+  /// Admin: lahat ng users na naka-mute sa world chat (para sa Admin screen).
+  static Future<List<MutedUser>> mutedUsers() async {
+    final res = await _api.get('/admin/chat/muted');
+    return (res['users'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(MutedUser.fromJson)
+        .toList();
+  }
+
   // ---- profile ----
 
   static Future<int> coins() async {

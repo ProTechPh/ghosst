@@ -26,6 +26,10 @@ class _AdminScreenState extends State<AdminScreen> {
   /// so each key product can show what's available vs already claimed.
   List<StockEntry> keys = [];
 
+  /// Users muted in world chat — ang unmute path ay dito, hindi sa long-press
+  /// (nawawala ang messages pagkatapos ng 24h cleanup).
+  List<MutedUser> mutedUsers = [];
+
   bool loading = true;
   bool busy = false;
   String message = '';
@@ -182,11 +186,13 @@ class _AdminScreenState extends State<AdminScreen> {
         Backend.allProducts(),
         // Best-effort: the panel still works if `keys` can't be read.
         Backend.listKeys().catchError((_) => <StockEntry>[]),
+        Backend.mutedUsers().catchError((_) => <MutedUser>[]),
       ]);
       if (!mounted) return;
       setState(() {
         products = results[0] as List<Product>;
         keys = results[1] as List<StockEntry>;
+        mutedUsers = results[2] as List<MutedUser>;
         loading = false;
       });
     } catch (e) {
@@ -195,6 +201,25 @@ class _AdminScreenState extends State<AdminScreen> {
         message = 'Load failed: $e';
         loading = false;
       });
+    }
+  }
+
+  /// Unmutes a user in world chat, then reloads the panel (the muted list
+  /// is the source of truth — see [mutedUsers]).
+  Future<void> _unmuteUser(MutedUser user) async {
+    setState(() => busy = true);
+    try {
+      await Backend.setChatMuted(user.id, false);
+      if (!mounted) return;
+      await _load();
+      // _load() clears `message` - set the banner after it so it survives.
+      if (!mounted) return;
+      setState(() => message = 'Unmuted ${user.name.isNotEmpty ? user.name : user.email}.');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => message = 'Unmute failed: $e');
+    } finally {
+      if (mounted) setState(() => busy = false);
     }
   }
 
@@ -1638,6 +1663,56 @@ class _AdminScreenState extends State<AdminScreen> {
             ],
           ),
         ),
+        const SizedBox(height: 18),
+
+        // ---- Muted chat users ----
+        SectionLabel('Muted chat users (${mutedUsers.length})'),
+        if (mutedUsers.isEmpty)
+          const Text(
+            'No muted users.',
+            style: TextStyle(color: AppColors.textDim),
+          ),
+        for (final u in mutedUsers)
+          GlowCard(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Row(
+              children: [
+                const Icon(Icons.block, size: 20, color: AppColors.red),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        u.name.isNotEmpty ? u.name : u.email,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${u.email} · ${u.id.length > 8 ? u.id.substring(0, 8) : u.id}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.textDim,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                TextButton(
+                  onPressed: busy ? null : () => _unmuteUser(u),
+                  child: const Text('Unmute'),
+                ),
+              ],
+            ),
+          ),
         const SizedBox(height: 18),
 
         // ---- Products ----
