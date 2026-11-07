@@ -39,6 +39,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _sending = false;
   bool _booting = false;
   bool _unavailable = false;
+  bool _booted = false; // true pagkatapos ng unang snapshot (hindi empty state)
   String? _myUid;
   ChatMessage? _replyTo;
 
@@ -86,7 +87,10 @@ class _ChatScreenState extends State<ChatScreen> {
     _sub = _client.messages().listen(
       (list) {
         if (!mounted) return;
-        setState(() => _messages = list);
+        setState(() {
+          _messages = list;
+          _booted = true;
+        });
       },
       onError: (Object e) {
         debugPrint('[ChatScreen] stream failed: $e');
@@ -146,6 +150,16 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _messageList() {
+    // Hanggang sa unang snapshot: loading, hindi ang empty state — kung hindi,
+    // mukhang "walang history" ang tab sa bagong device habang nag-sign-in.
+    if (!_booted) {
+      return const Center(
+        child: Text(
+          'Naglo-load ng chat…',
+          style: TextStyle(color: AppColors.textDim),
+        ),
+      );
+    }
     if (_messages.isEmpty) {
       return const Center(
         child: Text(

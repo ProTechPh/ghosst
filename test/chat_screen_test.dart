@@ -213,6 +213,22 @@ void main() {
     expect(find.text('Reply to Jeric'), findsNothing);
   });
 
+  testWidgets('shows loading until the first snapshot, then the empty state',
+      (tester) async {
+    final client = _FakeClient();
+    await _pump(tester, client);
+    await tester.pump();
+
+    // Bago ang unang snapshot: loading — hindi ang "Wala pang mensahe."
+    expect(find.text('Naglo-load ng chat…'), findsOneWidget);
+    expect(find.text('Wala pang mensahe. Ikaw ang mauna.'), findsNothing);
+
+    client._controller.add([]);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Wala pang mensahe. Ikaw ang mauna.'), findsOneWidget);
+  });
+
   testWidgets('renders the reply quote inside the bubble', (tester) async {
     final client = _FakeClient();
     await _pump(tester, client);
