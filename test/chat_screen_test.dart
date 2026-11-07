@@ -144,7 +144,7 @@ void main() {
 
   testWidgets('a failed send surfaces the reason in a SnackBar',
       (tester) async {
-    final client = _FakeClient()..sendError = 'Hindi naipadala — subukan ulit.';
+    final client = _FakeClient()..sendError = 'Could not send — try again.';
     await _pump(tester, client);
     await tester.pumpAndSettle();
 
@@ -152,7 +152,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.send));
     await tester.pumpAndSettle();
 
-    expect(find.text('Hindi naipadala — subukan ulit.'), findsOneWidget);
+    expect(find.text('Could not send — try again.'), findsOneWidget);
   });
 
   testWidgets('an inactive tab subscribes only once selected', (tester) async {
@@ -219,14 +219,14 @@ void main() {
     await _pump(tester, client);
     await tester.pump();
 
-    // Bago ang unang snapshot: loading — hindi ang "Wala pang mensahe."
-    expect(find.text('Naglo-load ng chat…'), findsOneWidget);
-    expect(find.text('Wala pang mensahe. Ikaw ang mauna.'), findsNothing);
+    // Bago ang unang snapshot: loading — hindi ang empty state.
+    expect(find.text('Loading chat…'), findsOneWidget);
+    expect(find.text('No messages yet. Be the first.'), findsNothing);
 
     client._controller.add([]);
     await tester.pumpAndSettle();
 
-    expect(find.text('Wala pang mensahe. Ikaw ang mauna.'), findsOneWidget);
+    expect(find.text('No messages yet. Be the first.'), findsOneWidget);
   });
 
   testWidgets('renders the reply quote inside the bubble', (tester) async {

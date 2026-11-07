@@ -162,7 +162,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (!_booted) {
       return const Center(
         child: Text(
-          'Naglo-load ng chat…',
+          'Loading chat…',
           style: TextStyle(color: AppColors.textDim),
         ),
       );
@@ -170,7 +170,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_messages.isEmpty) {
       return const Center(
         child: Text(
-          'Wala pang mensahe. Ikaw ang mauna.',
+          'No messages yet. Be the first.',
           style: TextStyle(color: AppColors.textDim),
         ),
       );
@@ -416,7 +416,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 onSubmitted: (_) => _send(),
                 style: AppText.body.copyWith(fontSize: 14),
                 decoration: InputDecoration(
-                  hintText: 'Mensahe...',
+                  hintText: 'Message...',
                   hintStyle: AppText.caption.copyWith(
                     color: AppColors.textDim,
                   ),

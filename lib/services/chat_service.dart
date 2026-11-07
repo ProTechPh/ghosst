@@ -159,7 +159,7 @@ class ChatService implements ChatClient {
 
     final now = DateTime.now();
     if (!cooldownPassed(_lastSend, now)) {
-      return 'Masyadong mabilis — maghintay ng 5 segundo.';
+      return 'Too fast — wait 5 seconds.';
     }
     _lastSend = now;
 
@@ -184,7 +184,7 @@ class ChatService implements ChatClient {
       return null;
     } catch (e) {
       debugPrint('[ChatService] send failed: $e');
-      return 'Hindi naipadala — subukan ulit.';
+      return 'Could not send — try again.';
     }
   }
 
@@ -201,8 +201,8 @@ class ChatService implements ChatClient {
   /// `null` = valid; string = dahilan. Sinasalamin ang Firestore rules.
   static String? validate(String text) {
     final t = text.trim();
-    if (t.isEmpty) return 'Magsulat ng mensahe.';
-    if (t.length > _maxLength) return 'Hanggang $_maxLength characters lang.';
+    if (t.isEmpty) return 'Write a message.';
+    if (t.length > _maxLength) return 'Maximum $_maxLength characters.';
     return null;
   }
 
