@@ -78,6 +78,11 @@ class Backend {
     _isAdmin = null;
   }
 
+  /// Custom token para sa world chat (503 `chat_disabled` kapag hindi
+  /// naka-setup ang service account sa API).
+  static Future<String> firebaseToken() async =>
+      (await _api.get('/firebase/token'))['token'] as String;
+
   static Future<void> deleteAccount() async {
     await _api.delete('/account', data: {'confirm': 'DELETE'});
     await _session.clear();
