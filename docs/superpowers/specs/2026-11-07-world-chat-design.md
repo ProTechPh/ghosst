@@ -104,6 +104,7 @@ service cloud.firestore {
         && request.resource.data.text is string
         && request.resource.data.text.size() > 0
         && request.resource.data.text.size() <= 500
+        && request.resource.data.text.matches('.*\\S.*')
         && request.resource.data.admin == (request.auth.token.admin == true)
         && request.auth.token.muted == false
         && request.resource.data.ts == request.time

@@ -57,6 +57,11 @@ const ROUTES = [
     ['POST',   '#^/v1/admin/announcements$#',              'announcements_create',    'required'],
     ['POST',   '#^/v1/admin/chat/mute$#',                  'chat_mute_user',          'required'],
     ['GET',    '#^/v1/admin/chat/muted$#',                 'chat_muted_list',         'required'],
+    ['GET',    '#^/v1/admin/banned-words$#',               'banned_words_list',       'required'],
+    ['POST',   '#^/v1/admin/banned-words$#',               'banned_word_add',         'required'],
+    ['DELETE', '#^/v1/admin/banned-words/([\w.-]+)$#',     'banned_word_remove',      'required'],
+    ['GET',    '#^/v1/admin/moderation$#',                 'moderation_get',          'required'],
+    ['POST',   '#^/v1/admin/moderation$#',                 'moderation_save',         'required'],
 
     ['POST',   '#^/v1/uploads/presign$#',                  'uploads_presign',         'required'],
     ['POST',   '#^/v1/uploads/complete$#',                 'uploads_complete',        'required'],
