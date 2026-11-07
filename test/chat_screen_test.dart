@@ -12,14 +12,19 @@ class _FakeClient implements ChatClient {
   @override
   final bool ready;
   final bool signedIn;
+  static const myUid = 'uid-1';
 
   final _controller = StreamController<List<ChatMessage>>();
   final sent = <String>[];
+  final sentReplyTo = <ChatMessage?>[];
   int subscribes = 0;
   String? sendError;
 
   @override
   Future<bool> ensureSignedIn() async => signedIn;
+
+  @override
+  Future<String?> currentUid() async => myUid;
 
   @override
   Stream<List<ChatMessage>> messages() {
@@ -28,8 +33,9 @@ class _FakeClient implements ChatClient {
   }
 
   @override
-  Future<String?> send(String text) async {
+  Future<String?> send(String text, {ChatMessage? replyTo}) async {
     sent.add(text);
+    sentReplyTo.add(replyTo);
     return sendError;
   }
 
@@ -40,17 +46,23 @@ class _FakeClient implements ChatClient {
 }
 
 ChatMessage _msg({
+  String? id,
   String uid = 'uid-1',
   String name = 'Jeric',
   required String text,
   bool admin = false,
+  String? replyName,
+  String? replyText,
 }) {
   return ChatMessage(
+    id: id ?? 'doc-$text',
     uid: uid,
     name: name,
     text: text,
     admin: admin,
     tsMillis: DateTime.now().millisecondsSinceEpoch,
+    replyName: replyName,
+    replyText: replyText,
   );
 }
 
@@ -101,7 +113,7 @@ void main() {
     await tester.pumpAndSettle();
 
     client._controller.add([
-      _msg(text: 'Bagong stock mamaya', admin: true),
+      _msg(uid: 'uid-2', text: 'Bagong stock mamaya', admin: true),
       _msg(uid: 'uid-2', name: '', text: 'Salamat boss'),
     ]);
     // Stream delivery is a microtask; the first pump renders the pre-event
@@ -156,5 +168,68 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(client.subscribes, 1);
+  });
+
+  testWidgets('swipe right opens the reply preview; X cancels it',
+      (tester) async {
+    final client = _FakeClient();
+    await _pump(tester, client);
+    await tester.pumpAndSettle();
+
+    client._controller.add([_msg(uid: 'uid-2', text: 'Hello')]);
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.text('Hello'), const Offset(600, 0));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Reply to Jeric'), findsOneWidget);
+    // Quoted text appears in the preview (in addition to the bubble).
+    expect(find.text('Hello'), findsWidgets);
+
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pumpAndSettle();
+    expect(find.text('Reply to Jeric'), findsNothing);
+  });
+
+  testWidgets('send passes the reply target and clears the preview',
+      (tester) async {
+    final client = _FakeClient();
+    await _pump(tester, client);
+    await tester.pumpAndSettle();
+
+    client._controller.add([_msg(uid: 'uid-2', text: 'Hello')]);
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.text('Hello'), const Offset(600, 0));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'Hi!');
+    await tester.tap(find.byIcon(Icons.send));
+    await tester.pumpAndSettle();
+
+    expect(client.sent, ['Hi!']);
+    expect(client.sentReplyTo.single?.name, 'Jeric');
+    expect(client.sentReplyTo.single?.text, 'Hello');
+    expect(find.text('Reply to Jeric'), findsNothing);
+  });
+
+  testWidgets('renders the reply quote inside the bubble', (tester) async {
+    final client = _FakeClient();
+    await _pump(tester, client);
+    await tester.pumpAndSettle();
+
+    client._controller.add([
+      _msg(
+        uid: 'uid-2',
+        text: 'Sagot ko',
+        replyName: 'Abbie',
+        replyText: 'Tanong niya',
+      ),
+    ]);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Abbie'), findsOneWidget);
+    expect(find.text('Tanong niya'), findsOneWidget);
+    expect(find.text('Sagot ko'), findsOneWidget);
   });
 }

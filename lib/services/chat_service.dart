@@ -11,18 +11,27 @@ import 'worker_backend.dart';
 @immutable
 class ChatMessage {
   const ChatMessage({
+    required this.id,
     required this.uid,
     required this.name,
     required this.text,
     required this.admin,
     required this.tsMillis,
+    this.replyName,
+    this.replyText,
   });
 
+  final String id;
   final String uid;
   final String name;
   final String text;
   final bool admin;
   final int tsMillis;
+
+  /// Snapshot ng ni-re-reply-ang message (null = hindi reply). Ang pangalan
+  /// ay maaaring '' (deleted user) — display-time na 'Deleted user'.
+  final String? replyName;
+  final String? replyText;
 }
 
 /// Ang surface na ginagamit ng [ChatScreen] — fake ito sa widget tests.
@@ -32,8 +41,11 @@ abstract class ChatClient {
   /// Invisible Firebase sign-in; false = chat unavailable.
   Future<bool> ensureSignedIn();
 
+  /// Ang backend UUID ng naka-sign-in na user (null = wala pa).
+  Future<String?> currentUid();
+
   Stream<List<ChatMessage>> messages();
-  Future<String?> send(String text);
+  Future<String?> send(String text, {ChatMessage? replyTo});
   Future<void> signOut();
 }
 
@@ -44,6 +56,7 @@ abstract class ChatClient {
 class ChatService implements ChatClient {
   static const Duration cooldown = Duration(seconds: 5);
   static const int _maxLength = 500;
+  static const int _maxQuote = 200; // rules cap ng replyText
   static const int _pageSize = 50;
 
   static bool _ready = false;
@@ -98,6 +111,17 @@ class ChatService implements ChatClient {
     }
   }
 
+  /// Ang backend UUID ng kasalukuyang user — panukat ng "own" bubble
+  /// (nasa kanan). Null kapag hindi pa naka-sign-in.
+  @override
+  Future<String?> currentUid() async {
+    try {
+      return (await Backend.currentUser())?.id;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Pinakabagong 50 messages, live (Firestore cache = offline queueing).
   @override
   Stream<List<ChatMessage>> messages() {
@@ -111,12 +135,15 @@ class ChatService implements ChatClient {
               for (final doc in snap.docs)
                 if (doc.data()['ts'] is Timestamp)
                   ChatMessage(
+                    id: doc.id,
                     uid: doc.data()['uid'] as String? ?? '',
                     name: doc.data()['name'] as String? ?? '',
                     text: doc.data()['text'] as String? ?? '',
                     admin: doc.data()['admin'] as bool? ?? false,
                     tsMillis:
                         (doc.data()['ts'] as Timestamp).millisecondsSinceEpoch,
+                    replyName: doc.data()['replyName'] as String?,
+                    replyText: doc.data()['replyText'] as String?,
                   ),
             ]);
   }
@@ -124,7 +151,7 @@ class ChatService implements ChatClient {
   /// `null` = naipadala; string = dahilan kung bakit hindi. Validation at
   /// cooldown dito mismo (ang rules ay server-side na bantay pa rin).
   @override
-  Future<String?> send(String text) async {
+  Future<String?> send(String text, {ChatMessage? replyTo}) async {
     final problem = validate(text);
     if (problem != null) return problem;
 
@@ -138,13 +165,20 @@ class ChatService implements ChatClient {
       if (!await ensureSignedIn()) return 'Chat unavailable';
       final user = await Backend.currentUser();
       if (user == null) return 'Not signed in';
-      await FirebaseFirestore.instance.collection('world_chat').add({
+      final data = <String, Object?>{
         'uid': user.id,
         'name': fallbackName(user.name, user.id),
         'text': text.trim(),
         'admin': await Backend.isAdmin(),
         'ts': FieldValue.serverTimestamp(),
-      });
+      };
+      if (replyTo != null) {
+        // Snapshot ng quote — hindi doc reference, kaya walang jump-to-message.
+        data['replyName'] = replyTo.name;
+        data['replyText'] =
+            String.fromCharCodes(replyTo.text.runes.take(_maxQuote));
+      }
+      await FirebaseFirestore.instance.collection('world_chat').add(data);
       return null;
     } catch (e) {
       debugPrint('[ChatService] send failed: $e');

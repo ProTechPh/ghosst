@@ -77,7 +77,8 @@ mechanism.
 Collection `world_chat`, one doc per message, immutable (no client update/delete):
 
 ```
-{ uid: string, name: string ≤40, text: string 1..500, admin: bool, ts: serverTimestamp }
+{ uid: string, name: string ≤40, text: string 1..500, admin: bool, ts: serverTimestamp,
+  replyName: string ≤40 (optional), replyText: string ≤200 (optional) }
 ```
 
 Query: `orderBy('ts', desc) limit 50`, live snapshot stream.
@@ -105,7 +106,12 @@ service cloud.firestore {
         && request.resource.data.text.size() <= 500
         && request.resource.data.admin == (request.auth.token.admin == true)
         && request.resource.data.ts == request.time
-        && request.resource.data.keys().hasOnly(['uid', 'name', 'text', 'ts', 'admin']);
+        && (!('replyName' in request.resource.data)
+          || (request.resource.data.replyName is string
+            && request.resource.data.replyName.size() <= 40
+            && request.resource.data.replyText is string
+            && request.resource.data.replyText.size() <= 200))
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'text', 'ts', 'admin', 'replyName', 'replyText']);
       allow update, delete: if false;
     }
   }
@@ -121,7 +127,9 @@ service cloud.firestore {
   - `firebase_custom_token(string $uid, bool $isAdmin): string` — RS256 JWT exactly
     per Firebase docs: `iss`/`sub` = SA email, `aud =
     https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit`,
-    `iat`, `exp` = iat+3600 (the max), `uid`, `claims {admin: true}` only when admin
+    `iat`, `exp` = iat+3600 (the max), `uid`, `claims {admin: true|false}` —
+    the claim is always present (absent claim = rules error on
+    `request.auth.token.admin`, denying every non-admin write).
     (`admin` is not a reserved claim). Signs with `openssl_sign` + `b64url_encode`,
     mirroring `sign_access_token()`.
   - `firebase_scrub_chat(string $uid): void` — SA-key OAuth2 token (scope
