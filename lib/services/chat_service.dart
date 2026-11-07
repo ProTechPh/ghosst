@@ -85,7 +85,8 @@ class ChatService implements ChatClient {
       final current = FirebaseAuth.instance.currentUser;
       if (current != null) {
         final claims = (await current.getIdTokenResult()).claims ?? const {};
-        if ((claims['admin'] == true) == isAdmin) return true;
+        // Eksaktong tugma, hindi truthy: kulang na claim = kailangang i-mint ulit.
+        if (claims['admin'] == isAdmin) return true;
         await FirebaseAuth.instance.signOut();
       }
       final token = await Backend.firebaseToken();
