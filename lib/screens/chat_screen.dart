@@ -64,6 +64,9 @@ class _ChatScreenState extends State<ChatScreen> {
     if (widget.active && !oldWidget.active) {
       _boot();
       if (widget.isAdmin && _sub != null) _refreshMuted();
+      // Ang mute status ay pwedeng nagbago habang wala sa tab (admin
+      // nag-unmute/mute) — i-recheck sa bawat pagbalik, hindi sa restart.
+      if (_sub != null) _recheckMuted();
     }
   }
 
@@ -72,6 +75,14 @@ class _ChatScreenState extends State<ChatScreen> {
     final users = await _client.mutedUsers();
     if (!mounted) return;
     setState(() => _mutedIds = {for (final u in users) u.id});
+  }
+
+  /// I-recheck ang sariling mute status mula sa backend (fresh /me + re-mint
+  /// kung nagbago) — para makita agad ang unmute/mute nang hindi nagre-restart.
+  Future<void> _recheckMuted() async {
+    final muted = await _client.refreshMuted();
+    if (!mounted) return;
+    if (muted != _muted) setState(() => _muted = muted);
   }
 
   /// Sign in before listening: the rules deny reads to an anonymous client,

@@ -123,7 +123,13 @@ class Backend {
   }
 
   /// Mute status sa world chat, mula sa cached `/me` payload (tulad ng isAdmin).
-  static Future<bool> chatMuted() async {
+  /// Ang `refresh: true` ay binubura ang cache para sa totoong status ngayon —
+  /// kailangan kapag pwedeng nagbago ang mute habang naka-bukas ang app.
+  static Future<bool> chatMuted({bool refresh = false}) async {
+    if (refresh) {
+      _user = null;
+      _chatMuted = null;
+    }
     final cached = _chatMuted;
     if (cached != null) return cached;
     try {

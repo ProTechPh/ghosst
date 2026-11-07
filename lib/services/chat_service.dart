@@ -48,6 +48,12 @@ abstract class ChatClient {
   /// True kapag ang kasalukuyang user ay naka-mute sa chat (token claim).
   Future<bool> isMuted();
 
+  /// Binabasa ang totoong mute status mula sa backend (bypass ang `/me` cache)
+  /// at nire-mint ulit ang token kung nagbago ang claim. Ginagamit pagbalik
+  /// sa Chat tab at bago mag-send kapag naka-mute ang token — para hindi
+  /// kakailanganin ng app restart para ma-reflect ang unmute (o mute).
+  Future<bool> refreshMuted();
+
   /// Admin: i-mute/unmute ang isang user sa chat. `null` = ok; string = dahilan.
   Future<String?> setUserMuted(String uid, bool muted);
 
@@ -161,6 +167,36 @@ class ChatService implements ChatClient {
     }
   }
 
+  /// Ang totoong status ngayon + re-mint kung nagbago ang claim. Sa error
+  /// (offline, PHP down) ay ibinabalik ang huling alam ng token — conservative:
+  /// hindi magkukunwaring unmuted ang user dahil sa network blip.
+  @override
+  Future<bool> refreshMuted() async {
+    if (!_ready) return false;
+    try {
+      final muted = await Backend.chatMuted(refresh: true);
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final claims = (await user.getIdTokenResult()).claims ?? const {};
+        if (claims['muted'] != muted) {
+          await FirebaseAuth.instance.signOut();
+          final token = await Backend.firebaseToken();
+          await FirebaseAuth.instance.signInWithCustomToken(token);
+        }
+      }
+      return muted;
+    } catch (e) {
+      debugPrint('[ChatService] refreshMuted failed: $e');
+      try {
+        final user = FirebaseAuth.instance.currentUser;
+        final claims = (await user?.getIdTokenResult(true))?.claims ?? const {};
+        return claims['muted'] == true;
+      } catch (_) {
+        return false;
+      }
+    }
+  }
+
   /// Admin-only moderation. Ang API ang nagvavalidate ng role; dito lang
   /// SnackBar-ready na string ang ibinabalik.
   @override
@@ -216,6 +252,18 @@ class ChatService implements ChatClient {
 
     try {
       if (!await ensureSignedIn()) return 'Chat unavailable';
+      // Kung naka-mute ang token, i-refresh ang totoong status muna — baka
+      // na-unmute na ang user habang naka-bukas ang app (hindi kailangan ng
+      // restart). Kung naka-mute pa rin, malinaw na dahilan ang ibalik.
+      final fbUser = FirebaseAuth.instance.currentUser;
+      var claimsMuted = false;
+      if (fbUser != null) {
+        final claims = (await fbUser.getIdTokenResult(true)).claims ?? const {};
+        claimsMuted = claims['muted'] == true;
+      }
+      if (claimsMuted && await refreshMuted()) {
+        return 'You are muted in this chat.';
+      }
       final user = await Backend.currentUser();
       if (user == null) return 'Not signed in';
       final data = <String, Object?>{

@@ -25,6 +25,9 @@ class _FakeClient implements ChatClient {
   /// True ay hindi kailanman natatapos ang sign-in (boot timeout test).
   bool hangSignIn = false;
 
+  /// Ang result ng refreshMuted() — hindi-muted default; i-set ng tests.
+  bool refreshMutedResult = false;
+
   final _controller = StreamController<List<ChatMessage>>();
   final sent = <String>[];
   final sentReplyTo = <ChatMessage?>[];
@@ -44,6 +47,9 @@ class _FakeClient implements ChatClient {
 
   @override
   Future<bool> isMuted() async => muted;
+
+  @override
+  Future<bool> refreshMuted() async => refreshMutedResult;
 
   @override
   Future<String?> setUserMuted(String uid, bool muted) async {
@@ -368,6 +374,30 @@ void main() {
 
     expect(find.text('You are muted in this chat.'), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
+  });
+
+  testWidgets('returning to the tab rechecks mute status', (tester) async {
+    final client = _FakeClient(muted: true);
+    await _pump(tester, client);
+    await tester.pumpAndSettle();
+
+    expect(find.text('You are muted in this chat.'), findsOneWidget);
+
+    // The admin unmuted meanwhile; leave the tab and come back.
+    client.refreshMutedResult = false;
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.dark,
+      home: Scaffold(body: ChatScreen(client: client, active: false)),
+    ));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.dark,
+      home: Scaffold(body: ChatScreen(client: client, active: true)),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('You are muted in this chat.'), findsNothing);
+    expect(find.byType(TextField), findsOneWidget);
   });
 
   testWidgets('renders the reply quote inside the bubble', (tester) async {
