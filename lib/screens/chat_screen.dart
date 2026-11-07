@@ -61,6 +61,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _boot() async {
     if (_sub != null || _booting) return;
     _booting = true;
+    final sw = Stopwatch()..start();
     if (widget.client == null) {
       // `main()` starts the init; the tab may mount before it settles. The
       // future never completes in widget tests, so the fallback stays up.
@@ -74,6 +75,7 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
     final uid = await _client.currentUid();
+    debugPrint('[ChatScreen] signed in + subscribing in ${sw.elapsedMilliseconds}ms');
     if (mounted) {
       setState(() {
         _myUid = uid;
@@ -83,10 +85,15 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _subscribe() {
+    final sw = Stopwatch()..start();
     _sub?.cancel();
     _sub = _client.messages().listen(
       (list) {
         if (!mounted) return;
+        if (!_booted) {
+          debugPrint(
+              '[ChatScreen] first snapshot (${list.length} msgs) in ${sw.elapsedMilliseconds}ms');
+        }
         setState(() {
           _messages = list;
           _booted = true;

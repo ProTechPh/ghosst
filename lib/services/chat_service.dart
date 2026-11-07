@@ -90,13 +90,16 @@ class ChatService implements ChatClient {
 
   /// Invisible sign-in gamit ang custom token. Nagre-mint kapag stale ang
   /// admin claim (halimbawa, ginawang admin ang account pagkatapos ng login).
+  /// Ang `isAdmin` ay kukunin lang kapag may existing session na — sa bagong
+  /// device (walang session) hindi ito ginagamit at isang /me round trip
+  /// ang nasasayang kung kukunin ito nang maaga.
   @override
   Future<bool> ensureSignedIn() async {
     if (!_ready) return false;
     try {
-      final isAdmin = await Backend.isAdmin();
       final current = FirebaseAuth.instance.currentUser;
       if (current != null) {
+        final isAdmin = await Backend.isAdmin();
         final claims = (await current.getIdTokenResult()).claims ?? const {};
         // Eksaktong tugma, hindi truthy: kulang na claim = kailangang i-mint ulit.
         if (claims['admin'] == isAdmin) return true;
@@ -112,14 +115,13 @@ class ChatService implements ChatClient {
   }
 
   /// Ang backend UUID ng kasalukuyang user — panukat ng "own" bubble
-  /// (nasa kanan). Null kapag hindi pa naka-sign-in.
+  /// (nasa kanan). Null kapag hindi pa naka-sign-in. Ang Firebase uid ng
+  /// custom-token user AY ang backend UUID (ito ang ibinigay ng PHP), kaya
+  /// walang /me call — zero network.
   @override
   Future<String?> currentUid() async {
-    try {
-      return (await Backend.currentUser())?.id;
-    } catch (_) {
-      return null;
-    }
+    if (!_ready) return null;
+    return FirebaseAuth.instance.currentUser?.uid;
   }
 
   /// Pinakabagong 50 messages, live (Firestore cache = offline queueing).
