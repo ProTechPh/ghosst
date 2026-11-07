@@ -7,25 +7,36 @@ import 'package:ghosst/services/chat_service.dart';
 import 'package:ghosst/theme.dart';
 
 class _FakeClient implements ChatClient {
-  _FakeClient({this.ready = true});
+  _FakeClient({this.ready = true, this.signedIn = true});
 
   @override
   final bool ready;
+  final bool signedIn;
 
   final _controller = StreamController<List<ChatMessage>>();
   final sent = <String>[];
+  int subscribes = 0;
+  String? sendError;
 
   @override
-  Stream<List<ChatMessage>> messages() => _controller.stream;
+  Future<bool> ensureSignedIn() async => signedIn;
+
+  @override
+  Stream<List<ChatMessage>> messages() {
+    subscribes++;
+    return _controller.stream;
+  }
 
   @override
   Future<String?> send(String text) async {
     sent.add(text);
-    return null;
+    return sendError;
   }
 
   @override
   Future<void> signOut() async {}
+
+  void failStream(Object error) => _controller.addError(error);
 }
 
 ChatMessage _msg({
@@ -43,10 +54,14 @@ ChatMessage _msg({
   );
 }
 
-Future<void> _pump(WidgetTester tester, ChatClient client) async {
+Future<void> _pump(
+  WidgetTester tester,
+  ChatClient client, {
+  bool active = true,
+}) async {
   await tester.pumpWidget(MaterialApp(
     theme: AppTheme.dark,
-    home: Scaffold(body: ChatScreen(client: client)),
+    home: Scaffold(body: ChatScreen(client: client, active: active)),
   ));
   await tester.pump();
 }
@@ -58,10 +73,32 @@ void main() {
     expect(find.text('Chat unavailable'), findsOneWidget);
   });
 
+  testWidgets('does not subscribe when sign-in fails', (tester) async {
+    final client = _FakeClient(signedIn: false);
+    await _pump(tester, client);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Chat unavailable'), findsOneWidget);
+    expect(client.subscribes, 0);
+  });
+
+  testWidgets('a dead message stream falls back instead of hanging',
+      (tester) async {
+    final client = _FakeClient();
+    await _pump(tester, client);
+    await tester.pumpAndSettle();
+
+    client.failStream(Exception('permission-denied'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Chat unavailable'), findsOneWidget);
+  });
+
   testWidgets('renders messages, the ADMIN chip, and Deleted user',
       (tester) async {
     final client = _FakeClient();
     await _pump(tester, client);
+    await tester.pumpAndSettle();
 
     client._controller.add([
       _msg(text: 'Bagong stock mamaya', admin: true),
@@ -80,6 +117,7 @@ void main() {
   testWidgets('empty input never sends; typed text does', (tester) async {
     final client = _FakeClient();
     await _pump(tester, client);
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.send));
     await tester.pump();
@@ -90,5 +128,33 @@ void main() {
     await tester.pump();
 
     expect(client.sent, ['  hello  ']);
+  });
+
+  testWidgets('a failed send surfaces the reason in a SnackBar',
+      (tester) async {
+    final client = _FakeClient()..sendError = 'Hindi naipadala — subukan ulit.';
+    await _pump(tester, client);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'hello');
+    await tester.tap(find.byIcon(Icons.send));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Hindi naipadala — subukan ulit.'), findsOneWidget);
+  });
+
+  testWidgets('an inactive tab subscribes only once selected', (tester) async {
+    final client = _FakeClient();
+    await _pump(tester, client, active: false);
+    await tester.pumpAndSettle();
+    expect(client.subscribes, 0);
+
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.dark,
+      home: Scaffold(body: ChatScreen(client: client)),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(client.subscribes, 1);
   });
 }

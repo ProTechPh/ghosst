@@ -28,6 +28,10 @@ class ChatMessage {
 /// Ang surface na ginagamit ng [ChatScreen] — fake ito sa widget tests.
 abstract class ChatClient {
   bool get ready;
+
+  /// Invisible Firebase sign-in; false = chat unavailable.
+  Future<bool> ensureSignedIn();
+
   Stream<List<ChatMessage>> messages();
   Future<String?> send(String text);
   Future<void> signOut();
@@ -73,7 +77,8 @@ class ChatService implements ChatClient {
 
   /// Invisible sign-in gamit ang custom token. Nagre-mint kapag stale ang
   /// admin claim (halimbawa, ginawang admin ang account pagkatapos ng login).
-  static Future<bool> ensureSignedIn() async {
+  @override
+  Future<bool> ensureSignedIn() async {
     if (!_ready) return false;
     try {
       final isAdmin = await Backend.isAdmin();
@@ -166,9 +171,12 @@ class ChatService implements ChatClient {
 
   /// Display name kung meron; kung wala, `Anon-<unang 6 ng uid>` — stable,
   /// hindi PII. Blank name ('' lamang) ay scrub output ng deleted account.
+  /// Naka-cap sa 40 (rules) para hindi permanenteng ma-reject ang send.
   static String fallbackName(String displayName, String uid) {
     final name = displayName.trim();
-    if (name.isNotEmpty) return name;
+    if (name.isNotEmpty) {
+      return String.fromCharCodes(name.runes.take(40));
+    }
     final short = uid.length > 6 ? uid.substring(0, 6) : uid;
     return 'Anon-$short';
   }

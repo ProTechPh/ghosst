@@ -589,7 +589,7 @@ class _HomeShellState extends State<HomeShell> {
         onGoToStore: () => setState(() => tab = 0),
       ),
       const AnnouncementsScreen(embedded: true),
-      const ChatScreen(embedded: true),
+      ChatScreen(embedded: true, active: tab == 4),
       if (isAdmin) AdminScreen(onAnnouncementSent: _refresh),
     ];
 

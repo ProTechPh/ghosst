@@ -36,6 +36,17 @@ void main() {
     test('treats a whitespace-only name as blank', () {
       expect(ChatService.fallbackName('   ', 'abcdef01-2345'), 'Anon-abcdef');
     });
+
+    test('truncates a long display name to the 40-char rules cap', () {
+      expect(ChatService.fallbackName('x' * 45, 'abcdef01-2345'), 'x' * 40);
+    });
+
+    test('never splits a surrogate pair when truncating', () {
+      final name = '😀' * 41;
+      final out = ChatService.fallbackName(name, 'abcdef01-2345');
+      expect(out.runes.length, 40);
+      expect(out.runes.every((r) => r == 0x1F600), isTrue);
+    });
   });
 
   group('ChatService.cooldownPassed', () {

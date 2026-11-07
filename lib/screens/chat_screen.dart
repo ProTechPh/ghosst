@@ -9,13 +9,23 @@ import '../theme.dart';
 /// is no Firebase login UI. Fail-open: when Firebase is not configured or
 /// offline, the tab says "Chat unavailable" instead of breaking the shell.
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key, this.embedded = true, this.client});
+  const ChatScreen({
+    super.key,
+    this.embedded = true,
+    this.client,
+    this.active = true,
+  });
 
   /// True when shown as a shell tab (the shell supplies the bar).
   final bool embedded;
 
   /// Injectable for tests; defaults to [ChatService].
   final ChatClient? client;
+
+  /// True when this tab is the selected one. IndexedStack builds every tab,
+  /// so the listener waits for the first visit instead of billing a read on
+  /// every app open (Spark daily cap).
+  final bool active;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -27,30 +37,55 @@ class _ChatScreenState extends State<ChatScreen> {
   StreamSubscription<List<ChatMessage>>? _sub;
   List<ChatMessage> _messages = const [];
   bool _sending = false;
+  bool _booting = false;
+  bool _unavailable = false;
 
   @override
   void initState() {
     super.initState();
-    if (_client.ready) {
-      _subscribe();
-    } else if (widget.client == null) {
+    if (widget.active) _boot();
+  }
+
+  @override
+  void didUpdateWidget(ChatScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) _boot();
+  }
+
+  /// Sign in before listening: the rules deny reads to an anonymous client,
+  /// and a denied snapshot listener never recovers. Failures show the same
+  /// fallback as a dead Firebase init.
+  Future<void> _boot() async {
+    if (_sub != null || _booting) return;
+    _booting = true;
+    if (widget.client == null) {
       // `main()` starts the init; the tab may mount before it settles. The
       // future never completes in widget tests, so the fallback stays up.
-      ChatService.started.then((ready) async {
-        if (!mounted || !ready) return;
-        await ChatService.ensureSignedIn();
-        if (!mounted) return;
-        setState(_subscribe);
-      });
+      await ChatService.started;
     }
+    if (!mounted) return;
+    _booting = false;
+    if (!_client.ready) return;
+    if (!await _client.ensureSignedIn()) {
+      if (mounted) setState(() => _unavailable = true);
+      return;
+    }
+    if (mounted) setState(_subscribe);
   }
 
   void _subscribe() {
     _sub?.cancel();
-    _sub = _client.messages().listen((list) {
-      if (!mounted) return;
-      setState(() => _messages = list);
-    });
+    _sub = _client.messages().listen(
+      (list) {
+        if (!mounted) return;
+        setState(() => _messages = list);
+      },
+      onError: (Object e) {
+        debugPrint('[ChatScreen] stream failed: $e');
+        _sub?.cancel();
+        if (mounted) setState(() => _unavailable = true);
+      },
+    );
   }
 
   @override
@@ -76,7 +111,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final body = !_client.ready
+    final body = _unavailable || !_client.ready
         ? const Center(
             child: Text(
               'Chat unavailable',
