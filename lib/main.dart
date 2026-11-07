@@ -13,6 +13,7 @@ import 'premium.dart';
 import 'screens/adblock_screen.dart';
 import 'screens/admin_screen.dart';
 import 'screens/announcements_screen.dart';
+import 'screens/chat_screen.dart';
 import 'screens/earn_screen.dart';
 import 'screens/landing_screen.dart';
 import 'screens/my_keys_screen.dart';
@@ -24,6 +25,7 @@ import 'screens/wallet_screen.dart';
 import 'services/ad_service.dart';
 import 'services/adblock_detector.dart';
 import 'services/announcement_store.dart';
+import 'services/chat_service.dart';
 import 'services/worker_backend.dart';
 import 'services/consent_service.dart';
 import 'services/distribution.dart';
@@ -37,6 +39,7 @@ import 'theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   unawaited(Push.init());
+  unawaited(ChatService.init());
   await Distribution.initialize();
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
@@ -280,6 +283,7 @@ class _HomeState extends State<Home> {
     super.initState();
     // A dead refresh token drops the UI back to the landing page.
     Backend.onSignedOut = () {
+      unawaited(ChatService().signOut());
       if (mounted) setState(() => signedIn = false);
     };
     _load();
@@ -302,6 +306,7 @@ class _HomeState extends State<Home> {
     try {
       await Backend.signOut();
     } catch (_) {}
+    await ChatService().signOut();
     if (mounted) setState(() => signedIn = false);
   }
 
@@ -584,6 +589,7 @@ class _HomeShellState extends State<HomeShell> {
         onGoToStore: () => setState(() => tab = 0),
       ),
       const AnnouncementsScreen(embedded: true),
+      const ChatScreen(embedded: true),
       if (isAdmin) AdminScreen(onAnnouncementSent: _refresh),
     ];
 
@@ -592,6 +598,7 @@ class _HomeShellState extends State<HomeShell> {
       _NavItem(Icons.play_circle_outline, Icons.play_circle, 'Earn'),
       _NavItem(Icons.shopping_bag_outlined, Icons.shopping_bag, 'Purchases'),
       _NavItem(Icons.campaign_outlined, Icons.campaign, 'News'),
+      _NavItem(Icons.chat_bubble_outline, Icons.chat_bubble, 'Chat'),
       if (isAdmin)
         _NavItem(
           Icons.admin_panel_settings_outlined,
