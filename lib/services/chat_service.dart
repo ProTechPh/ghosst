@@ -143,6 +143,20 @@ class ChatService implements ChatClient {
     }
   }
 
+  /// Warm-up: itinatag ang Firestore connection (at auth) habang nasa
+  /// splash/login pa ang user, para pagbukas ng Chat tab ay mabilis ang unang
+  /// snapshot. Isang read lang (limit 1) kada app start — negligible sa quota.
+  /// Best-effort: anumang failure ay bale-wala.
+  static Future<void> warm() async {
+    if (!_ready) return;
+    try {
+      if (FirebaseAuth.instance.currentUser == null) return;
+      await FirebaseFirestore.instance.collection('world_chat').limit(1).get();
+    } catch (_) {
+      // Warm lang ito — ang totoong boot ang magdedesisyon.
+    }
+  }
+
   /// Ang backend UUID ng kasalukuyang user — panukat ng "own" bubble
   /// (nasa kanan). Null kapag hindi pa naka-sign-in. Ang Firebase uid ng
   /// custom-token user AY ang backend UUID (ito ang ibinigay ng PHP), kaya

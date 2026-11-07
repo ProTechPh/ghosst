@@ -39,7 +39,7 @@ import 'theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   unawaited(Push.init());
-  unawaited(ChatService.init());
+  unawaited(ChatService.init().then((_) => ChatService.warm()));
   await Distribution.initialize();
   FlutterError.onError = (details) {
     FlutterError.presentError(details);

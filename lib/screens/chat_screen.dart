@@ -117,15 +117,16 @@ class _ChatScreenState extends State<ChatScreen> {
     }
     final uid = await _client.currentUid();
     final muted = await _client.isMuted();
-    final mutedUsers = widget.isAdmin ? await _client.mutedUsers() : const [];
     debugPrint('[ChatScreen] signed in + subscribing in ${sw.elapsedMilliseconds}ms');
     if (mounted) {
       setState(() {
         _myUid = uid;
         _muted = muted;
-        _mutedIds = {for (final u in mutedUsers) u.id};
         _subscribe();
       });
+      // Ang muted list ay dialog state lang — pagkatapos ng subscribe para
+      // hindi nito i-delay ang unang paint.
+      if (widget.isAdmin) _refreshMuted();
     }
   }
 
