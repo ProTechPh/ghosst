@@ -120,6 +120,7 @@ class _SignUpState extends State<SignUp> {
               onSubmitted: (_) => FocusScope.of(context).nextFocus(),
               decoration: authDecoration(
                 hint: 'Your display name',
+                label: 'Name',
                 icon: Icons.person_outline_rounded,
               ),
             ),
@@ -135,6 +136,7 @@ class _SignUpState extends State<SignUp> {
               onSubmitted: (_) => FocusScope.of(context).nextFocus(),
               decoration: authDecoration(
                 hint: 'you@example.com',
+                label: 'Email',
                 icon: Icons.alternate_email_rounded,
                 errorText: emailErr,
               ),
@@ -151,6 +153,7 @@ class _SignUpState extends State<SignUp> {
               onSubmitted: (_) => _submit(),
               decoration: authDecoration(
                 hint: 'Your password',
+                label: 'Password',
                 icon: Icons.lock_outline_rounded,
                 errorText: passErr,
                 helperText: 'Minimum 8 characters',

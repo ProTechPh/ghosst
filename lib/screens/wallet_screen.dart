@@ -52,25 +52,28 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 
   Future<void> _load() async {
-    var balance = _balance;
     var balanceError = '';
-    try {
-      balance = await Backend.coins();
-    } catch (e) {
+    // Balance alongside the other fetches — serial await cost one
+    // round-trip before the wallet could paint.
+    final coinsFuture = Backend.coins().then<int>((v) => v).catchError((
+      Object e,
+    ) {
       // A failed fetch must not read as "0 coins" — that flips the UI to
       // "not enough" everywhere.
       balanceError = '$e';
-    }
+      return _balance;
+    });
     final results = await Future.wait<Object>([
+      coinsFuture,
       Backend.myClaims().catchError((_) => <Claim>[]),
       Backend.myAdRewards().catchError((_) => <AdReward>[]),
     ]);
     if (!mounted) return;
     setState(() {
-      _balance = balance;
+      _balance = results[0] as int;
       _balanceError = balanceError;
-      _claims = results[0] as List<Claim>;
-      _rewards = results[1] as List<AdReward>;
+      _claims = results[1] as List<Claim>;
+      _rewards = results[2] as List<AdReward>;
       _loading = false;
     });
   }
@@ -80,7 +83,6 @@ class _WalletScreenState extends State<WalletScreen> {
   /// balance + total spent reconstructs lifetime earnings even while the
   /// `ad_rewards` collection stays server-side only.
   int get _earnedEst => _balance + _spent;
-
 
   List<_Tx> get _timeline {
     final entries = <_Tx>[
@@ -312,17 +314,13 @@ class _WalletScreenState extends State<WalletScreen> {
               const SizedBox(height: AppSpace.lg),
               Row(
                 children: [
-                  Expanded(
-                    child: _glassStat('Spent', groupDigits(_spent)),
-                  ),
+                  Expanded(child: _glassStat('Spent', groupDigits(_spent))),
                   const SizedBox(width: AppSpace.sm),
                   Expanded(
                     child: _glassStat('Earned', groupDigits(_earnedEst)),
                   ),
                   const SizedBox(width: AppSpace.sm),
-                  Expanded(
-                    child: _glassStat('Keys', '${_claims.length}'),
-                  ),
+                  Expanded(child: _glassStat('Keys', '${_claims.length}')),
                 ],
               ),
             ],
@@ -356,10 +354,7 @@ class _WalletScreenState extends State<WalletScreen> {
           const SizedBox(height: 2),
           Text(
             value,
-            style: AppText.figure.copyWith(
-              fontSize: 15,
-              color: AppColors.text,
-            ),
+            style: AppText.figure.copyWith(fontSize: 15, color: AppColors.text),
           ),
         ],
       ),
@@ -401,7 +396,6 @@ class _WalletScreenState extends State<WalletScreen> {
       ],
     );
   }
-
 
   // ---- activity ---------------------------------------------------------
 

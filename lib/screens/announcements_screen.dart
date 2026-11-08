@@ -7,13 +7,22 @@ import '../theme.dart';
 /// Every announcement still published, so a user can re-read the ones the
 /// banner already rotated out.
 class AnnouncementsScreen extends StatefulWidget {
-  const AnnouncementsScreen({super.key, this.load, this.embedded = false});
+  const AnnouncementsScreen({
+    super.key,
+    this.load,
+    this.embedded = false,
+    this.active = true,
+  });
 
   /// Injectable for tests; defaults to the API.
   final Future<List<Announcement>> Function()? load;
 
   /// True when shown as a shell tab (the shell supplies the bar).
   final bool embedded;
+
+  /// False when hidden inside `IndexedStack` — defers the fetch until the
+  /// tab is first opened (same gate as `ChatScreen`/`MyKeysScreen`).
+  final bool active;
 
   @override
   State<AnnouncementsScreen> createState() => _AnnouncementsScreenState();
@@ -26,7 +35,15 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    // IndexedStack mounts every tab at once — skip the fetch for a hidden
+    // tab so shell open does not pay for News when the user never taps it.
+    if (widget.active) _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant AnnouncementsScreen old) {
+    super.didUpdateWidget(old);
+    if (widget.active && !old.active) _load();
   }
 
   Future<void> _load() async {
@@ -44,7 +61,10 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
         ? const Center(child: CircularProgressIndicator())
         : items.isEmpty
         ? const Center(
-            child: Text("There's no announcement yet.", style: TextStyle(color: AppColors.textDim)),
+            child: Text(
+              "There's no announcement yet.",
+              style: TextStyle(color: AppColors.textDim),
+            ),
           )
         : ListView.separated(
             padding: const EdgeInsets.fromLTRB(
@@ -94,7 +114,10 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(a.title, style: AppText.subtitle.copyWith(fontSize: 15)),
+                          Text(
+                            a.title,
+                            style: AppText.subtitle.copyWith(fontSize: 15),
+                          ),
                           if (a.createdAt.isNotEmpty) ...[
                             const SizedBox(height: 2),
                             Text(

@@ -146,6 +146,10 @@ class _ScrollRevealState extends State<ScrollReveal> {
 
   @override
   Widget build(BuildContext context) {
+    // Reduced motion: no slide/fade, content is just there.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return widget.child;
+    }
     return AnimatedSlide(
       offset: _revealed ? Offset.zero : widget.offset,
       duration: kMotionSlow,
@@ -280,7 +284,7 @@ class Eyebrow extends StatelessWidget {
       child: Text(
         text.toUpperCase(),
         style: TextStyle(
-          fontSize: 10,
+          fontSize: 10.5,
           fontWeight: FontWeight.w700,
           letterSpacing: 2,
           height: 1.2,
@@ -442,7 +446,9 @@ class _IslandButtonState extends State<IslandButton> {
                       ? Border.all(color: Colors.white.withValues(alpha: 0.14))
                       : null,
                 ),
-                child: Icon(widget.icon, size: 15, color: labelColor),
+                child: ExcludeSemantics(
+                  child: Icon(widget.icon, size: AppIcon.sm, color: labelColor),
+                ),
               ),
             ),
           ),
@@ -479,11 +485,18 @@ class _IslandButtonState extends State<IslandButton> {
 // ---------------------------------------------------------------------------
 
 class Pressable extends StatefulWidget {
-  const Pressable({super.key, this.onTap, this.child, this.scale = 0.98});
+  const Pressable({
+    super.key,
+    this.onTap,
+    this.child,
+    this.scale = 0.98,
+    this.semanticLabel,
+  });
 
   final VoidCallback? onTap;
   final Widget? child;
   final double scale;
+  final String? semanticLabel;
 
   @override
   State<Pressable> createState() => _PressableState();
@@ -495,17 +508,22 @@ class _PressableState extends State<Pressable> {
   @override
   Widget build(BuildContext context) {
     final enabled = widget.onTap != null;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: enabled ? (_) => setState(() => _down = true) : null,
-      onTapUp: enabled ? (_) => setState(() => _down = false) : null,
-      onTapCancel: enabled ? () => setState(() => _down = false) : null,
-      onTap: widget.onTap,
-      child: AnimatedScale(
-        scale: _down && enabled ? widget.scale : 1,
-        duration: kMotionPress,
-        curve: kPremiumCurve,
-        child: widget.child,
+    return Semantics(
+      button: enabled,
+      enabled: enabled,
+      label: widget.semanticLabel,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: enabled ? (_) => setState(() => _down = true) : null,
+        onTapUp: enabled ? (_) => setState(() => _down = false) : null,
+        onTapCancel: enabled ? () => setState(() => _down = false) : null,
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: _down && enabled ? widget.scale : 1,
+          duration: kMotionPress,
+          curve: kPremiumCurve,
+          child: widget.child,
+        ),
       ),
     );
   }
@@ -556,7 +574,18 @@ class _SkeletonState extends State<Skeleton>
   late final AnimationController _shimmer = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1400),
-  )..repeat();
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _shimmer.stop();
+      _shimmer.value = 0;
+    } else if (!_shimmer.isAnimating) {
+      _shimmer.repeat();
+    }
+  }
 
   @override
   void dispose() {
@@ -566,6 +595,17 @@ class _SkeletonState extends State<Skeleton>
 
   @override
   Widget build(BuildContext context) {
+    // Reduced motion: static placeholder, no shimmer loop.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return Container(
+        width: widget.width,
+        height: widget.height,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(widget.radius),
+          color: Colors.white.withValues(alpha: 0.08),
+        ),
+      );
+    }
     return AnimatedBuilder(
       animation: _shimmer,
       builder: (context, _) => Container(
@@ -631,7 +671,7 @@ class StatCell extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 16, color: tone),
+              ExcludeSemantics(child: Icon(icon, size: AppIcon.sm, color: tone)),
               const SizedBox(width: AppSpace.xs + 2),
             ],
             Flexible(
@@ -701,6 +741,10 @@ class AnimatedCounter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Reduced motion: show the final value, no count-up.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return Text('$prefix${groupDigits(value)}$suffix', style: style);
+    }
     return TweenAnimationBuilder<int>(
       tween: IntTween(begin: 0, end: value),
       duration: duration,
@@ -740,10 +784,12 @@ class _GrainPainter extends CustomPainter {
   final double opacity;
 
   // Deterministic normalised scatter, generated once for the whole app.
+  // 1100 dots at 3.5% alpha still reads as film grain; 2600 was overdraw
+  // on every resize on low-end GPUs.
   static final List<Offset> _dots = () {
     final rng = math.Random(1337);
     return List<Offset>.generate(
-      2600,
+      1100,
       (_) => Offset(rng.nextDouble(), rng.nextDouble()),
     );
   }();

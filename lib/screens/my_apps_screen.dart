@@ -136,6 +136,9 @@ class _MyAppsScreenState extends State<MyAppsScreen> {
         width: 44,
         height: 44,
         fit: BoxFit.cover,
+        // 44px slot at 2x.
+        cacheWidth: 88,
+        cacheHeight: 88,
         errorBuilder: (c, e, s) => fallback,
       ),
     );
@@ -159,9 +162,7 @@ class _MyAppsScreenState extends State<MyAppsScreen> {
       body: Stack(
         children: [
           const MeshBackground(),
-          const Positioned.fill(
-            child: IgnorePointer(child: TableSurface()),
-          ),
+          const Positioned.fill(child: IgnorePointer(child: TableSurface())),
           if (loading)
             _skeleton()
           else if (error.isNotEmpty)

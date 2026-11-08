@@ -306,7 +306,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                         : p.isApk
                                         ? Icons.android_rounded
                                         : Icons.insert_drive_file_rounded,
-                                    color: AppColors.cyan.withValues(alpha: 0.55),
+                                    color: AppColors.cyan.withValues(
+                                      alpha: 0.55,
+                                    ),
                                     size: 48,
                                   ),
                                 ),
@@ -314,6 +316,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             : Image.network(
                                 Backend.imageUrl(p.imageIds.first, width: 300),
                                 fit: BoxFit.cover,
+                                // 132px slot at 2x.
+                                cacheWidth: 264,
+                                cacheHeight: 264,
                               ),
                       ),
                     ),
@@ -322,7 +327,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SizedBox(height: MediaQuery.paddingOf(context).top + AppSpace.sm),
+                          SizedBox(
+                            height:
+                                MediaQuery.paddingOf(context).top + AppSpace.sm,
+                          ),
                           Text(
                             p.isApk
                                 ? 'ANDROID APP'
@@ -457,6 +465,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                 Image.network(
                                   'https://i.ytimg.com/vi/$_ytId/hqdefault.jpg',
                                   fit: BoxFit.cover,
+                                  // hqdefault is 480x360 native; decode no larger.
+                                  cacheWidth: 480,
+                                  cacheHeight: 360,
                                   errorBuilder: (context, error, stack) =>
                                       const ColoredBox(color: Colors.black),
                                 ),
@@ -599,8 +610,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   Widget _glassBack(BuildContext context) {
     return Container(
-      width: 44,
-      height: 44,
+      width: kTouchMin,
+      height: kTouchMin,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: AppColors.bg.withValues(alpha: 0.55),
@@ -612,7 +623,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         onPressed: () => Navigator.of(context).maybePop(),
         icon: const Icon(
           Icons.arrow_back_rounded,
-          size: 20,
+          size: AppIcon.md,
           color: AppColors.text,
         ),
       ),
@@ -906,5 +917,4 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       ),
     );
   }
-
 }

@@ -78,22 +78,24 @@ class CardFrame extends StatelessWidget {
         borderRadius: BorderRadius.circular(radius),
         boxShadow: [
           // Floating drop shadow so every card lifts off the page.
+          // Cheaper blurs (was 40/24/32) — large blurRadius costs GPU
+          // per card per scroll frame on low-end devices.
           BoxShadow(
             color: AppColors.primary.withValues(alpha: .18),
-            blurRadius: 40,
+            blurRadius: 28,
             spreadRadius: -4,
             offset: const Offset(0, 16),
           ),
           BoxShadow(
             color: Colors.black.withValues(alpha: .50),
-            blurRadius: 24,
+            blurRadius: 18,
             spreadRadius: -8,
             offset: const Offset(0, 12),
           ),
           if (glow)
             BoxShadow(
               color: edgeColor(tier).withValues(alpha: .45),
-              blurRadius: 32,
+              blurRadius: 24,
               spreadRadius: -2,
             ),
         ],

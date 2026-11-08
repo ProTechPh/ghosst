@@ -33,10 +33,18 @@ class _MyKeysScreenState extends State<MyKeysScreen> {
   /// productId -> YouTube tutorial URL (optional), same best-effort rules.
   Map<String, String> productYt = {};
 
+  /// First-load flag: first activation must show skeleton/error, later
+  /// activations just refresh silently. Combines with the active-gate below
+  /// so opening the app does not fire claims+art fetches for a hidden tab.
+  bool _hasLoaded = false;
+
   @override
   void initState() {
     super.initState();
-    _load();
+    // IndexedStack mounts every tab at once — loading here spends network
+    // (claims + one product request per unique id) on tabs the user may
+    // never open. Load only when this tab is the visible one.
+    if (widget.active) _load();
   }
 
   @override
@@ -44,7 +52,7 @@ class _MyKeysScreenState extends State<MyKeysScreen> {
     super.didUpdateWidget(old);
     // IndexedStack keeps this tab's data forever — re-read whenever the tab
     // becomes visible again, so a key claimed after sign-in shows up.
-    if (widget.active && !old.active) _load(silent: true);
+    if (widget.active && !old.active) _load(silent: _hasLoaded);
   }
 
   Future<void> _load({bool silent = false}) async {
@@ -81,6 +89,7 @@ class _MyKeysScreenState extends State<MyKeysScreen> {
       }
 
       if (!mounted) return;
+      _hasLoaded = true;
       setState(() {
         claims = c;
         productArt = art;
@@ -425,7 +434,9 @@ class _MyKeysScreenState extends State<MyKeysScreen> {
                       ),
                     ),
                     child: Icon(
-                      c.isDownload ? Icons.download_rounded : Icons.copy_rounded,
+                      c.isDownload
+                          ? Icons.download_rounded
+                          : Icons.copy_rounded,
                       size: 16,
                       color: AppColors.cyan,
                     ),

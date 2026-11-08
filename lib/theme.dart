@@ -74,6 +74,21 @@ class AppRadius {
   static const double pill = 999;
 }
 
+/// Icon scale — one size per hierarchy level, never ad-hoc numbers.
+class AppIcon {
+  AppIcon._();
+
+  static const double xs = 13;
+  static const double sm = 16;
+  static const double md = 20;
+  static const double lg = 24;
+  static const double xl = 30;
+}
+
+/// Minimum touch target (Android 48dp / iOS 44pt) — hit areas must reach
+/// this even when the visual is smaller. Use SizedBox/Container constraints.
+const double kTouchMin = 48;
+
 /// Type scale. Sizes, weights, heights and tracking are set here once so the
 /// app reads as one deliberate type system, not per-screen guesses.
 ///
@@ -355,31 +370,37 @@ class LogoBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.34),
-            blurRadius: size * 0.45,
-            spreadRadius: 1,
-          ),
-          // Inner top highlight — light comes from above.
-          BoxShadow(
-            color: Colors.white.withValues(alpha: 0.10),
-            offset: const Offset(0, 1),
-            blurRadius: 1,
-            blurStyle: BlurStyle.inner,
-          ),
-        ],
-      ),
+    // Decorative — always paired with adjacent "Ghosst"/"GHOSST" text.
+    return ExcludeSemantics(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.34),
+              blurRadius: size * 0.45,
+              spreadRadius: 1,
+            ),
+            // Inner top highlight — light comes from above.
+            BoxShadow(
+              color: Colors.white.withValues(alpha: 0.10),
+              offset: const Offset(0, 1),
+              blurRadius: 1,
+              blurStyle: BlurStyle.inner,
+            ),
+          ],
+        ),
       child: ClipOval(
         child: Image.asset(
           'assets/images/logo.jpg',
           fit: BoxFit.cover,
+          // 2x retina — the 250KB source decoded at full size for a 28px badge
+          // on every frame of the app bar / nav.
+          cacheWidth: (size * 2).round(),
+          cacheHeight: (size * 2).round(),
           errorBuilder: (context, error, stackTrace) => Container(
             decoration: const BoxDecoration(
               gradient: kNeonGradient,
@@ -396,6 +417,7 @@ class LogoBadge extends StatelessWidget {
               ),
             ),
           ),
+        ),
         ),
       ),
     );
@@ -579,9 +601,10 @@ class GlowCard extends StatelessWidget {
         border: Border.all(color: AppColors.border),
         boxShadow: [
           // One light source, above: a soft cyan-tinted cast, never pure black.
+          // Cheaper blurs (was 30/18) — same lift, less GPU per card.
           BoxShadow(
             color: AppColors.primary.withValues(alpha: glow ? 0.18 : 0.08),
-            blurRadius: glow ? 30 : 18,
+            blurRadius: glow ? 22 : 14,
             spreadRadius: -6,
             offset: const Offset(0, 10),
           ),
@@ -627,7 +650,7 @@ class NeonPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: color),
+          ExcludeSemantics(child: Icon(icon, size: AppIcon.xs, color: color)),
           const SizedBox(width: AppSpace.xs),
           Text(
             label,
@@ -680,10 +703,12 @@ class CoinPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.monetization_on_rounded,
-            size: 16,
-            color: Color(0xFF422006),
+          const ExcludeSemantics(
+            child: Icon(
+              Icons.monetization_on_rounded,
+              size: AppIcon.sm,
+              color: Color(0xFF422006),
+            ),
           ),
           const SizedBox(width: AppSpace.xs + 2),
           Text(
@@ -700,7 +725,19 @@ class CoinPill extends StatelessWidget {
       ),
     );
     if (onTap == null) return pill;
-    return GestureDetector(onTap: onTap, child: pill);
+    // 48dp hit area even though the visual pill is ~30dp tall.
+    return Semantics(
+      button: true,
+      label: 'Wallet, $coins coins',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: SizedBox(
+          height: kTouchMin,
+          child: Center(child: pill),
+        ),
+      ),
+    );
   }
 }
 
@@ -753,7 +790,9 @@ class EmptyState extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: Icon(icon, size: 30, color: AppColors.primary),
+                child: ExcludeSemantics(
+                  child: Icon(icon, size: AppIcon.xl, color: AppColors.primary),
+                ),
               ),
             ),
             const SizedBox(height: AppSpace.lg),

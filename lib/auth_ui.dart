@@ -217,7 +217,8 @@ class AuthPanel extends StatelessWidget {
   }
 }
 
-/// Uppercase micro-label above an input.
+/// Uppercase micro-label above an input. Visual only — the field itself
+/// carries the same text as its semantics label (see [authDecoration]).
 class AuthFieldLabel extends StatelessWidget {
   const AuthFieldLabel(this.text, {super.key});
 
@@ -227,13 +228,15 @@ class AuthFieldLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.sm),
-      child: Text(
-        text.toUpperCase(),
-        style: AppText.caption.copyWith(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.6,
-          color: AppColors.textDim,
+      child: ExcludeSemantics(
+        child: Text(
+          text.toUpperCase(),
+          style: AppText.caption.copyWith(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.6,
+            color: AppColors.textDim,
+          ),
         ),
       ),
     );
@@ -242,16 +245,20 @@ class AuthFieldLabel extends StatelessWidget {
 
 /// Icon, hint and inline error in one place — the border/error styling is
 /// inherited from the theme, so screens never rebuild OutlineInputBorders.
+/// [label] is the screen-reader name so the separate [AuthFieldLabel] visual
+/// does not duplicate announcements.
 InputDecoration authDecoration({
   required String hint,
   required IconData icon,
   String? errorText,
   String? helperText,
   Widget? suffixIcon,
+  String? label,
 }) {
   return InputDecoration(
     hintText: hint,
-    prefixIcon: Icon(icon, size: 19),
+    labelText: label,
+    prefixIcon: ExcludeSemantics(child: Icon(icon, size: AppIcon.md)),
     suffixIcon: suffixIcon,
     errorText: errorText,
     helperText: helperText,
@@ -264,10 +271,34 @@ InputDecoration authDecoration({
 }
 
 /// Form-level failure (wrong password, email taken) above the submit button.
-class AuthErrorBox extends StatelessWidget {
+/// Takes focus on failure so the error summary is the next thing announced.
+class AuthErrorBox extends StatefulWidget {
   const AuthErrorBox({super.key, required this.message});
 
   final String message;
+
+  @override
+  State<AuthErrorBox> createState() => _AuthErrorBoxState();
+}
+
+class _AuthErrorBoxState extends State<AuthErrorBox> {
+  late final FocusNode _focusNode = FocusNode();
+
+  @override
+  void didUpdateWidget(covariant AuthErrorBox oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.message.isNotEmpty && widget.message != oldWidget.message) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _focusNode.requestFocus();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -275,34 +306,44 @@ class AuthErrorBox extends StatelessWidget {
       duration: kMotionBase,
       curve: kPremiumCurve,
       alignment: Alignment.topCenter,
-      child: message.isEmpty
+      child: widget.message.isEmpty
           ? const SizedBox(width: double.infinity)
-          : Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(top: AppSpace.lg),
-              padding: const EdgeInsets.all(AppSpace.md),
-              decoration: BoxDecoration(
-                color: AppColors.red.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(AppRadius.input),
-                border: Border.all(
-                  color: AppColors.red.withValues(alpha: 0.35),
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.error_outline,
-                    size: 18,
-                    color: AppColors.red,
-                  ),
-                  const SizedBox(width: AppSpace.sm),
-                  Expanded(
-                    child: Text(
-                      message,
-                      style: AppText.caption.copyWith(color: AppColors.red),
+          : Focus(
+              focusNode: _focusNode,
+              canRequestFocus: true,
+              child: Semantics(
+                liveRegion: true,
+                label: widget.message,
+                child: Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(top: AppSpace.lg),
+                  padding: const EdgeInsets.all(AppSpace.md),
+                  decoration: BoxDecoration(
+                    color: AppColors.red.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(AppRadius.input),
+                    border: Border.all(
+                      color: AppColors.red.withValues(alpha: 0.35),
                     ),
                   ),
-                ],
+                  child: Row(
+                    children: [
+                      const ExcludeSemantics(
+                        child: Icon(
+                          Icons.error_outline,
+                          size: AppIcon.sm,
+                          color: AppColors.red,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpace.sm),
+                      Expanded(
+                        child: Text(
+                          widget.message,
+                          style: AppText.caption.copyWith(color: AppColors.red),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
     );
@@ -343,7 +384,12 @@ class AuthSubmit extends StatelessWidget {
                 children: [
                   Text(label),
                   const SizedBox(width: AppSpace.sm),
-                  const Icon(Icons.arrow_forward_rounded, size: 18),
+                  const ExcludeSemantics(
+                    child: Icon(
+                      Icons.arrow_forward_rounded,
+                      size: AppIcon.sm,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -361,19 +407,27 @@ class _BackButton extends StatelessWidget {
     return Pressable(
       onTap: onTap,
       scale: 0.92,
-      child: Container(
-        width: 40,
-        height: 40,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: AppColors.surface.withValues(alpha: 0.55),
-          borderRadius: BorderRadius.circular(AppRadius.input),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: const Icon(
-          Icons.arrow_back_rounded,
-          size: 19,
-          color: AppColors.text,
+      semanticLabel: 'Back',
+      child: SizedBox(
+        // 48dp hit area, 40dp visual.
+        width: kTouchMin,
+        height: kTouchMin,
+        child: Container(
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppColors.surface.withValues(alpha: 0.55),
+            borderRadius: BorderRadius.circular(AppRadius.input),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: const ExcludeSemantics(
+            child: Icon(
+              Icons.arrow_back_rounded,
+              size: AppIcon.md,
+              color: AppColors.text,
+            ),
+          ),
         ),
       ),
     );

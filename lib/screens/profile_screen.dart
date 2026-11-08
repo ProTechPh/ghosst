@@ -14,7 +14,8 @@ import '../services/distribution.dart';
 import '../services/play_store.dart';
 import '../theme.dart';
 import 'my_apps_screen.dart';
-import 'announcements_screen.dart';import 'wallet_screen.dart';
+import 'announcements_screen.dart';
+import 'wallet_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
@@ -54,23 +55,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _load() async {
-    var coins = _coins;
     var coinsError = '';
-    try {
-      coins = await Backend.coins();
-    } catch (e) {
+    // Balance alongside the other fetches — serial await cost one
+    // round-trip before the profile could paint.
+    final coinsFuture = Backend.coins().then<int>((v) => v).catchError((
+      Object e,
+    ) {
       coinsError = '$e';
-    }
+      return _coins;
+    });
     final results = await Future.wait<Object?>([
+      coinsFuture,
       Backend.currentUser().catchError((_) => null),
       Backend.myClaims().catchError((_) => <Claim>[]),
     ]);
     if (!mounted) return;
     setState(() {
-      _user = results[0] as AppUser?;
-      _coins = coins;
+      _coins = results[0] as int;
+      _user = results[1] as AppUser?;
       _coinsError = coinsError;
-      _claims = results[1] as List<Claim>;
+      _claims = results[2] as List<Claim>;
       _loading = false;
     });
   }
@@ -234,9 +238,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _openAnnouncements() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const AnnouncementsScreen()));
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const AnnouncementsScreen()),
+    );
   }
 
   void _openAppOwned() {

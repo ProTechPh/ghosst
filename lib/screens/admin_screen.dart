@@ -166,19 +166,22 @@ class _AdminScreenState extends State<AdminScreen> {
                           return;
                         }
                         setD(() => searching = true);
-                        searchDebounce = Timer(const Duration(milliseconds: 400), () async {
-                          try {
-                            final rows = await Backend.searchUsers(q);
-                            if (ctx.mounted) {
-                              setD(() {
-                                searchResults = rows;
-                                searching = false;
-                              });
+                        searchDebounce = Timer(
+                          const Duration(milliseconds: 400),
+                          () async {
+                            try {
+                              final rows = await Backend.searchUsers(q);
+                              if (ctx.mounted) {
+                                setD(() {
+                                  searchResults = rows;
+                                  searching = false;
+                                });
+                              }
+                            } catch (_) {
+                              if (ctx.mounted) setD(() => searching = false);
                             }
-                          } catch (_) {
-                            if (ctx.mounted) setD(() => searching = false);
-                          }
-                        });
+                          },
+                        );
                       },
                     ),
                     if (searching)
@@ -411,7 +414,10 @@ class _AdminScreenState extends State<AdminScreen> {
       await _load();
       // _load() clears `message` - set the banner after it so it survives.
       if (!mounted) return;
-      setState(() => message = 'Unmuted ${user.name.isNotEmpty ? user.name : user.email}.');
+      setState(
+        () => message =
+            'Unmuted ${user.name.isNotEmpty ? user.name : user.email}.',
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => message = 'Unmute failed: $e');
@@ -480,7 +486,9 @@ class _AdminScreenState extends State<AdminScreen> {
     final title = announcementTitle.text.trim();
     final text = announcementBody.text.trim();
     if (title.isEmpty || text.isEmpty) {
-      setState(() => message = 'Announcement failed: title and body are required.');
+      setState(
+        () => message = 'Announcement failed: title and body are required.',
+      );
       return;
     }
     setState(() => busy = true);
@@ -600,8 +608,9 @@ class _AdminScreenState extends State<AdminScreen> {
     editYt.text = p.youtubeUrl;
     editVersion.text = p.version;
     editFileSize.text = p.fileSize;
-    editDurations.text = [for (final d in p.durations) '${d.label}: ${d.cost}']
-        .join('\n');
+    editDurations.text = [
+      for (final d in p.durations) '${d.label}: ${d.cost}',
+    ].join('\n');
     var type = p.type;
     // MediaFire links are admin-only. Fetch in the background so the dialog
     // opens instantly; saving is gated on [linkLoaded] so a slow/failed fetch
@@ -611,16 +620,18 @@ class _AdminScreenState extends State<AdminScreen> {
     editLink.text = '';
     if (!mounted) return;
     void Function(void Function()) setDialogState = (_) {};
-    Backend.appFileFor(p.id).then((v) {
-      if (!mounted) return;
-      editLink.text = v;
-      linkLoaded = true;
-      if (dialogOpen) setDialogState(() {});
-    }).catchError((_) {
-      if (!mounted) return;
-      linkLoaded = false;
-      if (dialogOpen) setDialogState(() {});
-    });
+    Backend.appFileFor(p.id)
+        .then((v) {
+          if (!mounted) return;
+          editLink.text = v;
+          linkLoaded = true;
+          if (dialogOpen) setDialogState(() {});
+        })
+        .catchError((_) {
+          if (!mounted) return;
+          linkLoaded = false;
+          if (dialogOpen) setDialogState(() {});
+        });
     var remoteIds = <String>[...p.imageIds];
     var localPaths = <String>[];
 
@@ -831,6 +842,9 @@ class _AdminScreenState extends State<AdminScreen> {
                                   fit: BoxFit.cover,
                                   width: 66,
                                   height: 66,
+                                  // 66px thumb at 2x.
+                                  cacheWidth: 132,
+                                  cacheHeight: 132,
                                   errorBuilder: (c, e, s) => Container(
                                     color: AppColors.surfaceHigh,
                                     child: const Icon(
@@ -853,6 +867,9 @@ class _AdminScreenState extends State<AdminScreen> {
                                   fit: BoxFit.cover,
                                   width: 66,
                                   height: 66,
+                                  // 66px thumb at 2x.
+                                  cacheWidth: 132,
+                                  cacheHeight: 132,
                                   errorBuilder: (c, e, s) => Container(
                                     color: AppColors.surfaceHigh,
                                     child: const Icon(
@@ -1179,17 +1196,24 @@ class _AdminScreenState extends State<AdminScreen> {
     /// Re-reads server-side totals for all pools and overall counts.
     Future<void> reloadCounts() async {
       try {
-        final all = await Backend.countKeys(p.id);
-        final used = await Backend.countKeys(p.id, usedOnly: true);
+        // Parallel — serial awaits cost 2+N round-trips per stock refresh.
+        final results = await Future.wait<int>([
+          Backend.countKeys(p.id),
+          Backend.countKeys(p.id, usedOnly: true),
+          ...p.durations.map(
+            (d) => Backend.countAvailableKeys(p.id, duration: d.label),
+          ),
+        ]);
+        final all = results[0];
+        final used = results[1];
         final dCounts = <String, int>{};
-        if (p.hasDurations) {
-          for (final d in p.durations) {
-            final c = await Backend.countAvailableKeys(p.id, duration: d.label);
-            if (c >= 0) {
-              dCounts[d.label] = c;
-            } else {
-              dCounts[d.label] = avail.where((k) => k.duration == d.label).length;
-            }
+        for (var i = 0; i < p.durations.length; i++) {
+          final d = p.durations[i];
+          final c = results[i + 2];
+          if (c >= 0) {
+            dCounts[d.label] = c;
+          } else {
+            dCounts[d.label] = avail.where((k) => k.duration == d.label).length;
           }
         }
         if (open) {
@@ -1238,10 +1262,10 @@ class _AdminScreenState extends State<AdminScreen> {
         usedOnly ? 'Delete $count used key$plural?' : 'Delete all $count keys?',
         usedOnly
             ? 'Every claimed key of "${p.name}" is erased from the database — '
-                'the stock list stays tidy while buyers keep the keys they '
-                'already received. This cannot be undone.'
+                  'the stock list stays tidy while buyers keep the keys they '
+                  'already received. This cannot be undone.'
             : 'Every key of "${p.name}" — used and unused — is erased from '
-                'the database. This cannot be undone.',
+                  'the database. This cannot be undone.',
       );
       if (!ok || !open) return;
 
@@ -1268,8 +1292,8 @@ class _AdminScreenState extends State<AdminScreen> {
         await loadFreshStock();
         if (open && failed > 0) {
           refresh?.call(
-            () => bulkErr =
-                '$failed row(s) could not be deleted — run it again.',
+            () =>
+                bulkErr = '$failed row(s) could not be deleted — run it again.',
           );
         }
       } catch (e) {
@@ -1297,7 +1321,9 @@ class _AdminScreenState extends State<AdminScreen> {
           final hasCounts = totalKeys != null && usedTotal != null;
           final claimedTotal = hasCounts ? usedTotal! : claimed.length;
           final availTotal = hasCounts ? totalKeys! - usedTotal! : avail.length;
-          final allTotal = hasCounts ? totalKeys! : avail.length + claimed.length;
+          final allTotal = hasCounts
+              ? totalKeys!
+              : avail.length + claimed.length;
 
           final poolAvail = p.hasDurations && filterPool
               ? avail.where((k) => k.duration == keyDuration).toList()
@@ -1389,7 +1415,8 @@ class _AdminScreenState extends State<AdminScreen> {
                     final skippedMsg = res.skipped > 0
                         ? ' (${res.skipped} existing skipped)'
                         : '';
-                    addErr = 'Added ${res.added} of ${lines.length} keys$skippedMsg — '
+                    addErr =
+                        'Added ${res.added} of ${lines.length} keys$skippedMsg — '
                         '${res.failed} failed'
                         '${res.lastError.isEmpty ? '' : ' (${_trimErr(res.lastError)})'}. '
                         'Failed keys were kept in the text box for retry.';
@@ -1587,7 +1614,8 @@ class _AdminScreenState extends State<AdminScreen> {
                         ],
                       ],
                     ),
-                    if (poolAvail.isNotEmpty && poolAvail.length < poolTotal) ...[
+                    if (poolAvail.isNotEmpty &&
+                        poolAvail.length < poolTotal) ...[
                       const SizedBox(height: 2),
                       Text(
                         'Newest ${poolAvail.length} of $poolTotal listed.',
@@ -1602,8 +1630,8 @@ class _AdminScreenState extends State<AdminScreen> {
                         poolTotal > 0
                             ? '$poolTotal in the database — older than loaded view.'
                             : (p.hasDurations && filterPool
-                                ? 'No keys in $keyDuration pool.'
-                                : 'No keys in stock.'),
+                                  ? 'No keys in $keyDuration pool.'
+                                  : 'No keys in stock.'),
                         style: const TextStyle(
                           color: AppColors.textDim,
                           fontSize: 13,
@@ -1673,7 +1701,8 @@ class _AdminScreenState extends State<AdminScreen> {
                       ),
                     const SizedBox(height: 14),
                     SectionLabel('Claimed ($claimedTotal)'),
-                    if (claimed.isNotEmpty && claimed.length < claimedTotal) ...[
+                    if (claimed.isNotEmpty &&
+                        claimed.length < claimedTotal) ...[
                       const SizedBox(height: 2),
                       Text(
                         'Newest ${claimed.length} of $claimedTotal listed.',
@@ -1809,7 +1838,15 @@ class _AdminScreenState extends State<AdminScreen> {
     children: [
       ClipRRect(
         borderRadius: BorderRadius.circular(12),
-        child: Image.network(path, width: 66, height: 66, fit: BoxFit.cover),
+        child: Image.network(
+          path,
+          width: 66,
+          height: 66,
+          fit: BoxFit.cover,
+          // 66px thumb at 2x.
+          cacheWidth: 132,
+          cacheHeight: 132,
+        ),
       ),
       Positioned(
         right: 3,
@@ -1899,9 +1936,7 @@ class _AdminScreenState extends State<AdminScreen> {
               ],
             ),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: AppColors.primary.withValues(alpha: 0.3),
-            ),
+            border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
           ),
           child: Row(
             children: [
@@ -1912,8 +1947,11 @@ class _AdminScreenState extends State<AdminScreen> {
                   gradient: kNeonGradient,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.admin_panel_settings,
-                    color: Color(0xFF04212A), size: 24),
+                child: const Icon(
+                  Icons.admin_panel_settings,
+                  color: Color(0xFF04212A),
+                  size: 24,
+                ),
               ),
               const SizedBox(width: 12),
               const Expanded(
@@ -1945,7 +1983,11 @@ class _AdminScreenState extends State<AdminScreen> {
         // Dashboard KPIs
         Row(
           children: [
-            _dashTile('Products', '${products.length}', Icons.inventory_2_outlined),
+            _dashTile(
+              'Products',
+              '${products.length}',
+              Icons.inventory_2_outlined,
+            ),
             const SizedBox(width: 8),
             _dashTile('Keys', '${keys.length}', Icons.vpn_key_outlined),
             const SizedBox(width: 8),
@@ -1982,7 +2024,9 @@ class _AdminScreenState extends State<AdminScreen> {
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
                               Container(
-                                height: (availCount[p.id] ?? 0).clamp(4, 70).toDouble(),
+                                height: (availCount[p.id] ?? 0)
+                                    .clamp(4, 70)
+                                    .toDouble(),
                                 decoration: BoxDecoration(
                                   gradient: kNeonGradient,
                                   borderRadius: BorderRadius.circular(4),
@@ -2102,40 +2146,41 @@ class _AdminScreenState extends State<AdminScreen> {
           icon: Icons.campaign_outlined,
           child: Column(
             children: [
-        // ---- Announcement ----
-        SectionLabel('Announcement'),
-        GlowCard(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: announcementTitle,
-                maxLength: 120,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  hintText: 'Title (e.g. New stock: Netflix)',
-                  counterText: '',
+              // ---- Announcement ----
+              SectionLabel('Announcement'),
+              GlowCard(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: announcementTitle,
+                      maxLength: 120,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(
+                        hintText: 'Title (e.g. New stock: Netflix)',
+                        counterText: '',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: announcementBody,
+                      maxLines: 3,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(
+                        hintText:
+                            'Message shown in the app and in the notification',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: busy ? null : _sendAnnouncement,
+                      child: const Text('Send announcement'),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: announcementBody,
-                maxLines: 3,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  hintText: 'Message shown in the app and in the notification',
-                ),
-              ),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: busy ? null : _sendAnnouncement,
-                child: const Text('Send announcement'),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 18),
+              const SizedBox(height: 18),
             ],
           ),
         ),
@@ -2145,66 +2190,66 @@ class _AdminScreenState extends State<AdminScreen> {
           icon: Icons.block,
           child: Column(
             children: [
-        // ---- Moderators ----
-        SectionLabel('Moderators (${moderators.length})'),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: _manageModerators,
-            icon: const Icon(Icons.shield_outlined),
-            label: const Text('Manage moderators'),
-          ),
-        ),
-        const SizedBox(height: 8),
-        // ---- Muted chat users ----
-        SectionLabel('Muted chat users (${mutedUsers.length})'),
-        if (mutedUsers.isEmpty)
-          const Text(
-            'No muted users.',
-            style: TextStyle(color: AppColors.textDim),
-          ),
-        for (final u in mutedUsers)
-          GlowCard(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-            child: Row(
-              children: [
-                const Icon(Icons.block, size: 20, color: AppColors.red),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              // ---- Moderators ----
+              SectionLabel('Moderators (${moderators.length})'),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _manageModerators,
+                  icon: const Icon(Icons.shield_outlined),
+                  label: const Text('Manage moderators'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              // ---- Muted chat users ----
+              SectionLabel('Muted chat users (${mutedUsers.length})'),
+              if (mutedUsers.isEmpty)
+                const Text(
+                  'No muted users.',
+                  style: TextStyle(color: AppColors.textDim),
+                ),
+              for (final u in mutedUsers)
+                GlowCard(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  child: Row(
                     children: [
-                      Text(
-                        u.name.isNotEmpty ? u.name : u.email,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
+                      const Icon(Icons.block, size: 20, color: AppColors.red),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              u.name.isNotEmpty ? u.name : u.email,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              '${u.email} · ${u.id.length > 8 ? u.id.substring(0, 8) : u.id}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.textDim,
+                                fontSize: 12.5,
+                              ),
+                            ),
+                          ],
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 3),
-                      Text(
-                        '${u.email} · ${u.id.length > 8 ? u.id.substring(0, 8) : u.id}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.textDim,
-                          fontSize: 12.5,
-                        ),
+                      const SizedBox(width: 12),
+                      TextButton(
+                        onPressed: busy ? null : () => _unmuteUser(u),
+                        child: const Text('Unmute'),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                TextButton(
-                  onPressed: busy ? null : () => _unmuteUser(u),
-                  child: const Text('Unmute'),
-                ),
-              ],
-            ),
-          ),
-        const SizedBox(height: 18),
+              const SizedBox(height: 18),
             ],
           ),
         ),
@@ -2214,60 +2259,62 @@ class _AdminScreenState extends State<AdminScreen> {
           icon: Icons.gavel,
           child: Column(
             children: [
-        // ---- Banned words ----
-        SectionLabel('Banned words (${bannedWords.length})'),
-        if (bannedWords.isEmpty)
-          const Text(
-            'No banned words.',
-            style: TextStyle(color: AppColors.textDim),
-          ),
-        for (final w in bannedWords)
-          GlowCard(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-            child: Row(
-              children: [
-                const Icon(Icons.block, size: 20, color: AppColors.red),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    w.word,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+              // ---- Banned words ----
+              SectionLabel('Banned words (${bannedWords.length})'),
+              if (bannedWords.isEmpty)
+                const Text(
+                  'No banned words.',
+                  style: TextStyle(color: AppColors.textDim),
+                ),
+              for (final w in bannedWords)
+                GlowCard(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.block, size: 20, color: AppColors.red),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          w.word,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      TextButton(
+                        onPressed: busy ? null : () => _deleteBannedWord(w.id),
+                        child: const Text('Delete'),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                TextButton(
-                  onPressed: busy ? null : () => _deleteBannedWord(w.id),
-                  child: const Text('Delete'),
-                ),
-              ],
-            ),
-          ),
-        const SizedBox(height: 12),
-        GlowCard(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: bannedWordInput,
-                  textCapitalization: TextCapitalization.none,
-                  decoration: const InputDecoration(hintText: 'Word to ban'),
+              const SizedBox(height: 12),
+              GlowCard(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: bannedWordInput,
+                        textCapitalization: TextCapitalization.none,
+                        decoration: const InputDecoration(
+                          hintText: 'Word to ban',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    FilledButton(
+                      onPressed: busy ? null : _addBannedWord,
+                      child: const Text('Add word'),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 12),
-              FilledButton(
-                onPressed: busy ? null : _addBannedWord,
-                child: const Text('Add word'),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 18),
+              const SizedBox(height: 18),
             ],
           ),
         ),
@@ -2277,41 +2324,44 @@ class _AdminScreenState extends State<AdminScreen> {
           icon: Icons.tune,
           child: Column(
             children: [
-        // ---- Moderation ----
-        const SectionLabel('Moderation'),
-        GlowCard(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Block links in chat'),
-                subtitle: const Text(
-                  'Messages with links are deleted and the sender is auto-muted.',
-                  style: TextStyle(color: AppColors.textDim, fontSize: 12.5),
+              // ---- Moderation ----
+              const SectionLabel('Moderation'),
+              GlowCard(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Block links in chat'),
+                      subtitle: const Text(
+                        'Messages with links are deleted and the sender is auto-muted.',
+                        style: TextStyle(
+                          color: AppColors.textDim,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                      value: blockLinks,
+                      onChanged: (v) => setState(() => blockLinks = v),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: muteHoursInput,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        hintText: 'Auto-mute duration (hours)',
+                        suffixText: 'hours',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: busy ? null : _saveModeration,
+                      child: const Text('Save settings'),
+                    ),
+                  ],
                 ),
-                value: blockLinks,
-                onChanged: (v) => setState(() => blockLinks = v),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: muteHoursInput,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  hintText: 'Auto-mute duration (hours)',
-                  suffixText: 'hours',
-                ),
-              ),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: busy ? null : _saveModeration,
-                child: const Text('Save settings'),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 18),
+              const SizedBox(height: 18),
             ],
           ),
         ),
@@ -2321,110 +2371,110 @@ class _AdminScreenState extends State<AdminScreen> {
           icon: Icons.inventory_2_outlined,
           child: Column(
             children: [
-        // ---- Products ----
-        SectionLabel('Products (${products.length})'),
-        if (products.isEmpty)
-          const Text(
-            'No products yet.',
-            style: TextStyle(color: AppColors.textDim),
-          ),
-        for (final p in products) ...[
-          GlowCard(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      p.active ? Icons.check_circle : Icons.cancel,
-                      color: p.active ? AppColors.green : AppColors.red,
-                      size: 22,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+              // ---- Products ----
+              SectionLabel('Products (${products.length})'),
+              if (products.isEmpty)
+                const Text(
+                  'No products yet.',
+                  style: TextStyle(color: AppColors.textDim),
+                ),
+              for (final p in products) ...[
+                GlowCard(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          Text(
-                            p.name,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          Icon(
+                            p.active ? Icons.check_circle : Icons.cancel,
+                            color: p.active ? AppColors.green : AppColors.red,
+                            size: 22,
                           ),
-                          const SizedBox(height: 3),
-                          Text(
-                            '${p.cost} coins · ${p.type.toUpperCase()}'
-                            '${p.isKey ? ' · ${availCount[p.id] ?? 0} in stock' : ''}'
-                            '${p.isKey && (claimedCount[p.id] ?? 0) > 0 ? ' · ${claimedCount[p.id]} claimed' : ''}'
-                            '${p.imageIds.isNotEmpty ? ' · ${p.imageIds.length} img' : ''}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: AppColors.textDim,
-                              fontSize: 12.5,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  p.name,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  '${p.cost} coins · ${p.type.toUpperCase()}'
+                                  '${p.isKey ? ' · ${availCount[p.id] ?? 0} in stock' : ''}'
+                                  '${p.isKey && (claimedCount[p.id] ?? 0) > 0 ? ' · ${claimedCount[p.id]} claimed' : ''}'
+                                  '${p.imageIds.isNotEmpty ? ' · ${p.imageIds.length} img' : ''}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: AppColors.textDim,
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                              ],
                             ),
+                          ),
+                          IconButton(
+                            tooltip: 'Delete product',
+                            visualDensity: VisualDensity.compact,
+                            color: AppColors.red,
+                            icon: const Icon(Icons.delete_outline, size: 21),
+                            onPressed: busy ? null : () => _deleteProduct(p),
                           ),
                         ],
                       ),
-                    ),
-                    IconButton(
-                      tooltip: 'Delete product',
-                      visualDensity: VisualDensity.compact,
-                      color: AppColors.red,
-                      icon: const Icon(Icons.delete_outline, size: 21),
-                      onPressed: busy ? null : () => _deleteProduct(p),
-                    ),
-                  ],
-                ),
-                // Actions get their own row — cramming them beside the name
-                // squeezed the buttons on narrow phones.
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: NeonButton(
-                        dense: true,
-                        outline: true,
-                        glow: false,
-                        onPressed: busy ? null : () => _editProduct(p),
-                        child: const Text('Edit'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: NeonButton(
-                        dense: true,
-                        outline: p.active,
-                        glow: !p.active,
-                        onPressed: busy ? null : () => _toggleActive(p),
-                        child: Text(p.active ? 'Disable' : 'Enable'),
-                      ),
-                    ),
-                    if (p.isKey) ...[
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: NeonButton(
-                          dense: true,
-                          outline: true,
-                          glow: false,
-                          onPressed: busy ? null : () => _showKeys(p),
-                          child: const Text('Keys'),
-                        ),
+                      // Actions get their own row — cramming them beside the name
+                      // squeezed the buttons on narrow phones.
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: NeonButton(
+                              dense: true,
+                              outline: true,
+                              glow: false,
+                              onPressed: busy ? null : () => _editProduct(p),
+                              child: const Text('Edit'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: NeonButton(
+                              dense: true,
+                              outline: p.active,
+                              glow: !p.active,
+                              onPressed: busy ? null : () => _toggleActive(p),
+                              child: Text(p.active ? 'Disable' : 'Enable'),
+                            ),
+                          ),
+                          if (p.isKey) ...[
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: NeonButton(
+                                dense: true,
+                                outline: true,
+                                glow: false,
+                                onPressed: busy ? null : () => _showKeys(p),
+                                child: const Text('Keys'),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ],
-                  ],
+                  ),
                 ),
+                const SizedBox(height: 10),
               ],
-            ),
-          ),
-          const SizedBox(height: 10),
-        ],
 
-        const SizedBox(height: 16),
+              const SizedBox(height: 16),
             ],
           ),
         ),
@@ -2434,176 +2484,187 @@ class _AdminScreenState extends State<AdminScreen> {
           icon: Icons.add_box_outlined,
           child: Column(
             children: [
-        // ---- New product — the form stays collapsed behind its toggle ----
-        NeonButton(
-          expand: true,
-          dense: true,
-          outline: showNewForm,
-          glow: !showNewForm,
-          onPressed: busy
-              ? null
-              : () => setState(() => showNewForm = !showNewForm),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                showNewForm ? Icons.close_rounded : Icons.add_rounded,
-                size: 17,
-                color: showNewForm ? AppColors.cyan : const Color(0xFF04212A),
+              // ---- New product — the form stays collapsed behind its toggle ----
+              NeonButton(
+                expand: true,
+                dense: true,
+                outline: showNewForm,
+                glow: !showNewForm,
+                onPressed: busy
+                    ? null
+                    : () => setState(() => showNewForm = !showNewForm),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      showNewForm ? Icons.close_rounded : Icons.add_rounded,
+                      size: 17,
+                      color: showNewForm
+                          ? AppColors.cyan
+                          : const Color(0xFF04212A),
+                    ),
+                    const SizedBox(width: 7),
+                    Text(showNewForm ? 'Close' : 'New product'),
+                  ],
+                ),
               ),
-              const SizedBox(width: 7),
-              Text(showNewForm ? 'Close' : 'New product'),
-            ],
-          ),
-        ),
-        if (showNewForm) ...[
-          const SizedBox(height: 12),
-          GlowCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _typePicker(
-                  productType,
-                  (v) => setState(() => productType = v),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: productName,
-                  decoration: const InputDecoration(
-                    hintText: 'Product name',
-                    prefixIcon: Icon(Icons.label_outline),
-                  ),
-                ),
+              if (showNewForm) ...[
                 const SizedBox(height: 12),
-                TextField(
-                  controller: productCost,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    hintText: 'Cost in coins',
-                    prefixIcon: Icon(Icons.monetization_on_rounded),
-                  ),
-                ),
-                if (productType == 'key') ...[
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: productDurations,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      hintText:
-                          'Duration options, one per line — '
-                          'e.g. 1 Hour: 10 / 1 Day: 25 (optional)',
-                      prefixIcon: Icon(Icons.timelapse_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Each line is "Label: coins". Buyers pick a duration on '
-                    'the product page; keys pasted in the Keys dialog belong '
-                    'to the selected pool. Leave empty for one flat price.',
-                    style: TextStyle(color: AppColors.textDim, fontSize: 11.5),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                TextField(
-                  controller: productDesc,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    hintText: 'Description (optional)',
-                    prefixIcon: Icon(Icons.notes_rounded),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: productYoutube,
-                  decoration: const InputDecoration(
-                    hintText: 'YouTube link (optional)',
-                    prefixIcon: Icon(Icons.ondemand_video_outlined),
-                  ),
-                ),
-                if (productType != 'key') ...[
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: productVersion,
-                    decoration: const InputDecoration(
-                      hintText: 'Version, e.g. 1.2.0 (optional)',
-                      prefixIcon: Icon(Icons.tag_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: productFileSize,
-                    decoration: const InputDecoration(
-                      hintText: 'Size label, e.g. 24 MB (optional)',
-                      prefixIcon: Icon(Icons.data_usage_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: productLink,
-                    decoration: const InputDecoration(
-                      hintText: 'MediaFire link buyers will unlock',
-                      prefixIcon: Icon(Icons.cloud_download_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Paste the mediafire.com/file/… page link (or a direct '
-                    'download link). Buyers only get it after paying.',
-                    style: TextStyle(color: AppColors.textDim, fontSize: 11.5),
-                  ),
-                ],
-                if (pickedPaths.isNotEmpty) ...[
-                  const SizedBox(height: 14),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final path in [...pickedPaths])
-                          _pathThumb(
-                            path,
-                            () => setState(
-                              () => pickedPaths = pickedPaths
-                                  .where((x) => x != path)
-                                  .toList(),
-                            ),
+                GlowCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _typePicker(
+                        productType,
+                        (v) => setState(() => productType = v),
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: productName,
+                        decoration: const InputDecoration(
+                          hintText: 'Product name',
+                          prefixIcon: Icon(Icons.label_outline),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: productCost,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          hintText: 'Cost in coins',
+                          prefixIcon: Icon(Icons.monetization_on_rounded),
+                        ),
+                      ),
+                      if (productType == 'key') ...[
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: productDurations,
+                          maxLines: 3,
+                          decoration: const InputDecoration(
+                            hintText:
+                                'Duration options, one per line — '
+                                'e.g. 1 Hour: 10 / 1 Day: 25 (optional)',
+                            prefixIcon: Icon(Icons.timelapse_rounded),
                           ),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Each line is "Label: coins". Buyers pick a duration on '
+                          'the product page; keys pasted in the Keys dialog belong '
+                          'to the selected pool. Leave empty for one flat price.',
+                          style: TextStyle(
+                            color: AppColors.textDim,
+                            fontSize: 11.5,
+                          ),
+                        ),
                       ],
-                    ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: productDesc,
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                          hintText: 'Description (optional)',
+                          prefixIcon: Icon(Icons.notes_rounded),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: productYoutube,
+                        decoration: const InputDecoration(
+                          hintText: 'YouTube link (optional)',
+                          prefixIcon: Icon(Icons.ondemand_video_outlined),
+                        ),
+                      ),
+                      if (productType != 'key') ...[
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: productVersion,
+                          decoration: const InputDecoration(
+                            hintText: 'Version, e.g. 1.2.0 (optional)',
+                            prefixIcon: Icon(Icons.tag_rounded),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: productFileSize,
+                          decoration: const InputDecoration(
+                            hintText: 'Size label, e.g. 24 MB (optional)',
+                            prefixIcon: Icon(Icons.data_usage_rounded),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: productLink,
+                          decoration: const InputDecoration(
+                            hintText: 'MediaFire link buyers will unlock',
+                            prefixIcon: Icon(Icons.cloud_download_outlined),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Paste the mediafire.com/file/… page link (or a direct '
+                          'download link). Buyers only get it after paying.',
+                          style: TextStyle(
+                            color: AppColors.textDim,
+                            fontSize: 11.5,
+                          ),
+                        ),
+                      ],
+                      if (pickedPaths.isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final path in [...pickedPaths])
+                                _pathThumb(
+                                  path,
+                                  () => setState(
+                                    () => pickedPaths = pickedPaths
+                                        .where((x) => x != path)
+                                        .toList(),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      NeonButton(
+                        dense: true,
+                        outline: true,
+                        expand: true,
+                        onPressed: busy
+                            ? null
+                            : () async {
+                                final picked = await _pickImages();
+                                if (picked != null && picked.isNotEmpty) {
+                                  setState(
+                                    () => pickedPaths = [
+                                      ...pickedPaths,
+                                      ...picked,
+                                    ],
+                                  );
+                                }
+                              },
+                        child: Text(
+                          pickedPaths.isEmpty
+                              ? 'Add product images'
+                              : 'Add more images (${pickedPaths.length})',
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      NeonButton(
+                        expand: true,
+                        onPressed: busy ? null : _addProduct,
+                        child: const Text('Create product'),
+                      ),
+                    ],
                   ),
-                ],
-                const SizedBox(height: 12),
-                NeonButton(
-                  dense: true,
-                  outline: true,
-                  expand: true,
-                  onPressed: busy
-                      ? null
-                      : () async {
-                          final picked = await _pickImages();
-                          if (picked != null && picked.isNotEmpty) {
-                            setState(
-                              () => pickedPaths = [...pickedPaths, ...picked],
-                            );
-                          }
-                        },
-                  child: Text(
-                    pickedPaths.isEmpty
-                        ? 'Add product images'
-                        : 'Add more images (${pickedPaths.length})',
-                  ),
-                ),
-                const SizedBox(height: 14),
-                NeonButton(
-                  expand: true,
-                  onPressed: busy ? null : _addProduct,
-                  child: const Text('Create product'),
                 ),
               ],
-            ),
-          ),
-        ],
             ],
           ),
         ),
@@ -2611,7 +2672,6 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 }
-
 
 class _Accordion extends StatefulWidget {
   const _Accordion({
@@ -2662,7 +2722,10 @@ class _AccordionState extends State<_Accordion> {
             InkWell(
               onTap: () => setState(() => _expanded = !_expanded),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
                 child: Row(
                   children: [
                     Container(
@@ -2672,8 +2735,11 @@ class _AccordionState extends State<_Accordion> {
                         gradient: kNeonGradient,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(widget.icon,
-                          size: 18, color: const Color(0xFF04212A)),
+                      child: Icon(
+                        widget.icon,
+                        size: 18,
+                        color: const Color(0xFF04212A),
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -2696,10 +2762,7 @@ class _AccordionState extends State<_Accordion> {
             ),
             if (_expanded) ...[
               const Divider(height: 1, color: AppColors.border),
-              Padding(
-                padding: const EdgeInsets.all(14),
-                child: widget.child,
-              ),
+              Padding(padding: const EdgeInsets.all(14), child: widget.child),
             ],
           ],
         ),
@@ -2707,4 +2770,3 @@ class _AccordionState extends State<_Accordion> {
     );
   }
 }
-

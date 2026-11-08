@@ -36,4 +36,34 @@ void main() {
 
     expect(find.text("There's no announcement yet."), findsOneWidget);
   });
+
+  testWidgets('hidden tab does not fetch until activated', (tester) async {
+    var calls = 0;
+    Future<List<Announcement>> load() async {
+      calls++;
+      return const [
+        Announcement(id: 'a1', title: 'Bagong stock', body: 'Netflix — 1 Month'),
+      ];
+    }
+
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.dark,
+      home: AnnouncementsScreen(load: load, active: false),
+    ));
+    // Indeterminate spinner never settles — one frame is enough to prove
+    // the fetch was not fired.
+    await tester.pump();
+
+    expect(calls, 0);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.dark,
+      home: AnnouncementsScreen(load: load, active: true),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(calls, 1);
+    expect(find.text('Bagong stock'), findsOneWidget);
+  });
 }

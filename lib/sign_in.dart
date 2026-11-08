@@ -117,6 +117,7 @@ class _SignInState extends State<SignIn> {
               onSubmitted: (_) => FocusScope.of(context).nextFocus(),
               decoration: authDecoration(
                 hint: 'you@example.com',
+                label: 'Email',
                 icon: Icons.alternate_email_rounded,
                 errorText: emailErr,
               ),
@@ -133,6 +134,7 @@ class _SignInState extends State<SignIn> {
               onSubmitted: (_) => _submit(),
               decoration: authDecoration(
                 hint: 'Your password',
+                label: 'Password',
                 icon: Icons.lock_outline_rounded,
                 errorText: passErr,
                 suffixIcon: IconButton(
