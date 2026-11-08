@@ -34,7 +34,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text("There's no announcement yet."), findsOneWidget);
+    expect(find.text('No announcements yet'), findsOneWidget);
   });
 
   testWidgets('hidden tab does not fetch until activated', (tester) async {

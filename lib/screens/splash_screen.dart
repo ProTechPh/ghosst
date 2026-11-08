@@ -203,10 +203,13 @@ class _SplashScreenState extends State<SplashScreen>
     final progress = _seg(0.0, 0.94); // hairline load bar
     final skipIn = _seg(0.90, 1.0);
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _skip,
-      child: Column(
+    return Semantics(
+      button: true,
+      label: 'Skip splash screen',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _skip,
+        child: Column(
         children: [
           Expanded(
             child: Center(
@@ -252,6 +255,7 @@ class _SplashScreenState extends State<SplashScreen>
           ),
           const SizedBox(height: 44),
         ],
+      ),
       ),
     );
   }

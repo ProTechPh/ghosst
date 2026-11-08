@@ -60,11 +60,10 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
     final body = loading
         ? const Center(child: CircularProgressIndicator())
         : items.isEmpty
-        ? const Center(
-            child: Text(
-              "There's no announcement yet.",
-              style: TextStyle(color: AppColors.textDim),
-            ),
+        ? const EmptyState(
+            icon: Icons.campaign_outlined,
+            title: 'No announcements yet',
+            message: 'Check back later for updates.',
           )
         : ListView.separated(
             padding: const EdgeInsets.fromLTRB(

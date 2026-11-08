@@ -238,6 +238,7 @@ class _AdminScreenState extends State<AdminScreen> {
                           ),
                           subtitle: Text(m['id'] as String? ?? ''),
                           trailing: IconButton(
+                            tooltip: 'Demote moderator',
                             icon: const Icon(Icons.remove_circle_outline),
                             onPressed: () async {
                               try {
@@ -707,21 +708,25 @@ class _AdminScreenState extends State<AdminScreen> {
                 Positioned(
                   right: 3,
                   top: 3,
-                  child: GestureDetector(
-                    onTap: onRemove,
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: const BoxDecoration(
-                        color: Colors.black87,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
+                  child: Semantics(
+                    button: true,
+                    label: 'Remove',
+                    child: GestureDetector(
+                      onTap: onRemove,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(
+                          color: Colors.black87,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
                         Icons.close,
                         size: 14,
                         color: Colors.white,
                       ),
                     ),
                   ),
+                ),
                 ),
               ],
             );
@@ -1851,15 +1856,19 @@ class _AdminScreenState extends State<AdminScreen> {
       Positioned(
         right: 3,
         top: 3,
-        child: GestureDetector(
-          onTap: onRemove,
-          child: Container(
-            padding: const EdgeInsets.all(2),
-            decoration: const BoxDecoration(
-              color: Colors.black87,
-              shape: BoxShape.circle,
+        child: Semantics(
+          button: true,
+          label: 'Remove',
+          child: GestureDetector(
+            onTap: onRemove,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: const BoxDecoration(
+                color: Colors.black87,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.close, size: 14, color: Colors.white),
             ),
-            child: const Icon(Icons.close, size: 14, color: Colors.white),
           ),
         ),
       ),

@@ -351,6 +351,7 @@ class _StoreScreenState extends State<StoreScreen> {
                   child: Column(
                     children: [
                       Pressable(
+                        semanticLabel: 'Open wallet',
                         onTap: widget.onOpenWallet,
                         child: Padding(
                           padding: const EdgeInsets.all(AppSpace.lg),
@@ -411,6 +412,7 @@ class _StoreScreenState extends State<StoreScreen> {
                           color: Colors.white.withValues(alpha: 0.06),
                         ),
                         Pressable(
+                          semanticLabel: 'Go to earn coins',
                           onTap: widget.onGoToEarn,
                           child: Padding(
                             padding: const EdgeInsets.fromLTRB(

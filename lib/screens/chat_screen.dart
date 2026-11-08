@@ -371,11 +371,9 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     }
     if (_messages.isEmpty) {
-      return const Center(
-        child: Text(
-          'No messages yet. Be the first.',
-          style: TextStyle(color: AppColors.textDim),
-        ),
+      return const EmptyState(
+        icon: Icons.chat_bubble_outline_rounded,
+        title: 'No messages yet. Be the first.',
       );
     }
     // Firestore returns newest first; reversing puts the newest at the bottom.
@@ -459,9 +457,12 @@ class _ChatScreenState extends State<ChatScreen> {
             ],
             ConstrainedBox(
               constraints: BoxConstraints(maxWidth: maxBubble - 36),
-              child: GestureDetector(
-                onLongPress: () => _onLongPress(m),
-                child: _bubble(m, mine),
+              child: Semantics(
+                hint: 'Long press for message actions',
+                child: GestureDetector(
+                  onLongPress: () => _onLongPress(m),
+                  child: _bubble(m, mine),
+                ),
               ),
             ),
             if (mine) ...[
@@ -582,9 +583,13 @@ class _ChatScreenState extends State<ChatScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (m.replyName != null || m.replyText != null)
-            GestureDetector(
-              onTap: () => _jumpToReply(m.replyToId),
-              child: _quote(m, mine),
+            Semantics(
+              button: true,
+              label: 'Jump to replied message',
+              child: GestureDetector(
+                onTap: () => _jumpToReply(m.replyToId),
+                child: _quote(m, mine),
+              ),
             ),
           if (!mine)
             Row(
