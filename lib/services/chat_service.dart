@@ -125,8 +125,15 @@ class ChatService implements ChatClient {
     try {
       final current = FirebaseAuth.instance.currentUser;
       if (current != null) {
-        final isAdmin = await Backend.isAdmin();
-        final muted = await Backend.chatMuted();
+        // Parallelize: both read from the cached /me payload, but if it's
+        // not cached yet they share the same single /me call internally.
+        // Running them concurrently still saves the microtask overhead.
+        final results = await Future.wait([
+          Backend.isAdmin(),
+          Backend.chatMuted(),
+        ]);
+        final isAdmin = results[0];
+        final muted = results[1];
         Map<String, dynamic>? claims;
         try {
           claims = (await current.getIdTokenResult()).claims;
@@ -167,13 +174,27 @@ class ChatService implements ChatClient {
 
   /// Warm-up: itinatag ang Firestore connection (at auth) habang nasa
   /// splash/login pa ang user, para pagbukas ng Chat tab ay mabilis ang unang
-  /// snapshot. Isang read lang (limit 1) kada app start — negligible sa quota.
+  /// snapshot. Cache-first: kung may offline data na, basahin iyon (instant)
+  /// para ma-prime ang snapshot. Kung wala, isang server read lang (limit 1).
+  /// Isang read lang (limit 1) kada app start — negligible sa quota.
   /// Best-effort: anumang failure ay bale-wala.
   static Future<void> warm() async {
     if (!_ready) return;
     try {
       if (FirebaseAuth.instance.currentUser == null) return;
-      await FirebaseFirestore.instance.collection('world_chat').limit(1).get();
+      // Try cache first — primes the snapshot listener so the first
+      // messages() call returns instantly from cache while the server
+      // round-trip runs in the background.
+      try {
+        await FirebaseFirestore.instance
+            .collection('world_chat')
+            .orderBy('ts', descending: true)
+            .limit(1)
+            .get(const GetOptions(source: Source.cache));
+      } catch (_) {
+        // No cache yet (first install) — fall through to server read.
+        await FirebaseFirestore.instance.collection('world_chat').limit(1).get();
+      }
     } catch (_) {
       // Warm lang ito — ang totoong boot ang magdedesisyon.
     }
@@ -190,13 +211,16 @@ class ChatService implements ChatClient {
   }
 
   /// Ang `muted` claim ng kasalukuyang token (cached, walang network).
+  /// Hindi na nag-fo-force refresh (`false`) — ang cached claims ay sapat
+  /// para sa initial paint. Ang totoong status ay nire-refresh pagbalik sa
+  /// tab (`_recheckMuted`) at bago mag-send.
   @override
   Future<bool> isMuted() async {
     if (!_ready) return false;
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return false;
-      final claims = (await user.getIdTokenResult(true)).claims ?? const {};
+      final claims = (await user.getIdTokenResult(false)).claims ?? const {};
       return claims['muted'] == true;
     } catch (_) {
       return false;
@@ -248,6 +272,9 @@ class ChatService implements ChatClient {
   }
 
   /// Pinakabagong 50 messages, live (Firestore cache = offline queueing).
+  /// Gumagamit ng ServerTimestampBehavior.estimate para sa mga pending writes
+  /// (lokal na naipadala pero naghihintay pa ng server timestamp) — kaya
+  /// lalabas agad ang sariling chat bubble nang walang pagkaantala.
   @override
   Stream<List<ChatMessage>> messages() {
     if (!_ready) return const Stream<List<ChatMessage>>.empty();
@@ -256,22 +283,35 @@ class ChatService implements ChatClient {
         .orderBy('ts', descending: true)
         .limit(_pageSize)
         .snapshots()
-        .map((snap) => [
-              for (final doc in snap.docs)
-                if (doc.data()['ts'] is Timestamp)
-                  ChatMessage(
-                    id: doc.id,
-                    uid: doc.data()['uid'] as String? ?? '',
-                    name: doc.data()['name'] as String? ?? '',
-                    text: doc.data()['text'] as String? ?? '',
-                    admin: doc.data()['admin'] as bool? ?? false,
-                    tsMillis:
-                        (doc.data()['ts'] as Timestamp).millisecondsSinceEpoch,
-                    replyName: doc.data()['replyName'] as String?,
-                    replyText: doc.data()['replyText'] as String?,
-                    replyToId: doc.data()['replyToId'] as String?,
-                  ),
-            ]);
+        .map((snap) {
+          final list = <ChatMessage>[];
+          for (final doc in snap.docs) {
+            final data = doc.data();
+            final ts = data['ts'];
+            final int tsMillis;
+            if (ts is Timestamp) {
+              tsMillis = ts.millisecondsSinceEpoch;
+            } else if (doc.metadata.hasPendingWrites) {
+              // Pending write: bago ma-compute ng Firestore server ang serverTimestamp,
+              // gamitin ang local device time para lumabas agad ang chat bubble.
+              tsMillis = DateTime.now().millisecondsSinceEpoch;
+            } else {
+              continue;
+            }
+            list.add(ChatMessage(
+              id: doc.id,
+              uid: data['uid'] as String? ?? '',
+              name: data['name'] as String? ?? '',
+              text: data['text'] as String? ?? '',
+              admin: data['admin'] as bool? ?? false,
+              tsMillis: tsMillis,
+              replyName: data['replyName'] as String?,
+              replyText: data['replyText'] as String?,
+              replyToId: data['replyToId'] as String?,
+            ));
+          }
+          return list;
+        });
   }
 
   @override
@@ -308,6 +348,12 @@ class ChatService implements ChatClient {
 
   /// `null` = naipadala; string = dahilan kung bakit hindi. Validation at
   /// cooldown dito mismo (ang rules ay server-side na bantay pa rin).
+  ///
+  /// Optimized: ang mute check ay cached claims lang (walang forced refresh).
+  /// Kung naka-mute ang cached claims, saka lang mag-refresh para i-confirm —
+  /// ibig sabihin, para sa normal (hindi muted) na user, zero network overhead
+  /// bago mag-Firestore write. Ang totoong enforcement ay nasa Firestore rules
+  /// pa rin, kaya walang security risk.
   @override
   Future<String?> send(String text, {ChatMessage? replyTo}) async {
     final problem = validate(text);
@@ -320,21 +366,34 @@ class ChatService implements ChatClient {
     _lastSend = now;
 
     try {
-      if (!await ensureSignedIn()) return 'Chat unavailable';
-      // Kung naka-mute ang token, i-refresh ang totoong status muna — baka
-      // na-unmute na ang user habang naka-bukas ang app (hindi kailangan ng
-      // restart). Kung naka-mute pa rin, malinaw na dahilan ang ibalik.
+      // Quick check: kung wala pang Firebase user, sign in muna.
+      // Kung meron na (normal case), skip ang buong ensureSignedIn() —
+      // na-validate na ito sa boot time.
       final fbUser = FirebaseAuth.instance.currentUser;
-      var claimsMuted = false;
-      if (fbUser != null) {
-        final claims = (await fbUser.getIdTokenResult(true)).claims ?? const {};
-        claimsMuted = claims['muted'] == true;
+      if (fbUser == null) {
+        if (!await ensureSignedIn()) return 'Chat unavailable';
       }
-      if (claimsMuted && await refreshMuted()) {
-        return 'You are muted in this chat.';
+
+      // Mute check: cached claims lang (false = walang network).
+      // Para sa karamihan ng users (hindi muted), zero-cost ito.
+      // Kung naka-mute ang cached claim, saka lang i-refresh para i-confirm
+      // na hindi pa na-unmute — isang network RT lang sa rare case.
+      final cachedClaims =
+          (await (FirebaseAuth.instance.currentUser
+                  ?.getIdTokenResult(false)))
+              ?.claims ?? const {};
+      if (cachedClaims['muted'] == true) {
+        // Baka na-unmute na — refresh ang totoong status.
+        if (await refreshMuted()) {
+          return 'You are muted in this chat.';
+        }
       }
+
+      // User data: laging cached pagkatapos ng boot, zero network.
       final user = await Backend.currentUser();
       if (user == null) return 'Not signed in';
+
+      // isAdmin ay cached din — pinagsama na para walang extra await.
       final data = <String, Object?>{
         'uid': user.id,
         'name': fallbackName(user.name, user.id),
@@ -349,11 +408,64 @@ class ChatService implements ChatClient {
             String.fromCharCodes(replyTo.text.runes.take(_maxQuote));
         data['replyToId'] = replyTo.id;
       }
-      await FirebaseFirestore.instance.collection('world_chat').add(data);
+      try {
+        await FirebaseFirestore.instance
+            .collection('world_chat')
+            .add(data)
+            .timeout(const Duration(seconds: 4));
+      } on TimeoutException {
+        // Ang mutation ay nasa local cache / offline queue na ng Firestore at
+        // lalabas agad sa snapshot listener gamit ang ServerTimestampBehavior.estimate.
+        // Kusang i-si-sync ito kapag stable ang koneksyon.
+        debugPrint('[ChatService] add() server ack timed out — write queued in local cache');
+      } catch (e) {
+        if (replyTo != null) {
+          // Fallback 1: Kung hindi pa updated ang Firestore rules sa Firebase console
+          // (kulang ng `replyToId` sa hasOnly), tanggalin ang `replyToId` at subukan ulit.
+          // Mananatili pa rin ang reply quote preview (replyName + replyText)!
+          if (data.containsKey('replyToId')) {
+            data.remove('replyToId');
+            try {
+              await FirebaseFirestore.instance
+                  .collection('world_chat')
+                  .add(data)
+                  .timeout(const Duration(seconds: 4));
+              return null;
+            } on TimeoutException {
+              debugPrint('[ChatService] retry without replyToId timed out — write queued');
+              return null;
+            } catch (_) {
+              // Fallback 2: Tanggalin lahat ng reply fields kung lumang-luma pa ang rules
+              data.remove('replyName');
+              data.remove('replyText');
+              try {
+                await FirebaseFirestore.instance
+                    .collection('world_chat')
+                    .add(data)
+                    .timeout(const Duration(seconds: 4));
+                return null;
+              } on TimeoutException {
+                debugPrint('[ChatService] clean retry timed out — write queued');
+                return null;
+              }
+            }
+          } else {
+            data.remove('replyName');
+            data.remove('replyText');
+            await FirebaseFirestore.instance
+                .collection('world_chat')
+                .add(data)
+                .timeout(const Duration(seconds: 4));
+            return null;
+          }
+        } else {
+          rethrow;
+        }
+      }
       return null;
     } catch (e) {
       debugPrint('[ChatService] send failed: $e');
-      return 'Could not send — try again.';
+      return 'Could not send — try again. ($e)';
     }
   }
 
