@@ -97,6 +97,10 @@ class _ChatScreenState extends State<ChatScreen> {
   /// Sign in before listening: the rules deny reads to an anonymous client,
   /// and a denied snapshot listener never recovers. Failures show the same
   /// fallback as a dead Firebase init.
+  ///
+  /// Optimized: sa fast path (may session), subscribe agad at resolve ang
+  /// muted state sa background — hindi na hinihintay ang getIdTokenResult
+  /// bago mag-paint ng messages.
   Future<void> _boot() async {
     if (_sub != null || _booting) return;
     _booting = true;
@@ -111,18 +115,22 @@ class _ChatScreenState extends State<ChatScreen> {
     if (!_client.ready) return;
 
     if (_client.hasSession) {
-      // Fast path: may persisted session na. Mag-subscribe agad gamit ito
-      // (ang read rule ay kailangan lang ng auth — sapat ang lumang token),
-      // at i-validate ang claims laban sa backend sa background. Ang /me at
-      // token refresh ay hindi na nasa critical path ng unang paint.
+      // Fast path: may persisted session na. Subscribe AGAD — ang uid ay
+      // sync (Firebase uid == backend UUID), at ang muted state ay i-resolve
+      // sa background para hindi mag-block ng first paint.
       final uid = await _client.currentUid();
-      final muted = await _client.isMuted();
       debugPrint('[ChatScreen] subscribing (session) in ${sw.elapsedMilliseconds}ms');
       if (mounted) {
         setState(() {
           _myUid = uid;
-          _muted = muted;
+          // Default to not muted — enforcement is server-side anyway.
+          // The real state will arrive in a few hundred ms.
           _subscribe();
+        });
+        // Resolve muted state in background — updates the composer bar
+        // without blocking the message list.
+        _client.isMuted().then((muted) {
+          if (mounted && muted != _muted) setState(() => _muted = muted);
         });
         // Ang muted list ay dialog state lang — pagkatapos ng subscribe para
         // hindi nito i-delay ang unang paint.
@@ -130,7 +138,7 @@ class _ChatScreenState extends State<ChatScreen> {
       }
       // Background validation: nire-mint kung stale ang claims (walang signOut
       // kaya nabubuhay ang stream). Kung pumalya ito, ang send path ang
-      // magre-validate ulit — hindi ito critical para sa pagbasang.
+      // magre-validate ulit — hindi ito critical para sa pagbasa.
       unawaited(_client.ensureSignedIn());
       return;
     }
@@ -148,13 +156,16 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) setState(() => _unavailable = true);
       return;
     }
-    final uid = await _client.currentUid();
-    final muted = await _client.isMuted();
+    // On slow path, parallelize uid + muted since we already waited for sign-in.
+    final results = await Future.wait([
+      _client.currentUid(),
+      _client.isMuted(),
+    ]);
     debugPrint('[ChatScreen] signed in + subscribing in ${sw.elapsedMilliseconds}ms');
     if (mounted) {
       setState(() {
-        _myUid = uid;
-        _muted = muted;
+        _myUid = results[0] as String?;
+        _muted = results[1] as bool;
         _subscribe();
       });
       // Ang muted list ay dialog state lang — pagkatapos ng subscribe para
@@ -174,10 +185,15 @@ class _ChatScreenState extends State<ChatScreen> {
               '[ChatScreen] first snapshot (${list.length} msgs) in ${sw.elapsedMilliseconds}ms');
         }
         final oldIds = _messages.map((m) => m.id).toSet();
+        // Build a set of my message ids for O(1) reply-target lookup
+        // instead of O(n) inner scan per new message.
+        final myMsgIds = <String>{
+          for (final m in _messages) if (m.uid == _myUid) m.id,
+        };
         final hasNewReply = list.any((m) =>
             m.uid != _myUid &&
             m.replyToId != null &&
-            _messages.any((o) => o.id == m.replyToId && o.uid == _myUid) &&
+            myMsgIds.contains(m.replyToId) &&
             !oldIds.contains(m.id));
         if (hasNewReply && !widget.active) {
           widget.onUnreadChanged?.call(true);
@@ -257,19 +273,26 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _send() async {
     if (_input.text.trim().isEmpty || _sending) return;
-    setState(() => _sending = true);
-    final problem = await _client.send(_input.text, replyTo: _replyTo);
+    final text = _input.text;
+    final reply = _replyTo;
+
+    // Optimistic: linisin agad ang input at reply preview para responsive ang UI.
+    _input.clear();
+    setState(() {
+      _sending = true;
+      _replyTo = null;
+    });
+
+    final problem = await _client.send(text, replyTo: reply);
     if (!mounted) return;
     setState(() => _sending = false);
     if (problem != null) {
+      // Kung pumalya, ibalik ang tinype at ang ni-re-reply-an para makapag-retry.
+      _input.text = text;
+      setState(() => _replyTo = reply);
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(problem)));
-      return;
     }
-    _input.clear();
-    // Bura ang reply preview sa success lang — sa failure nananatili para
-    // makapag-retry nang hindi nawawala ang pinili.
-    setState(() => _replyTo = null);
   }
 
   @override
@@ -330,6 +353,16 @@ class _ChatScreenState extends State<ChatScreen> {
             AppSpace.sm,
           ),
           itemCount: _messages.length + (_hasMore ? 1 : 0),
+          // Stable key lookup: kapag may bagong message sa snapshot,
+          // hinahanap ng framework ang lumang widget gamit ang key nito sa
+          // halip na i-rebuild lahat mula sa index 0.
+          findItemIndexCallback: (key) {
+            if (key is ValueKey<String>) {
+              final idx = _messages.indexWhere((m) => m.id == key.value);
+              return idx >= 0 ? idx : null;
+            }
+            return null;
+          },
           separatorBuilder: (_, _) => const SizedBox(height: AppSpace.sm),
           itemBuilder: (_, i) {
             if (i >= _messages.length) {
@@ -346,7 +379,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               );
             }
-            return _swipeable(_messages[i], maxBubble);
+            // RepaintBoundary: isolate ang bawat bubble para hindi ma-repaint
+            // ang buong list kapag isang item lang ang nagbago.
+            return RepaintBoundary(
+              child: _swipeable(_messages[i], maxBubble),
+            );
           },
         );
       },
