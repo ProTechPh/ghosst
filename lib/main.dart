@@ -296,6 +296,12 @@ class _HomeState extends State<Home> {
     try {
       final user = await Backend.currentUser();
       if (mounted) setState(() => signedIn = user != null);
+      if (user != null) {
+        // Pre-authenticate world chat in the background while splash plays:
+        unawaited(ChatService.started.then((ready) {
+          if (ready) unawaited(ChatService().ensureSignedIn());
+        }));
+      }
     } catch (_) {
       if (mounted) setState(() => signedIn = false);
     } finally {
@@ -369,6 +375,9 @@ class _HomeShellState extends State<HomeShell> {
     // The shell only exists when signed in and past the launch gates; the
     // request itself waits for the splash to finish.
     unawaited(Push.requestPermission());
+    unawaited(ChatService.started.then((ready) {
+      if (ready) unawaited(ChatService().ensureSignedIn());
+    }));
   }
 
   void _onAdsEnabledForBanner() {
