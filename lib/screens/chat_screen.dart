@@ -44,6 +44,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final _input = TextEditingController();
   final _scroll = ScrollController();
   StreamSubscription<List<ChatMessage>>? _sub;
+  Timer? _retryTimer;
   List<ChatMessage> _messages = const [];
   bool _sending = false;
   bool _booting = false;
@@ -112,7 +113,10 @@ class _ChatScreenState extends State<ChatScreen> {
     }
     if (!mounted) return;
     _booting = false;
-    if (!_client.ready) return;
+    if (!_client.ready) {
+      if (mounted) setState(() => _unavailable = true);
+      return;
+    }
 
     if (_client.hasSession) {
       // Fast path: may persisted session na. Subscribe AGAD — ang uid ay
@@ -201,19 +205,35 @@ class _ChatScreenState extends State<ChatScreen> {
         setState(() {
           _messages = list;
           _booted = true;
+          _unavailable = false;
         });
       },
       onError: (Object e) {
         debugPrint('[ChatScreen] stream failed: $e');
         _sub?.cancel();
         _sub = null; // payagan ang re-boot pagbalik sa tab (retry)
-        if (mounted) setState(() => _unavailable = true);
+        if (mounted) {
+          setState(() => _unavailable = true);
+          // Auto-reconnect: subukang mag-re-auth at mag-subscribe muli
+          _retryTimer?.cancel();
+          _retryTimer = Timer(const Duration(seconds: 3), () {
+            if (mounted && widget.active && _sub == null) {
+              _client.ensureSignedIn().then((ok) {
+                if (mounted && ok && _sub == null) {
+                  setState(() => _unavailable = false);
+                  _subscribe();
+                }
+              });
+            }
+          });
+        }
       },
     );
   }
 
   @override
   void dispose() {
+    _retryTimer?.cancel();
     _sub?.cancel();
     _input.dispose();
     _scroll.dispose();
@@ -298,10 +318,29 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final body = _unavailable || !_client.ready
-        ? const Center(
-            child: Text(
-              'Chat unavailable',
-              style: TextStyle(color: AppColors.textDim),
+        ? Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Chat unavailable',
+                  style: TextStyle(color: AppColors.textDim),
+                ),
+                if (_client.ready) ...[
+                  const SizedBox(height: AppSpace.sm),
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _unavailable = false;
+                        _booting = false;
+                      });
+                      _boot();
+                    },
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('Retry'),
+                  ),
+                ],
+              ],
             ),
           )
         : Column(

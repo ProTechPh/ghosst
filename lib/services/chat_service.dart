@@ -87,6 +87,7 @@ class ChatService implements ChatClient {
   static bool _initStarted = false;
   static final Completer<bool> _startedCompleter = Completer<bool>();
   static DateTime? _lastSend;
+  static Future<bool>? _inFlightSignIn;
 
   /// True kapag umandar na ang `Firebase.initializeApp()`.
   @override
@@ -112,15 +113,19 @@ class ChatService implements ChatClient {
     _startedCompleter.complete(_ready);
   }
 
-  /// Invisible sign-in gamit ang custom token. Nagre-mint kapag stale ang
-  /// admin o muted claim (halimbawa, ginawang admin o na-mute ang account
-  /// pagkatapos ng login). Ang `isAdmin` at `chatMuted` ay kukunin lang
-  /// kapag may existing session na — sa bagong device (walang session) hindi
-  /// sila ginagamit at isang /me round trip ang nasasayang kung maaga.
-  /// Walang `signOut` dito: parehong uid ang mint, kaya ang Firestore stream
-  /// ay nire-re-auth lang sa halip na maputol.
+  /// Invisible sign-in gamit ang custom token. Single-flight deduplicated:
+  /// kung may tumatakbo nang sign-in sa background (e.g. mula sa HomeShell),
+  /// iisang future lang ang hihintayin ng ChatScreen sa halip na magsabay.
   @override
-  Future<bool> ensureSignedIn() async {
+  Future<bool> ensureSignedIn() {
+    final existing = _inFlightSignIn;
+    if (existing != null) return existing;
+    return _inFlightSignIn = _ensureSignedInImpl().whenComplete(() {
+      _inFlightSignIn = null;
+    });
+  }
+
+  Future<bool> _ensureSignedInImpl() async {
     if (!_ready) return false;
     try {
       final current = FirebaseAuth.instance.currentUser;
@@ -472,6 +477,7 @@ class ChatService implements ChatClient {
   @override
   Future<void> signOut() async {
     _lastSend = null;
+    _inFlightSignIn = null;
     try {
       await FirebaseAuth.instance.signOut();
     } catch (_) {
