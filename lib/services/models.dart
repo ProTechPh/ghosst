@@ -242,3 +242,167 @@ class Moderation {
 /// Null when there is nothing to show or the user already closed this one.
 Announcement? unreadAnnouncement(Announcement? a, String dismissedId) =>
     (a == null || a.id == dismissedId) ? null : a;
+
+/// One purchasable duration for a premium version (e.g. `3 Days` @ ₱150).
+class ShopDuration {
+  const ShopDuration({
+    required this.label,
+    required this.price,
+    required this.stock,
+    required this.currency,
+  });
+
+  factory ShopDuration.fromJson(Map<String, dynamic> json, String currency) =>
+      ShopDuration(
+        label: json['label'] as String? ?? '',
+        price: (json['price'] as num?)?.toDouble() ?? 0,
+        stock: (json['stock'] as num?)?.toInt() ?? 0,
+        currency: currency,
+      );
+
+  final String label;
+  final double price;
+  final int stock;
+  final String currency;
+
+  bool get soldOut => stock <= 0;
+  String get priceLabel => shopPriceLabel(currency, price, price);
+}
+
+/// One version in the website premium shop (a game key, priced in ₱).
+/// Read-only: the app never buys these; [url] opens the site's checkout page.
+class ShopProduct {
+  const ShopProduct({
+    required this.id,
+    required this.name,
+    required this.platform,
+    required this.price,
+    required this.priceMax,
+    required this.stock,
+    required this.currency,
+    required this.image,
+    required this.url,
+    this.description = '',
+    this.details = '',
+    this.gallery = const [],
+    this.durations = const [],
+  });
+
+  factory ShopProduct.fromJson(Map<String, dynamic> json) {
+    final currency = json['currency'] as String? ?? '₱';
+    return ShopProduct(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      name: json['name'] as String? ?? '',
+      platform: json['platform'] as String? ?? '',
+      price: (json['price'] as num?)?.toDouble() ?? 0,
+      priceMax: (json['priceMax'] as num?)?.toDouble() ?? 0,
+      stock: (json['stock'] as num?)?.toInt() ?? 0,
+      currency: currency,
+      image: json['image'] as String? ?? '',
+      url: json['url'] as String? ?? '',
+      description: json['description'] as String? ?? '',
+      details: json['details'] as String? ?? '',
+      gallery: (json['gallery'] as List? ?? const [])
+          .whereType<String>()
+          .toList(),
+      durations: (json['durations'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map((j) => ShopDuration.fromJson(j, currency))
+          .toList(),
+    );
+  }
+
+  final int id;
+  final String name;
+  final String platform;
+  final double price;
+  final double priceMax;
+  final int stock;
+  final String currency;
+  final String image;
+  final String url;
+
+  /// Filled by the detail endpoint; empty on list rows.
+  final String description;
+  final String details;
+  final List<String> gallery;
+  final List<ShopDuration> durations;
+
+  String get priceLabel => shopPriceLabel(currency, price, priceMax);
+
+  /// `Android`, `iOS`, or `Android + iOS`.
+  String get platformLabel => switch (platform) {
+    'ios' => 'iOS',
+    'both' => 'Android + iOS',
+    _ => 'Android',
+  };
+}
+
+/// One game category on the website premium shop, with its image carousel.
+class ShopGame {
+  const ShopGame({
+    required this.name,
+    required this.slug,
+    required this.description,
+    required this.image,
+    required this.images,
+    required this.price,
+    required this.priceMax,
+    required this.stock,
+    required this.currency,
+    required this.products,
+  });
+
+  factory ShopGame.fromJson(Map<String, dynamic> json) {
+    final currency = json['currency'] as String? ?? '₱';
+    return ShopGame(
+      name: json['name'] as String? ?? '',
+      slug: json['slug'] as String? ?? '',
+      description: json['description'] as String? ?? '',
+      image: json['image'] as String? ?? '',
+      images: (json['images'] as List? ?? const []).whereType<String>().toList(),
+      price: (json['price'] as num?)?.toDouble() ?? 0,
+      priceMax: (json['priceMax'] as num?)?.toDouble() ?? 0,
+      stock: (json['stock'] as num?)?.toInt() ?? 0,
+      currency: currency,
+      products: (json['products'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map((j) => ShopProduct.fromJson({...j, 'currency': currency}))
+          .toList(),
+    );
+  }
+
+  final String name;
+  final String slug;
+  final String description;
+
+  /// Hero image, or the first product image when the game has no hero.
+  final String image;
+
+  /// Carousel: the game hero followed by its product images (max 8).
+  final List<String> images;
+
+  final double price;
+  final double priceMax;
+  final int stock;
+  final String currency;
+  final List<ShopProduct> products;
+
+  String get priceLabel => shopPriceLabel(currency, price, priceMax);
+}
+
+/// `₱620`, `₱99.50`, or `₱620 – ₱1,200` when keys are priced differently.
+String shopPriceLabel(String currency, double price, double priceMax) {
+  String money(double v) {
+    final digits = v == v.roundToDouble()
+        ? v.toStringAsFixed(0)
+        : v.toStringAsFixed(2);
+    return digits.replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'),
+      (m) => ',',
+    );
+  }
+
+  final low = '$currency${money(price)}';
+  return priceMax > price ? '$low – $currency${money(priceMax)}' : low;
+}

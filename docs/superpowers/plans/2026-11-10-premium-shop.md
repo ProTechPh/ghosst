@@ -403,3 +403,9 @@ Expected: `"ok":true`, a `currency` of `₱`, and products whose `url` ends in `
 git add docs/superpowers/specs/2026-11-10-premium-shop-design.md docs/superpowers/plans/2026-11-10-premium-shop.md
 git commit -m "docs: add premium shop spec and plan"
 ```
+
+## Amendment (2026-11-10, after the first UI pass)
+
+The inline rail was replaced by a third shelf (Keys | Apps | Premium). /v1/premium-shop now returns games (with images and nested products), and PremiumGameScreen shows the carousel and per-version prices/stock. The tasks above are historical; the shipped shape is the spec's How section.
+
+Amendment 2: version rows now open PremiumProductScreen (checkout-like: product_gallery carousel, description/details, price/stock) backed by GET /v1/premium-shop/{id}. Requires uploading pi/index.php and pi/routes/shop.php.

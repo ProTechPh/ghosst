@@ -1,78 +1,100 @@
 # Premium shop in the app (view-only) — design
 
 Date: 2026-11-10
-Status: draft for approval
+Status: implemented (revised after first UI pass)
 
 ## Intent
 
 Show the website's premium products (game keys with ₱ prices) inside the app's
-Store tab. Buying stays on ghossthub.com; in-app checkout is not built yet.
+Store tab as a third shelf. Buying stays on ghossthub.com; in-app checkout is
+not built yet.
 
 ## Goals
 
-- The Store tab gains a "Premium shop" section below the coin products.
-- Products come from the website DB (`products` + unused `keys`), read-only.
-- Tapping a card opens that product's `checkout.php?product=<id>` in the browser.
-- No coin or stock mutation in the app.
+- The Store shelf switch becomes `Keys | Apps | Premium`.
+- Premium lists **game categories** (CODM, Bloodstrike, MLBB, ...), each with
+  hero art, price range, version count, and key stock.
+- Tapping a game opens a read-only game page: image carousel, description,
+  price range, stock, and every version with its own price/stock.
+- Tapping a version opens a checkout-like page: gallery carousel, name,
+  description, details, platform, stock, price, and every available duration
+  with its own price and stock (sold-out ones dimmed). Its Buy button opens
+  `checkout.php?product=<id>`. No coin or stock mutation in the app.
 
 ## Non-goals
 
 - In-app checkout / payments.
-- Website accounts tab (`account_products`), cart, search, filters.
-- A dedicated premium screen or a new bottom-nav tab.
+- Website accounts tab (`account_products`), cart, search, platform filters.
+- A new bottom-nav tab.
 
 ## Constraints
 
-- Website keys and app products live in the same MySQL DB, so the app API can
-  read them directly; no scraping.
+- Website keys and app products live in the same MySQL DB, so the app API reads
+  them directly; no scraping.
 - Website login is separate from the app account (`users` vs `app_users`). The
   website handles sign-in and checkout after the hand-off.
-- `ghosst-web/` is the deploy source for the site and API (repo `api/` was moved
-  there); the new route must be uploaded with the API.
-
-## Approaches considered
-
-1. Third shelf segment `Keys | Apps | Premium` — rejected: mixes coin and peso
-   checkout in one list and hides the items behind a mode.
-2. Inline section in the Store scroll — picked: visible immediately, one tap to
-   buy, no new nav or screen.
-3. Entry card to a dedicated screen — rejected: extra tap, extra screen.
+- `ghosst-web/` is the deploy source for the site and API; API edits must be
+  uploaded with the app change.
 
 ## How
 
 ### API
 
-- New `GET /v1/premium-shop` (public, cached) in `ghosst-web/api`.
-- Query: active, non-maintenance products joined to unused `keys`, min/max price,
-  `HAVING min_price > 0`, ordered by game then price.
+- `GET /v1/premium-shop` (public, cached 60s) in `ghosst-web/api`.
+- Query: active, non-maintenance products with at least one unused key priced
+  above zero; min/max price and stock per product.
+- Games meta comes from `games` (slug, description, hero image, sort order);
+  a product with no games row still appears under its `game_name`.
 - Response:
-  `{ok, currency, products: [{id, name, game, platform, price, priceMax, image, url}]}`.
-- `image` absolute (`SHOP_URL` + ltrim); `url` is `SHOP_URL/checkout.php?product=id`.
-- `currency` from `settings.currency_symbol` (fallback `₱`). New `SHOP_URL`
-  constant in `api/config.php`, default `https://ghossthub.com`.
+  `{ok, currency, games: [{name, slug, description, image, images[], price,
+  priceMax, stock, currency, products: [{id, name, platform, price, priceMax,
+  stock, currency, image, url}]}]}`
+- `images` = game hero + that game's product images (deduped, max 8).
+- `image`/`images`/`url` are absolute using `SHOP_URL` (trailing slashes
+  trimmed); `url` is `SHOP_URL/checkout.php?product=<id>`.
+- Games sorted by `games.sort_order`, then name.
+- `GET /v1/premium-shop/{id}` returns one product with its gallery
+  (`product_gallery`, fallback to the product image), plain-text
+  `description`/`details`, price range, stock, checkout URL, and `durations`
+  (min price and unused-key count per `keys.duration`, sorted 1 Hour → 3 Days
+  → Lifetime). Missing or out-of-stock product → 404.
 
 ### App
 
-- `ShopItem` model with `fromJson` and `priceLabel` in `lib/services/models.dart`.
-- `Backend.premiumShop()` in `worker_backend.dart` (GET `/premium-shop`, maps JSON).
-- `store_screen.dart`: fetch in parallel with the coin load; hide the section on
-  failure. Section header "Premium shop" with a "pay on site" hint and a
-  horizontal rail of cards (image, game, name, ₱ price, "Buy on site"). The rail
-  scrolls through every product, so there is no separate "view all" link.
-- Tap opens the item URL with `launchUrl(..., LaunchMode.externalApplication)`.
-- Section renders on both flavors; copy notes in-app checkout is coming soon.
+- Models: `ShopGame` (with `images`, `products`, `priceLabel`) and
+  `ShopProduct` (`platformLabel`, `priceLabel`, plus `description`, `details`,
+  `gallery` on the detail response) in `lib/services/models.dart`.
+- `Backend.premiumShop()` → `GET /premium-shop`; `Backend.premiumProduct(id)`
+  → `GET /premium-shop/{id}`.
+- `store_screen.dart`: third segment item; the Premium shelf hides the coin
+  balance/products/sponsored blocks and renders game cards (hero, name, price
+  range, versions + stock). A failed or empty feed shows an "unavailable" state
+  with a link to `browseproducts.php`; the coin shelves are unaffected.
+- New `lib/screens/premium_game_screen.dart`: PageView image carousel with
+  dots, game description, price/stock, version rows (image, platform, stock,
+  price, View). Tapping a row opens the product page.
+- New `lib/screens/premium_product_screen.dart`: the checkout-like page
+  (carousel from `product_gallery`, name, category, platform, stock, price,
+  Available durations with stock/price, About/Details, sticky "Buy on
+  ghossthub.com"). Details load lazily from the product endpoint; the feed row
+  is shown instantly.
+- `PremiumCarousel` (`lib/screens/premium_carousel.dart`) is shared by both.
+- Section renders on both flavors.
 
 ## Edge cases
 
-- API down / non-200 → section hidden, coin store unaffected.
-- Missing image → same placeholder fallback as other cards.
-- Out of stock → excluded by the query (requires an unused key).
+- API down / non-200 → Premium tab shows the unavailable state; coin shelves
+  still work.
+- Missing game hero → first product image; no images at all → controller icon.
+- Sold out → excluded by the query (requires an unused priced key).
+- Malformed/relative product URL → tap does nothing (host check).
 
 ## Verification
 
-- `flutter analyze`, `flutter test` (new `test/shop_item_test.dart`: parsing and
-  price label).
-- Manual: run the local API, open Store, confirm cards, tap opens checkout in
-  the browser.
-- Deploy: upload `api/config.php`, `api/index.php`, `api/routes/shop.php` to
-  `public_html/api/` on Hostinger.
+- `flutter analyze`, `flutter test` (`test/premium_shop_test.dart`: game +
+  nested product parsing, price label grouping/cents, defaults).
+- Live: upload `api/index.php` + `api/routes/shop.php`, then
+  `curl https://ghossthub.com/api/v1/premium-shop` → `games[]` with images and
+  checkout URLs, and `curl .../premium-shop/55` → gallery + details.
+- Device: Premium shelf lists games, game carousel swipes, a version opens the
+  product page with gallery/description, Buy opens the browser.

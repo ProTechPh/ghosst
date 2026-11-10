@@ -182,6 +182,13 @@ class AppTheme {
       fontFamily: 'SpaceGrotesk',
     );
     return base.copyWith(
+      // Flutter 3.47's Android default (PredictiveBackPageTransitionsBuilder)
+      // crashed on route pop: `_dependents.isEmpty` assertion, then duplicate
+      // GlobalKey, then a truncated tree. Keep the stable zoom transition
+      // until the framework regression is fixed.
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {TargetPlatform.android: ZoomPageTransitionsBuilder()},
+      ),
       scaffoldBackgroundColor: AppColors.bg,
       colorScheme: base.colorScheme.copyWith(
         primary: AppColors.primary,

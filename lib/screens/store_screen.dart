@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../premium.dart';
 import '../arcade.dart';
@@ -11,6 +12,7 @@ import '../services/ad_service.dart';
 import '../services/worker_backend.dart';
 import '../services/distribution.dart';
 import '../theme.dart';
+import 'premium_game_screen.dart';
 import 'product_detail.dart';
 
 class StoreScreen extends StatefulWidget {
@@ -41,6 +43,11 @@ class StoreScreen extends StatefulWidget {
 
 class _StoreScreenState extends State<StoreScreen> {
   List<Product> products = [];
+
+  /// Website premium games (₱). Read-only - taps open a game page, buying
+  /// finishes on ghossthub.com.
+  List<ShopGame> premium = const [];
+  bool _premiumLoading = true;
   Map<String, int> stock = {};
   bool loading = true;
   String error = '';
@@ -169,6 +176,9 @@ class _StoreScreenState extends State<StoreScreen> {
   }
 
   Future<void> _load({bool silent = false}) async {
+    // The website shop is secondary: it loads beside the coin products and
+    // never blocks or fails the store.
+    unawaited(_loadPremium());
     if (!silent) {
       setState(() {
         loading = true;
@@ -211,6 +221,198 @@ class _StoreScreenState extends State<StoreScreen> {
       });
     }
   }
+
+  Future<void> _loadPremium() async {
+    try {
+      final games = await Backend.premiumShop();
+      if (mounted) {
+        setState(() {
+          premium = games;
+          _premiumLoading = false;
+        });
+      }
+    } catch (e) {
+      // Keep the last good list; a shop outage must not break the store.
+      debugPrint('[Store] premium shop unavailable: $e');
+      if (mounted) setState(() => _premiumLoading = false);
+    }
+  }
+
+  static const _shopUrl = 'https://ghossthub.com/browseproducts.php';
+
+  Future<void> _openShopLink(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.host.isEmpty) return;
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint('[Store] could not open shop link: $e');
+    }
+  }
+
+  List<Widget> _premiumBody() {
+    return [
+      ScrollReveal(
+        child: SectionHeader(
+          title: 'Premium shop',
+          trailing: Text(
+            '${premium.length}',
+            style: AppText.figure.copyWith(
+              fontSize: 12,
+              color: AppColors.textDim,
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(height: AppSpace.xs),
+      Text(
+        'Game keys priced in ₱ - checkout finishes on ghossthub.com.',
+        style: AppText.caption,
+      ),
+      const SizedBox(height: AppSpace.md),
+      if (_premiumLoading)
+        const Skeleton(height: 220, radius: AppRadius.card)
+      else if (premium.isEmpty)
+        ScrollReveal(
+          child: EmptyState(
+            icon: Icons.workspace_premium_outlined,
+            title: 'Premium shop unavailable',
+            message: 'Could not load the website shop right now.',
+            action: IslandButton(
+              expand: false,
+              dense: true,
+              outline: true,
+              glow: false,
+              label: 'Open ghossthub.com',
+              icon: CupertinoIcons.arrow_up_right,
+              onPressed: () => _openShopLink(_shopUrl),
+            ),
+          ),
+        )
+      else
+        for (final game in premium) ...[
+          ScrollReveal(child: _premiumGameCard(game)),
+          const SizedBox(height: AppSpace.md),
+        ],
+      const SizedBox(height: AppSpace.sm),
+    ];
+  }
+
+  Widget _premiumGameCard(ShopGame game) {
+    final versions = game.products.length;
+    return Pressable(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => PremiumGameScreen(game: game)),
+      ),
+      semanticLabel: '${game.name}, ${game.priceLabel}',
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              height: 140,
+              width: double.infinity,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Semantics(
+                    image: true,
+                    label: game.name,
+                    child: game.image.isEmpty
+                        ? _premiumImageFallback()
+                        : CachedNetworkImage(
+                            imageUrl: game.image,
+                            fit: BoxFit.cover,
+                            memCacheWidth: 800,
+                            errorWidget: (context, url, e) =>
+                                _premiumImageFallback(),
+                          ),
+                  ),
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.transparent, Color(0xE6050B0E)],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 14,
+                    right: 14,
+                    bottom: 10,
+                    child: Text(
+                      game.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppText.subtitle.copyWith(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  if (game.images.length > 1)
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: Eyebrow(text: '${game.images.length} photos'),
+                    ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(AppSpace.md),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          game.priceLabel,
+                          style: AppText.figure.copyWith(
+                            fontSize: 16,
+                            color: AppColors.gold,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '$versions ${versions == 1 ? 'version' : 'versions'} · ${game.stock} keys in stock',
+                          style: AppText.caption.copyWith(fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    size: 20,
+                    color: AppColors.textDim,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _premiumImageFallback() => ColoredBox(
+    color: AppColors.surfaceHigh,
+    child: Center(
+      child: Icon(
+        Icons.storefront_outlined,
+        color: AppColors.textDim.withValues(alpha: .7),
+      ),
+    ),
+  );
 
   /// Products on the current shelf.
   List<Product> get _shelf => products
@@ -263,6 +465,7 @@ class _StoreScreenState extends State<StoreScreen> {
 
     final shelf = _shelf;
     final rest = shelf.length > 1 ? shelf.sublist(1) : const <Product>[];
+    final isPremium = _tab == 'premium';
 
     return Stack(
       children: [
@@ -289,23 +492,32 @@ class _StoreScreenState extends State<StoreScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Eyebrow(
-                            text: _tab == 'key' ? 'License store' : 'App store',
+                            text: switch (_tab) {
+                              'key' => 'License store',
+                              'app' => 'App store',
+                              _ => 'Premium store',
+                            },
                           ),
                           const SizedBox(height: AppSpace.xs),
                           Text(
-                            _tab == 'key' ? 'Products' : 'Apps & files',
+                            switch (_tab) {
+                              'key' => 'Products',
+                              'app' => 'Apps & files',
+                              _ => 'Game keys',
+                            },
                             style: AppText.headline,
                           ),
                         ],
                       ),
                     ),
-                    Text(
-                      '${widget.coins} coins',
-                      style: AppText.figure.copyWith(
-                        fontSize: 13,
-                        color: AppColors.gold,
+                    if (!isPremium)
+                      Text(
+                        '${widget.coins} coins',
+                        style: AppText.figure.copyWith(
+                          fontSize: 13,
+                          color: AppColors.gold,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -320,8 +532,9 @@ class _StoreScreenState extends State<StoreScreen> {
                 const SizedBox(height: AppSpace.xl),
               ],
 
-              // ---- balance strip -------------------------------------------
-              ScrollReveal(
+              // ---- balance strip (coin shelves only) -----------------------
+              if (!isPremium)
+                ScrollReveal(
                 delay: const Duration(milliseconds: 110),
                 child: Container(
                   decoration: BoxDecoration(
@@ -457,7 +670,7 @@ class _StoreScreenState extends State<StoreScreen> {
               const SizedBox(height: AppSpace.xxl),
 
               // ---- products -------------------------------------------------
-              if (shelf.isEmpty)
+              if (!isPremium && shelf.isEmpty)
                 ScrollReveal(
                   child: EmptyState(
                     icon: _tab == 'key'
@@ -478,7 +691,7 @@ class _StoreScreenState extends State<StoreScreen> {
                           ),
                   ),
                 )
-              else ...[
+              else if (!isPremium) ...[
                 ScrollReveal(
                   child: SectionHeader(
                     title: 'Featured',
@@ -518,8 +731,14 @@ class _StoreScreenState extends State<StoreScreen> {
               ],
               const SizedBox(height: AppSpace.xl),
 
+              // ---- premium shelf (website games, pay on site) ---------------
+              if (isPremium) ..._premiumBody(),
+
               // ---- sponsored native ad ------------------------------------
-              if (shelf.isNotEmpty && _nativeLoaded && _nativeAd != null) ...[
+              if (!isPremium &&
+                  shelf.isNotEmpty &&
+                  _nativeLoaded &&
+                  _nativeAd != null) ...[
                 const SectionHeader(title: 'Sponsored'),
                 ConstrainedBox(
                   constraints: const BoxConstraints(
@@ -541,7 +760,9 @@ class _StoreScreenState extends State<StoreScreen> {
                 child: Text(
                   _tab == 'key'
                       ? 'FRESH DROPS · DELIVERED INSTANTLY'
-                      : 'MEDIAFIRE BACKED · DOWNLOADS ANY TIME',
+                      : _tab == 'app'
+                      ? 'MEDIAFIRE BACKED · DOWNLOADS ANY TIME'
+                      : 'PRICES IN ₱ · CHECKOUT ON GHOSSTHUB.COM',
                   style: AppText.label.copyWith(
                     fontSize: 10,
                     letterSpacing: 2.4,
@@ -556,10 +777,11 @@ class _StoreScreenState extends State<StoreScreen> {
     );
   }
 
-  // ---- Keys | Apps switch ---------------------------------------------
+  // ---- Keys | Apps | Premium switch -----------------------------------
   Widget _segment() {
     const keys = 'key';
     const apps = 'app';
+    const premiumShop = 'premium';
 
     Widget item(String id, String label, IconData icon) {
       final on = _tab == id;
@@ -631,6 +853,7 @@ class _StoreScreenState extends State<StoreScreen> {
         children: [
           item(keys, 'Keys', Icons.key_rounded),
           item(apps, 'Apps', Icons.android_rounded),
+          item(premiumShop, 'Premium', Icons.workspace_premium_rounded),
         ],
       ),
     );
