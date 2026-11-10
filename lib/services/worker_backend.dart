@@ -241,6 +241,16 @@ class Backend {
   static Future<List<Product>> products() async =>
       (await _apiBackend.products()).map(_product).toList();
 
+  /// Website premium shop (read-only; buying finishes on ghossthub.com).
+  static Future<List<ShopItem>> premiumShop() async {
+    final res = await _api.get('/premium-shop');
+    final currency = res['currency'] as String? ?? '₱';
+    return (res['products'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map((j) => ShopItem.fromJson({...j, 'currency': currency}))
+        .toList();
+  }
+
   static Future<List<Product>> allProducts() async {
     final res = await _api.get('/products', query: {'all': '1'});
     return (res['products'] as List? ?? const [])

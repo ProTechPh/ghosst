@@ -242,3 +242,57 @@ class Moderation {
 /// Null when there is nothing to show or the user already closed this one.
 Announcement? unreadAnnouncement(Announcement? a, String dismissedId) =>
     (a == null || a.id == dismissedId) ? null : a;
+
+/// One website premium-shop product (game key, priced in ₱). Read-only: the
+/// app never buys these; [url] opens the site's checkout page.
+class ShopItem {
+  const ShopItem({
+    required this.id,
+    required this.name,
+    required this.game,
+    required this.platform,
+    required this.price,
+    required this.priceMax,
+    required this.currency,
+    required this.image,
+    required this.url,
+  });
+
+  factory ShopItem.fromJson(Map<String, dynamic> json) => ShopItem(
+    id: (json['id'] as num?)?.toInt() ?? 0,
+    name: json['name'] as String? ?? '',
+    game: json['game'] as String? ?? '',
+    platform: json['platform'] as String? ?? '',
+    price: (json['price'] as num?)?.toDouble() ?? 0,
+    priceMax: (json['priceMax'] as num?)?.toDouble() ?? 0,
+    currency: json['currency'] as String? ?? '₱',
+    image: json['image'] as String? ?? '',
+    url: json['url'] as String? ?? '',
+  );
+
+  final int id;
+  final String name;
+  final String game;
+  final String platform;
+  final double price;
+  final double priceMax;
+  final String currency;
+  final String image;
+  final String url;
+
+  /// `₱620` or `₱620 – ₱1,200` when keys are priced differently.
+  String get priceLabel {
+    String money(double v) {
+      final digits = v == v.roundToDouble()
+          ? v.toStringAsFixed(0)
+          : v.toStringAsFixed(2);
+      return digits.replaceAllMapped(
+        RegExp(r'\B(?=(\d{3})+(?!\d))'),
+        (m) => ',',
+      );
+    }
+
+    final low = '$currency${money(price)}';
+    return priceMax > price ? '$low – $currency${money(priceMax)}' : low;
+  }
+}
