@@ -16,8 +16,9 @@ not built yet.
   hero art, price range, version count, and key stock.
 - Tapping a game opens a read-only game page: image carousel, description,
   price range, stock, and every version with its own price/stock.
-- Every version tap opens that product's `checkout.php?product=<id>` in the
-  browser. No coin or stock mutation in the app.
+- Tapping a version opens a checkout-like page: gallery carousel, name,
+  description, details, platform, stock, price. Its Buy button opens
+  `checkout.php?product=<id>`. No coin or stock mutation in the app.
 
 ## Non-goals
 
@@ -51,19 +52,30 @@ not built yet.
 - `image`/`images`/`url` are absolute using `SHOP_URL` (trailing slashes
   trimmed); `url` is `SHOP_URL/checkout.php?product=<id>`.
 - Games sorted by `games.sort_order`, then name.
+- `GET /v1/premium-shop/{id}` returns one product with its gallery
+  (`product_gallery`, fallback to the product image), plain-text
+  `description`/`details`, price range, stock and checkout URL. Missing or
+  out-of-stock product → 404.
 
 ### App
 
 - Models: `ShopGame` (with `images`, `products`, `priceLabel`) and
-  `ShopProduct` (`platformLabel`, `priceLabel`) in `lib/services/models.dart`.
-- `Backend.premiumShop()` → `GET /premium-shop`, maps `games`.
+  `ShopProduct` (`platformLabel`, `priceLabel`, plus `description`, `details`,
+  `gallery` on the detail response) in `lib/services/models.dart`.
+- `Backend.premiumShop()` → `GET /premium-shop`; `Backend.premiumProduct(id)`
+  → `GET /premium-shop/{id}`.
 - `store_screen.dart`: third segment item; the Premium shelf hides the coin
   balance/products/sponsored blocks and renders game cards (hero, name, price
   range, versions + stock). A failed or empty feed shows an "unavailable" state
   with a link to `browseproducts.php`; the coin shelves are unaffected.
 - New `lib/screens/premium_game_screen.dart`: PageView image carousel with
   dots, game description, price/stock, version rows (image, platform, stock,
-  price, Buy). Each row opens its checkout URL.
+  price, View). Tapping a row opens the product page.
+- New `lib/screens/premium_product_screen.dart`: the checkout-like page
+  (carousel from `product_gallery`, name, category, platform, stock, price,
+  About/Details, sticky "Buy on ghossthub.com"). Details load lazily from the
+  product endpoint; the feed row is shown instantly.
+- `PremiumCarousel` (`lib/screens/premium_carousel.dart`) is shared by both.
 - Section renders on both flavors.
 
 ## Edge cases
@@ -78,8 +90,8 @@ not built yet.
 
 - `flutter analyze`, `flutter test` (`test/premium_shop_test.dart`: game +
   nested product parsing, price label grouping/cents, defaults).
-- Live: upload `api/config.php` + `api/routes/shop.php`, then
+- Live: upload `api/index.php` + `api/routes/shop.php`, then
   `curl https://ghossthub.com/api/v1/premium-shop` → `games[]` with images and
-  checkout URLs.
-- Device: Premium shelf lists games, game page carousel swipes, Buy opens the
-  browser.
+  checkout URLs, and `curl .../premium-shop/55` → gallery + details.
+- Device: Premium shelf lists games, game carousel swipes, a version opens the
+  product page with gallery/description, Buy opens the browser.

@@ -1,101 +1,38 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../premium.dart';
 import '../services/models.dart';
 import '../theme.dart';
+import 'premium_carousel.dart';
+import 'premium_product_screen.dart';
 
-/// Website game page in read-only form: image carousel, versions with ₱
-/// prices and stock. Every Buy opens that product on ghossthub.com.
-class PremiumGameScreen extends StatefulWidget {
+/// Website game page in read-only form: image carousel, description, and
+/// versions with prices/stock. A version opens its own detail page.
+class PremiumGameScreen extends StatelessWidget {
   const PremiumGameScreen({super.key, required this.game});
 
   final ShopGame game;
 
-  @override
-  State<PremiumGameScreen> createState() => _PremiumGameScreenState();
-}
-
-class _PremiumGameScreenState extends State<PremiumGameScreen> {
-  final _pages = PageController();
-  int _page = 0;
-
-  @override
-  void dispose() {
-    _pages.dispose();
-    super.dispose();
-  }
-
-  Future<void> _open(ShopProduct item) async {
-    final uri = Uri.tryParse(item.url);
-    if (uri == null || uri.host.isEmpty) return;
-    try {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (e) {
-      debugPrint('[Premium] could not open checkout: $e');
-    }
+  void _openProduct(BuildContext context, ShopProduct product) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PremiumProductScreen(game: game.name, product: product),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final game = widget.game;
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(title: Text(game.name)),
       body: ListView(
         padding: const EdgeInsets.only(bottom: AppSpace.xxl),
         children: [
-          if (game.images.isNotEmpty) ...[
-            SizedBox(
-              height: 210,
-              child: PageView.builder(
-                controller: _pages,
-                itemCount: game.images.length,
-                onPageChanged: (i) => setState(() => _page = i),
-                itemBuilder: (_, i) => Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpace.xl),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(AppRadius.card),
-                    child: CachedNetworkImage(
-                      imageUrl: game.images[i],
-                      fit: BoxFit.cover,
-                      memCacheWidth: 900,
-                      errorWidget: (context, url, e) => _fallback(),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            if (game.images.length > 1) ...[
-              const SizedBox(height: AppSpace.sm),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  for (var i = 0; i < game.images.length; i++)
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      width: i == _page ? 18 : 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: i == _page
-                            ? AppColors.primary
-                            : AppColors.border,
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                    ),
-                ],
-              ),
-            ],
-          ] else
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpace.xl),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadius.card),
-                child: SizedBox(height: 160, child: _fallback()),
-              ),
-            ),
+          const SizedBox(height: AppSpace.sm),
+          PremiumCarousel(images: game.images),
           Padding(
             padding: const EdgeInsets.fromLTRB(
               AppSpace.xl,
@@ -144,7 +81,7 @@ class _PremiumGameScreenState extends State<PremiumGameScreen> {
                 ),
                 const SizedBox(height: AppSpace.sm),
                 for (final p in game.products) ...[
-                  _versionCard(p),
+                  _versionCard(context, p),
                   const SizedBox(height: AppSpace.sm),
                 ],
                 const SizedBox(height: AppSpace.sm),
@@ -160,10 +97,10 @@ class _PremiumGameScreenState extends State<PremiumGameScreen> {
     );
   }
 
-  Widget _versionCard(ShopProduct p) {
+  Widget _versionCard(BuildContext context, ShopProduct p) {
     return Pressable(
-      onTap: () => _open(p),
-      semanticLabel: '${p.name}, ${p.priceLabel}, buy on ghossthub.com',
+      onTap: () => _openProduct(context, p),
+      semanticLabel: '${p.name}, ${p.priceLabel}, view details',
       child: Container(
         padding: const EdgeInsets.all(AppSpace.sm + 2),
         decoration: BoxDecoration(
@@ -179,12 +116,13 @@ class _PremiumGameScreenState extends State<PremiumGameScreen> {
                 width: 56,
                 height: 56,
                 child: p.image.isEmpty
-                    ? _fallback()
+                    ? const PremiumImageFallback()
                     : CachedNetworkImage(
                         imageUrl: p.image,
                         fit: BoxFit.cover,
                         memCacheWidth: 200,
-                        errorWidget: (context, url, e) => _fallback(),
+                        errorWidget: (context, url, e) =>
+                            const PremiumImageFallback(),
                       ),
               ),
             ),
@@ -220,7 +158,7 @@ class _PremiumGameScreenState extends State<PremiumGameScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Buy',
+                  'View',
                   style: AppText.label.copyWith(
                     fontSize: 10,
                     letterSpacing: 1,
@@ -234,14 +172,4 @@ class _PremiumGameScreenState extends State<PremiumGameScreen> {
       ),
     );
   }
-
-  Widget _fallback() => ColoredBox(
-    color: AppColors.surfaceHigh,
-    child: Center(
-      child: Icon(
-        Icons.sports_esports_outlined,
-        color: AppColors.textDim.withValues(alpha: .7),
-      ),
-    ),
-  );
 }

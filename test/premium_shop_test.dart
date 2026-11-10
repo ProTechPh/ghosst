@@ -46,6 +46,30 @@ void main() {
     expect(shopPriceLabel('₱', 200, 200), '₱200');
   });
 
+  test('parses a version detail with description, details and gallery', () {
+    final p = ShopProduct.fromJson({
+      'id': 55,
+      'name': 'GHOSST PREMIUM V4',
+      'platform': 'android',
+      'description': 'Safe main account',
+      'details': 'Line one\nLine two',
+      'gallery': [
+        'https://ghossthub.com/uploads/a.jpg',
+        'https://ghossthub.com/uploads/b.jpg',
+      ],
+      'price': 50,
+      'priceMax': 3000,
+      'stock': 6,
+      'currency': '₱',
+      'url': 'https://ghossthub.com/checkout.php?product=55',
+    });
+
+    expect(p.description, 'Safe main account');
+    expect(p.details, contains('Line two'));
+    expect(p.gallery.length, 2);
+    expect(p.priceLabel, '₱50 – ₱3,000');
+  });
+
   test('defaults missing game fields and platforms', () {
     final game = ShopGame.fromJson({});
     expect(game.name, '');

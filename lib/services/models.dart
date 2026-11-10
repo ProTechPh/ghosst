@@ -256,6 +256,9 @@ class ShopProduct {
     required this.currency,
     required this.image,
     required this.url,
+    this.description = '',
+    this.details = '',
+    this.gallery = const [],
   });
 
   factory ShopProduct.fromJson(Map<String, dynamic> json) => ShopProduct(
@@ -268,6 +271,9 @@ class ShopProduct {
     currency: json['currency'] as String? ?? '₱',
     image: json['image'] as String? ?? '',
     url: json['url'] as String? ?? '',
+    description: json['description'] as String? ?? '',
+    details: json['details'] as String? ?? '',
+    gallery: (json['gallery'] as List? ?? const []).whereType<String>().toList(),
   );
 
   final int id;
@@ -279,6 +285,11 @@ class ShopProduct {
   final String currency;
   final String image;
   final String url;
+
+  /// Filled by the detail endpoint; empty on list rows.
+  final String description;
+  final String details;
+  final List<String> gallery;
 
   String get priceLabel => shopPriceLabel(currency, price, priceMax);
 
