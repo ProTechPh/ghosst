@@ -58,6 +58,51 @@ class _PremiumProductScreenState extends State<PremiumProductScreen> {
     }
   }
 
+  Widget _durationRow(ShopDuration d) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpace.sm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.md,
+        vertical: AppSpace.sm + 2,
+      ),
+      decoration: BoxDecoration(
+        color: d.soldOut
+            ? AppColors.surface.withValues(alpha: .5)
+            : AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.input + 2),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              d.label,
+              style: AppText.subtitle.copyWith(
+                fontSize: 13,
+                color: d.soldOut ? AppColors.textDim : AppColors.text,
+              ),
+            ),
+          ),
+          Text(
+            d.soldOut ? 'Sold out' : '${d.stock} left',
+            style: AppText.caption.copyWith(
+              fontSize: 11,
+              color: d.soldOut ? AppColors.red : AppColors.green,
+            ),
+          ),
+          const SizedBox(width: AppSpace.md),
+          Text(
+            d.priceLabel,
+            style: AppText.figure.copyWith(
+              fontSize: 14,
+              color: d.soldOut ? AppColors.textDim : AppColors.gold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final product = _product;
@@ -118,6 +163,15 @@ class _PremiumProductScreenState extends State<PremiumProductScreen> {
                     if (_loading)
                       const Skeleton(height: 120, radius: AppRadius.card)
                     else ...[
+                      if (product.durations.isNotEmpty) ...[
+                        Text(
+                          'Available durations',
+                          style: AppText.subtitle.copyWith(fontSize: 14),
+                        ),
+                        const SizedBox(height: AppSpace.sm),
+                        for (final d in product.durations) _durationRow(d),
+                        const SizedBox(height: AppSpace.lg),
+                      ],
                       if (product.description.isNotEmpty) ...[
                         Text(
                           'About',

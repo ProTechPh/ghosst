@@ -62,11 +62,18 @@ void main() {
       'stock': 6,
       'currency': '₱',
       'url': 'https://ghossthub.com/checkout.php?product=55',
+      'durations': [
+        {'label': '1 Day', 'price': 50, 'stock': 3},
+        {'label': 'Lifetime', 'price': 3000, 'stock': 0},
+      ],
     });
 
     expect(p.description, 'Safe main account');
     expect(p.details, contains('Line two'));
     expect(p.gallery.length, 2);
+    expect(p.durations.length, 2);
+    expect(p.durations.first.priceLabel, '₱50');
+    expect(p.durations.last.soldOut, isTrue);
     expect(p.priceLabel, '₱50 – ₱3,000');
   });
 

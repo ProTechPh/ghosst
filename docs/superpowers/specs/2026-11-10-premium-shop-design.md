@@ -17,7 +17,8 @@ not built yet.
 - Tapping a game opens a read-only game page: image carousel, description,
   price range, stock, and every version with its own price/stock.
 - Tapping a version opens a checkout-like page: gallery carousel, name,
-  description, details, platform, stock, price. Its Buy button opens
+  description, details, platform, stock, price, and every available duration
+  with its own price and stock (sold-out ones dimmed). Its Buy button opens
   `checkout.php?product=<id>`. No coin or stock mutation in the app.
 
 ## Non-goals
@@ -54,8 +55,9 @@ not built yet.
 - Games sorted by `games.sort_order`, then name.
 - `GET /v1/premium-shop/{id}` returns one product with its gallery
   (`product_gallery`, fallback to the product image), plain-text
-  `description`/`details`, price range, stock and checkout URL. Missing or
-  out-of-stock product → 404.
+  `description`/`details`, price range, stock, checkout URL, and `durations`
+  (min price and unused-key count per `keys.duration`, sorted 1 Hour → 3 Days
+  → Lifetime). Missing or out-of-stock product → 404.
 
 ### App
 
@@ -73,8 +75,9 @@ not built yet.
   price, View). Tapping a row opens the product page.
 - New `lib/screens/premium_product_screen.dart`: the checkout-like page
   (carousel from `product_gallery`, name, category, platform, stock, price,
-  About/Details, sticky "Buy on ghossthub.com"). Details load lazily from the
-  product endpoint; the feed row is shown instantly.
+  Available durations with stock/price, About/Details, sticky "Buy on
+  ghossthub.com"). Details load lazily from the product endpoint; the feed row
+  is shown instantly.
 - `PremiumCarousel` (`lib/screens/premium_carousel.dart`) is shared by both.
 - Section renders on both flavors.
 
