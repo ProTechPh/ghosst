@@ -46,6 +46,15 @@ class UnityDirectAds {
   VoidCallback? _onClosed;
   ValueChanged<String>? _onError;
 
+  /// True only when ads are permitted, the fallback is enabled, and the AdMob
+  /// error means "no ad is available" — not for "another advertisement is
+  /// already showing", consent denied, or auth errors.
+  static bool shouldFallback({
+    required bool adsEnabled,
+    required String error,
+  }) =>
+      adsEnabled && enabled && isAdMobUnavailable(error);
+
   /// True only for AdMob messages that mean "no ad is available" — not for
   /// "another advertisement is already showing", auth errors, etc.
   static bool isAdMobUnavailable(String error) {
@@ -160,6 +169,11 @@ class UnityDirectAds {
     _onClosed = null;
     _onError = null;
     channel.setMethodCallHandler(null);
+    // PlayerMetaData is SDK-wide and persisted. Clear it so a later
+    // AdMob-mediated Unity ad cannot reuse this direct ad's sid.
+    unawaited(
+      channel.invokeMethod<void>('clearServerId').catchError((Object _) {}),
+    );
   }
 
   @visibleForTesting

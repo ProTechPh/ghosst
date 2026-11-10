@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../arcade.dart';
 import '../premium.dart';
 import '../services/ad_service.dart';
+import '../services/consent_service.dart';
 import '../services/unity_direct_ads.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
@@ -158,8 +159,10 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
       // AdMob may be limited/no-fill. Try the direct Unity path once, but only
       // for "no ad available" errors — not for "already showing" or auth.
       if (!_unityFallbackTried &&
-          UnityDirectAds.enabled &&
-          UnityDirectAds.isAdMobUnavailable(e)) {
+          UnityDirectAds.shouldFallback(
+            adsEnabled: AdService.adsEnabled,
+            error: e,
+          )) {
         _unityFallbackTried = true;
         if (mounted) setState(() => status = 'Loading Unity ad…');
         unawaited(_watchUnityAd());
@@ -222,6 +225,34 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
       setState(() {
         busy = false;
         status = 'Sign in first.';
+      });
+      return;
+    }
+
+    if (!AdService.adsEnabled) {
+      setState(() {
+        busy = false;
+        status = 'Ads are temporarily unavailable. Please try again shortly.';
+      });
+      return;
+    }
+
+    // The direct Unity path bypasses AdMob, so it must honor the same UMP
+    // consent gate (including a mid-session revocation).
+    var canRequest = false;
+    try {
+      canRequest = await ConsentService.canRequestAds().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => false,
+      );
+    } catch (_) {
+      canRequest = false;
+    }
+    if (!mounted) return;
+    if (!canRequest) {
+      setState(() {
+        busy = false;
+        status = 'Ads are not available right now.';
       });
       return;
     }

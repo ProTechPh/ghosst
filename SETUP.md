@@ -120,7 +120,10 @@ App ID (already in the manifest): `ca-app-pub-7791552060229072~1855578469`.
    - Build with `--dart-define=UNITY_DIRECT_ENABLED=true`. Leave the flag off
      until the secret is set: a direct Unity ad would show but coins would not
      be credited.
-   - QA: Unity test mode + `--dart-define=USE_TEST_ADS=false
+   - QA: enable **Unity test mode in the Unity dashboard** (the mediation
+     adapter initializes the SDK before the direct bridge, so the bridge's
+     `testMode` argument is a no-op) and build with
+     `--dart-define=USE_TEST_ADS=false
      --dart-define=ADMOB_TEST_DEVICE_IDS=<device-id>
      --dart-define=UNITY_DIRECT_ENABLED=true`.
 

@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/services/unity_direct_ads.dart';
 
@@ -35,6 +36,31 @@ void main() {
     );
   });
 
+  test('requires the AdMob consent gate and an availability error', () {
+    UnityDirectAds.debugEnabled = true;
+    expect(
+      UnityDirectAds.shouldFallback(
+        adsEnabled: false,
+        error: 'No ads available right now.',
+      ),
+      isFalse,
+    );
+    expect(
+      UnityDirectAds.shouldFallback(
+        adsEnabled: true,
+        error: 'Another advertisement is already displaying.',
+      ),
+      isFalse,
+    );
+    expect(
+      UnityDirectAds.shouldFallback(
+        adsEnabled: true,
+        error: 'No ads available right now.',
+      ),
+      isTrue,
+    );
+  });
+
   test('returns false without touching the channel when disabled', () async {
     final result = await UnityDirectAds.instance.showRewarded(
       userId: 'u1',
@@ -63,5 +89,37 @@ void main() {
 
     expect(shown, isTrue);
     expect(calls, ['initialize', 'load', 'show']);
+  });
+
+  test('completes and clears the persisted Unity server id', () async {
+    UnityDirectAds.debugEnabled = true;
+    final calls = <String>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(UnityDirectAds.channel, (call) async {
+      calls.add(call.method);
+      return true;
+    });
+
+    var completed = false;
+    final shown = await UnityDirectAds.instance.showRewarded(
+      userId: 'u1',
+      onCompleted: () => completed = true,
+      onClosed: () {},
+      onError: (_) {},
+    );
+    expect(shown, isTrue);
+
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      UnityDirectAds.channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('event', {'type': 'completed', 'message': ''}),
+      ),
+      (_) {},
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(completed, isTrue);
+    expect(calls, contains('clearServerId'));
   });
 }

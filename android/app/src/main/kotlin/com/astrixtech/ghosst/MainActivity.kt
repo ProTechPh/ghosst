@@ -110,6 +110,7 @@ class MainActivity : FlutterActivity() {
 
         val unity = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, UNITY_CHANNEL)
         unityChannel = unity
+        clearUnityServerId() // drop a stale sid from a previous direct ad/crash
         unity.setMethodCallHandler { call, result ->
             when (call.method) {
                 "initialize" -> {
@@ -137,6 +138,10 @@ class MainActivity : FlutterActivity() {
                     } else {
                         showUnity(placementId, userId, result)
                     }
+                }
+                "clearServerId" -> {
+                    clearUnityServerId()
+                    result.success(true)
                 }
                 else -> result.notImplemented()
             }
@@ -195,6 +200,7 @@ class MainActivity : FlutterActivity() {
                 error: UnityAds.UnityAdsShowError,
                 message: String,
             ) {
+                clearUnityServerId()
                 emitUnityEvent("failed", message)
                 if (!settled) {
                     settled = true
@@ -218,6 +224,7 @@ class MainActivity : FlutterActivity() {
                 placementId: String,
                 state: UnityAds.UnityAdsShowCompletionState,
             ) {
+                clearUnityServerId()
                 emitUnityEvent(
                     if (state == UnityAds.UnityAdsShowCompletionState.COMPLETED) "completed" else "skipped",
                     null,
@@ -225,6 +232,16 @@ class MainActivity : FlutterActivity() {
                 emitUnityEvent("closed", null)
             }
         })
+    }
+
+    private fun clearUnityServerId() {
+        try {
+            val meta = PlayerMetaData(this)
+            meta.setServerId("")
+            meta.commit()
+        } catch (_: Exception) {
+            // Best-effort: the next direct ad sets it again.
+        }
     }
 
     private fun emitUnityEvent(type: String, message: String?) {

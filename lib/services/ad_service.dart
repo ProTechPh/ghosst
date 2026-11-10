@@ -32,9 +32,21 @@ class AdUnits {
   static const testInterstitial = 'ca-app-pub-3940256099942544/1033173712';
   static const testNative = 'ca-app-pub-3940256099942544/2247696110';
 
-  /// No production device is registered as an AdMob test device. Builds using
-  /// [useTestAds] remain safe because they use Google's official sample units.
-  static const List<String> testDeviceIds = [];
+  /// No production device is registered by default. QA with real mediated
+  /// units can pass the ids instead of switching every request to test ads:
+  /// `--dart-define=ADMOB_TEST_DEVICE_IDS=<id1>,<id2>`
+  static const String _testDeviceIdsRaw = String.fromEnvironment(
+    'ADMOB_TEST_DEVICE_IDS',
+  );
+  static List<String> get testDeviceIds =>
+      parseTestDeviceIds(_testDeviceIdsRaw);
+
+  @visibleForTesting
+  static List<String> parseTestDeviceIds(String raw) => raw
+      .split(',')
+      .map((id) => id.trim())
+      .where((id) => id.isNotEmpty)
+      .toList(growable: false);
 
   /// Debug builds use Google's guaranteed-fill sample inventory. Release builds
   /// use the real Ghosst units unless explicitly overridden for release QA with

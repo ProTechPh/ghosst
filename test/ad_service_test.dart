@@ -58,6 +58,11 @@ void main() {
     test('does not force production devices into AdMob test mode', () {
       expect(AdUnits.testDeviceIds, isEmpty);
     });
+
+    test('parses ADMOB_TEST_DEVICE_IDS and drops blanks', () {
+      expect(AdUnits.parseTestDeviceIds(''), isEmpty);
+      expect(AdUnits.parseTestDeviceIds('a, b,,'), ['a', 'b']);
+    });
   });
 
   group('AdService State & Error Mapping', () {
