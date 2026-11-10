@@ -43,7 +43,7 @@ class _ChatScreenState extends State<ChatScreen> {
   late final ChatClient _client = widget.client ?? ChatService();
   final _input = TextEditingController();
   final _scroll = ScrollController();
-  StreamSubscription<List<ChatMessage>>? _sub;
+  StreamSubscription<ChatFeed>? _sub;
   Timer? _retryTimer;
   List<ChatMessage> _messages = const [];
   bool _sending = false;
@@ -55,6 +55,13 @@ class _ChatScreenState extends State<ChatScreen> {
   ChatMessage? _replyTo;
   bool _loadingMore = false;
   bool _hasMore = true;
+
+  /// Chat link state: CONNECTING hanggang may server snapshot, tapos LIVE.
+  /// Cache-only snapshots ay CONNECTING pa rin — hindi natin ipinapakita ang
+  /// "cached". SENDING kapag may pending write.
+  bool _connecting = true;
+  bool _fromCache = false;
+  bool _pendingWrites = false;
 
   /// Ang ids ng mga naka-mute user (admin lang) — pangtanggal ng hula sa
   /// long-press dialog. Ni-refresh pagbalik sa tab at pagkatapos ng action.
@@ -105,6 +112,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _boot() async {
     if (_sub != null || _booting) return;
     _booting = true;
+    _connecting = true;
     final sw = Stopwatch()..start();
     if (widget.client == null) {
       // `main()` starts the init; the tab may mount before it settles. The
@@ -114,7 +122,12 @@ class _ChatScreenState extends State<ChatScreen> {
     if (!mounted) return;
     _booting = false;
     if (!_client.ready) {
-      if (mounted) setState(() => _unavailable = true);
+      if (mounted) {
+        setState(() {
+          _unavailable = true;
+          _connecting = false;
+        });
+      }
       return;
     }
 
@@ -157,7 +170,12 @@ class _ChatScreenState extends State<ChatScreen> {
       },
     );
     if (!ok) {
-      if (mounted) setState(() => _unavailable = true);
+      if (mounted) {
+        setState(() {
+          _unavailable = true;
+          _connecting = false;
+        });
+      }
       return;
     }
     // On slow path, parallelize uid + muted since we already waited for sign-in.
@@ -180,9 +198,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _subscribe() {
     final sw = Stopwatch()..start();
+    _connecting = true;
     _sub?.cancel();
     _sub = _client.messages().listen(
-      (list) {
+      (feed) {
+        final list = feed.messages;
         if (!mounted) return;
         if (!_booted) {
           debugPrint(
@@ -206,6 +226,9 @@ class _ChatScreenState extends State<ChatScreen> {
           _messages = list;
           _booted = true;
           _unavailable = false;
+          _connecting = false;
+          _fromCache = feed.fromCache;
+          _pendingWrites = feed.hasPendingWrites;
         });
       },
       onError: (Object e) {
@@ -213,7 +236,10 @@ class _ChatScreenState extends State<ChatScreen> {
         _sub?.cancel();
         _sub = null; // payagan ang re-boot pagbalik sa tab (retry)
         if (mounted) {
-          setState(() => _unavailable = true);
+          setState(() {
+            _unavailable = true;
+            _connecting = false;
+          });
           // Auto-reconnect: subukang mag-re-auth at mag-subscribe muli
           _retryTimer?.cancel();
           _retryTimer = Timer(const Duration(seconds: 3), () {
@@ -333,6 +359,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       setState(() {
                         _unavailable = false;
                         _booting = false;
+                        _connecting = true;
                       });
                       _boot();
                     },
@@ -345,6 +372,7 @@ class _ChatScreenState extends State<ChatScreen> {
           )
         : Column(
             children: [
+              _connectionBar(),
               Expanded(child: _messageList()),
               _composer(),
             ],
@@ -356,6 +384,49 @@ class _ChatScreenState extends State<ChatScreen> {
       backgroundColor: AppColors.bg,
       appBar: AppBar(title: const Text('World chat')),
       body: body,
+    );
+  }
+
+  ({String label, IconData icon, Color color}) get _connectionStatus {
+    if (!_connecting && _pendingWrites) {
+      return (
+        label: 'SENDING',
+        icon: Icons.cloud_upload_outlined,
+        color: AppColors.gold,
+      );
+    }
+    if (_connecting || _fromCache) {
+      return (
+        label: 'CONNECTING',
+        icon: Icons.sync,
+        color: AppColors.textDim,
+      );
+    }
+    return (label: 'LIVE', icon: Icons.bolt, color: AppColors.green);
+  }
+
+  /// Maliit na status chip sa taas ng chat: LIVE, SENDING, o CONNECTING.
+  /// Cache-only snapshots ay CONNECTING — walang "CACHED" label.
+  Widget _connectionBar() {
+    final status = _connectionStatus;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.lg,
+        AppSpace.xs,
+        AppSpace.lg,
+        0,
+      ),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Semantics(
+          label: 'Chat status: ${status.label.toLowerCase()}',
+          child: NeonPill(
+            label: status.label,
+            icon: status.icon,
+            color: status.color,
+          ),
+        ),
+      ),
     );
   }
 
