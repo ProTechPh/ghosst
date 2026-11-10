@@ -243,28 +243,28 @@ class Moderation {
 Announcement? unreadAnnouncement(Announcement? a, String dismissedId) =>
     (a == null || a.id == dismissedId) ? null : a;
 
-/// One website premium-shop product (game key, priced in ₱). Read-only: the
-/// app never buys these; [url] opens the site's checkout page.
-class ShopItem {
-  const ShopItem({
+/// One version in the website premium shop (a game key, priced in ₱).
+/// Read-only: the app never buys these; [url] opens the site's checkout page.
+class ShopProduct {
+  const ShopProduct({
     required this.id,
     required this.name,
-    required this.game,
     required this.platform,
     required this.price,
     required this.priceMax,
+    required this.stock,
     required this.currency,
     required this.image,
     required this.url,
   });
 
-  factory ShopItem.fromJson(Map<String, dynamic> json) => ShopItem(
+  factory ShopProduct.fromJson(Map<String, dynamic> json) => ShopProduct(
     id: (json['id'] as num?)?.toInt() ?? 0,
     name: json['name'] as String? ?? '',
-    game: json['game'] as String? ?? '',
     platform: json['platform'] as String? ?? '',
     price: (json['price'] as num?)?.toDouble() ?? 0,
     priceMax: (json['priceMax'] as num?)?.toDouble() ?? 0,
+    stock: (json['stock'] as num?)?.toInt() ?? 0,
     currency: json['currency'] as String? ?? '₱',
     image: json['image'] as String? ?? '',
     url: json['url'] as String? ?? '',
@@ -272,27 +272,89 @@ class ShopItem {
 
   final int id;
   final String name;
-  final String game;
   final String platform;
   final double price;
   final double priceMax;
+  final int stock;
   final String currency;
   final String image;
   final String url;
 
-  /// `₱620` or `₱620 – ₱1,200` when keys are priced differently.
-  String get priceLabel {
-    String money(double v) {
-      final digits = v == v.roundToDouble()
-          ? v.toStringAsFixed(0)
-          : v.toStringAsFixed(2);
-      return digits.replaceAllMapped(
-        RegExp(r'\B(?=(\d{3})+(?!\d))'),
-        (m) => ',',
-      );
-    }
+  String get priceLabel => shopPriceLabel(currency, price, priceMax);
 
-    final low = '$currency${money(price)}';
-    return priceMax > price ? '$low – $currency${money(priceMax)}' : low;
+  /// `Android`, `iOS`, or `Android + iOS`.
+  String get platformLabel => switch (platform) {
+    'ios' => 'iOS',
+    'both' => 'Android + iOS',
+    _ => 'Android',
+  };
+}
+
+/// One game category on the website premium shop, with its image carousel.
+class ShopGame {
+  const ShopGame({
+    required this.name,
+    required this.slug,
+    required this.description,
+    required this.image,
+    required this.images,
+    required this.price,
+    required this.priceMax,
+    required this.stock,
+    required this.currency,
+    required this.products,
+  });
+
+  factory ShopGame.fromJson(Map<String, dynamic> json) {
+    final currency = json['currency'] as String? ?? '₱';
+    return ShopGame(
+      name: json['name'] as String? ?? '',
+      slug: json['slug'] as String? ?? '',
+      description: json['description'] as String? ?? '',
+      image: json['image'] as String? ?? '',
+      images: (json['images'] as List? ?? const []).whereType<String>().toList(),
+      price: (json['price'] as num?)?.toDouble() ?? 0,
+      priceMax: (json['priceMax'] as num?)?.toDouble() ?? 0,
+      stock: (json['stock'] as num?)?.toInt() ?? 0,
+      currency: currency,
+      products: (json['products'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map((j) => ShopProduct.fromJson({...j, 'currency': currency}))
+          .toList(),
+    );
   }
+
+  final String name;
+  final String slug;
+  final String description;
+
+  /// Hero image, or the first product image when the game has no hero.
+  final String image;
+
+  /// Carousel: the game hero followed by its product images (max 8).
+  final List<String> images;
+
+  final double price;
+  final double priceMax;
+  final int stock;
+  final String currency;
+  final List<ShopProduct> products;
+
+  String get priceLabel => shopPriceLabel(currency, price, priceMax);
+}
+
+/// `₱620`, `₱99.50`, or `₱620 – ₱1,200` when keys are priced differently.
+String shopPriceLabel(String currency, double price, double priceMax) {
+  String money(double v) {
+    final digits = v == v.roundToDouble()
+        ? v.toStringAsFixed(0)
+        : v.toStringAsFixed(2);
+    return digits.replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'),
+      (m) => ',',
+    );
+  }
+
+  final low = '$currency${money(price)}';
+  return priceMax > price ? '$low – $currency${money(priceMax)}' : low;
 }

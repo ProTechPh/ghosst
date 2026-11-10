@@ -12,6 +12,7 @@ import '../services/ad_service.dart';
 import '../services/worker_backend.dart';
 import '../services/distribution.dart';
 import '../theme.dart';
+import 'premium_game_screen.dart';
 import 'product_detail.dart';
 
 class StoreScreen extends StatefulWidget {
@@ -43,8 +44,10 @@ class StoreScreen extends StatefulWidget {
 class _StoreScreenState extends State<StoreScreen> {
   List<Product> products = [];
 
-  /// Website premium products (₱). Read-only - taps open ghossthub.com.
-  List<ShopItem> premium = const [];
+  /// Website premium games (₱). Read-only - taps open a game page, buying
+  /// finishes on ghossthub.com.
+  List<ShopGame> premium = const [];
+  bool _premiumLoading = true;
   Map<String, int> stock = {};
   bool loading = true;
   String error = '';
@@ -221,38 +224,89 @@ class _StoreScreenState extends State<StoreScreen> {
 
   Future<void> _loadPremium() async {
     try {
-      final items = await Backend.premiumShop();
-      if (mounted) setState(() => premium = items);
+      final games = await Backend.premiumShop();
+      if (mounted) {
+        setState(() {
+          premium = games;
+          _premiumLoading = false;
+        });
+      }
     } catch (e) {
-      // Keep the last good rail; a shop outage must not break the store.
+      // Keep the last good list; a shop outage must not break the store.
       debugPrint('[Store] premium shop unavailable: $e');
+      if (mounted) setState(() => _premiumLoading = false);
     }
   }
 
-  Future<void> _openPremium(ShopItem item) async {
-    final uri = Uri.tryParse(item.url);
+  static const _shopUrl = 'https://ghossthub.com/browseproducts.php';
+
+  Future<void> _openShopLink(String url) async {
+    final uri = Uri.tryParse(url);
     if (uri == null || uri.host.isEmpty) return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint('[Store] could not open shop link: $e');
+    }
   }
 
-  Widget _premiumShelf() {
-    return SizedBox(
-      height: 248,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: premium.length,
-        separatorBuilder: (_, _) => const SizedBox(width: AppSpace.md),
-        itemBuilder: (_, i) => _premiumCard(premium[i]),
+  List<Widget> _premiumBody() {
+    return [
+      ScrollReveal(
+        child: SectionHeader(
+          title: 'Premium shop',
+          trailing: Text(
+            '${premium.length}',
+            style: AppText.figure.copyWith(
+              fontSize: 12,
+              color: AppColors.textDim,
+            ),
+          ),
+        ),
       ),
-    );
+      const SizedBox(height: AppSpace.xs),
+      Text(
+        'Game keys priced in ₱ - checkout finishes on ghossthub.com.',
+        style: AppText.caption,
+      ),
+      const SizedBox(height: AppSpace.md),
+      if (_premiumLoading)
+        const Skeleton(height: 220, radius: AppRadius.card)
+      else if (premium.isEmpty)
+        ScrollReveal(
+          child: EmptyState(
+            icon: Icons.workspace_premium_outlined,
+            title: 'Premium shop unavailable',
+            message: 'Could not load the website shop right now.',
+            action: IslandButton(
+              expand: false,
+              dense: true,
+              outline: true,
+              glow: false,
+              label: 'Open ghossthub.com',
+              icon: CupertinoIcons.arrow_up_right,
+              onPressed: () => _openShopLink(_shopUrl),
+            ),
+          ),
+        )
+      else
+        for (final game in premium) ...[
+          ScrollReveal(child: _premiumGameCard(game)),
+          const SizedBox(height: AppSpace.md),
+        ],
+      const SizedBox(height: AppSpace.sm),
+    ];
   }
 
-  Widget _premiumCard(ShopItem item) {
+  Widget _premiumGameCard(ShopGame game) {
+    final versions = game.products.length;
     return Pressable(
-      onTap: () => _openPremium(item),
-      semanticLabel: '${item.name} - buy on ghossthub.com',
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => PremiumGameScreen(game: game)),
+      ),
+      semanticLabel: '${game.name}, ${game.priceLabel}',
       child: Container(
-        width: 168,
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: AppColors.surface,
@@ -263,73 +317,85 @@ class _StoreScreenState extends State<StoreScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
-              height: 96,
+              height: 140,
               width: double.infinity,
-              child: Semantics(
-                image: true,
-                label: item.name,
-                child: item.image.isEmpty
-                    ? _premiumImageFallback()
-                    : CachedNetworkImage(
-                        imageUrl: item.image,
-                        fit: BoxFit.cover,
-                        memCacheWidth: 400,
-                        errorWidget: (context, url, e) =>
-                            _premiumImageFallback(),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Semantics(
+                    image: true,
+                    label: game.name,
+                    child: game.image.isEmpty
+                        ? _premiumImageFallback()
+                        : CachedNetworkImage(
+                            imageUrl: game.image,
+                            fit: BoxFit.cover,
+                            memCacheWidth: 800,
+                            errorWidget: (context, url, e) =>
+                                _premiumImageFallback(),
+                          ),
+                  ),
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.transparent, Color(0xE6050B0E)],
                       ),
-              ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.game.toUpperCase(),
+                    ),
+                  ),
+                  Positioned(
+                    left: 14,
+                    right: 14,
+                    bottom: 10,
+                    child: Text(
+                      game.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppText.label.copyWith(
-                        fontSize: 9,
-                        letterSpacing: 1,
-                        color: AppColors.cyan,
+                      style: AppText.subtitle.copyWith(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      item.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppText.subtitle.copyWith(fontSize: 13),
+                  ),
+                  if (game.images.length > 1)
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: Eyebrow(text: '${game.images.length} photos'),
                     ),
-                    const Spacer(),
-                    Text(
-                      item.priceLabel,
-                      style: AppText.figure.copyWith(
-                        fontSize: 15,
-                        color: AppColors.gold,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpace.xs),
-                    Row(
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(AppSpace.md),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Buy on site',
-                          style: AppText.caption.copyWith(
-                            fontSize: 10,
-                            color: AppColors.textDim,
+                          game.priceLabel,
+                          style: AppText.figure.copyWith(
+                            fontSize: 16,
+                            color: AppColors.gold,
                           ),
                         ),
-                        const SizedBox(width: 2),
-                        const Icon(
-                          CupertinoIcons.arrow_up_right,
-                          size: 12,
-                          color: AppColors.textDim,
+                        const SizedBox(height: 2),
+                        Text(
+                          '$versions ${versions == 1 ? 'version' : 'versions'} · ${game.stock} keys in stock',
+                          style: AppText.caption.copyWith(fontSize: 11),
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    size: 20,
+                    color: AppColors.textDim,
+                  ),
+                ],
               ),
             ),
           ],
@@ -399,6 +465,7 @@ class _StoreScreenState extends State<StoreScreen> {
 
     final shelf = _shelf;
     final rest = shelf.length > 1 ? shelf.sublist(1) : const <Product>[];
+    final isPremium = _tab == 'premium';
 
     return Stack(
       children: [
@@ -425,23 +492,32 @@ class _StoreScreenState extends State<StoreScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Eyebrow(
-                            text: _tab == 'key' ? 'License store' : 'App store',
+                            text: switch (_tab) {
+                              'key' => 'License store',
+                              'app' => 'App store',
+                              _ => 'Premium store',
+                            },
                           ),
                           const SizedBox(height: AppSpace.xs),
                           Text(
-                            _tab == 'key' ? 'Products' : 'Apps & files',
+                            switch (_tab) {
+                              'key' => 'Products',
+                              'app' => 'Apps & files',
+                              _ => 'Game keys',
+                            },
                             style: AppText.headline,
                           ),
                         ],
                       ),
                     ),
-                    Text(
-                      '${widget.coins} coins',
-                      style: AppText.figure.copyWith(
-                        fontSize: 13,
-                        color: AppColors.gold,
+                    if (!isPremium)
+                      Text(
+                        '${widget.coins} coins',
+                        style: AppText.figure.copyWith(
+                          fontSize: 13,
+                          color: AppColors.gold,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -456,8 +532,9 @@ class _StoreScreenState extends State<StoreScreen> {
                 const SizedBox(height: AppSpace.xl),
               ],
 
-              // ---- balance strip -------------------------------------------
-              ScrollReveal(
+              // ---- balance strip (coin shelves only) -----------------------
+              if (!isPremium)
+                ScrollReveal(
                 delay: const Duration(milliseconds: 110),
                 child: Container(
                   decoration: BoxDecoration(
@@ -593,7 +670,7 @@ class _StoreScreenState extends State<StoreScreen> {
               const SizedBox(height: AppSpace.xxl),
 
               // ---- products -------------------------------------------------
-              if (shelf.isEmpty)
+              if (!isPremium && shelf.isEmpty)
                 ScrollReveal(
                   child: EmptyState(
                     icon: _tab == 'key'
@@ -614,7 +691,7 @@ class _StoreScreenState extends State<StoreScreen> {
                           ),
                   ),
                 )
-              else ...[
+              else if (!isPremium) ...[
                 ScrollReveal(
                   child: SectionHeader(
                     title: 'Featured',
@@ -654,32 +731,14 @@ class _StoreScreenState extends State<StoreScreen> {
               ],
               const SizedBox(height: AppSpace.xl),
 
-              // ---- premium shop (website, pay on site) ---------------------
-              if (premium.isNotEmpty) ...[
-                ScrollReveal(
-                  child: SectionHeader(
-                    title: 'Premium shop',
-                    trailing: Text(
-                      'PAY ON SITE',
-                      style: AppText.label.copyWith(
-                        fontSize: 10,
-                        color: AppColors.textDim,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: AppSpace.xs),
-                Text(
-                  'Buy on ghossthub.com — in-app checkout is coming soon.',
-                  style: AppText.caption,
-                ),
-                const SizedBox(height: AppSpace.md),
-                ScrollReveal(child: _premiumShelf()),
-                const SizedBox(height: AppSpace.xl),
-              ],
+              // ---- premium shelf (website games, pay on site) ---------------
+              if (isPremium) ..._premiumBody(),
 
               // ---- sponsored native ad ------------------------------------
-              if (shelf.isNotEmpty && _nativeLoaded && _nativeAd != null) ...[
+              if (!isPremium &&
+                  shelf.isNotEmpty &&
+                  _nativeLoaded &&
+                  _nativeAd != null) ...[
                 const SectionHeader(title: 'Sponsored'),
                 ConstrainedBox(
                   constraints: const BoxConstraints(
@@ -701,7 +760,9 @@ class _StoreScreenState extends State<StoreScreen> {
                 child: Text(
                   _tab == 'key'
                       ? 'FRESH DROPS · DELIVERED INSTANTLY'
-                      : 'MEDIAFIRE BACKED · DOWNLOADS ANY TIME',
+                      : _tab == 'app'
+                      ? 'MEDIAFIRE BACKED · DOWNLOADS ANY TIME'
+                      : 'PRICES IN ₱ · CHECKOUT ON GHOSSTHUB.COM',
                   style: AppText.label.copyWith(
                     fontSize: 10,
                     letterSpacing: 2.4,
@@ -716,10 +777,11 @@ class _StoreScreenState extends State<StoreScreen> {
     );
   }
 
-  // ---- Keys | Apps switch ---------------------------------------------
+  // ---- Keys | Apps | Premium switch -----------------------------------
   Widget _segment() {
     const keys = 'key';
     const apps = 'app';
+    const premiumShop = 'premium';
 
     Widget item(String id, String label, IconData icon) {
       final on = _tab == id;
@@ -791,6 +853,7 @@ class _StoreScreenState extends State<StoreScreen> {
         children: [
           item(keys, 'Keys', Icons.key_rounded),
           item(apps, 'Apps', Icons.android_rounded),
+          item(premiumShop, 'Premium', Icons.workspace_premium_rounded),
         ],
       ),
     );
