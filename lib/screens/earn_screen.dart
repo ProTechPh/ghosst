@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../arcade.dart';
 import '../premium.dart';
 import '../services/ad_service.dart';
+import '../services/unity_direct_ads.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
 
@@ -44,6 +45,10 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
   double verifyProgress = 0;
   bool _lastActionSucceeded = false;
   Completer<void>? _verificationWakeup;
+
+  /// Set once per Watch tap so a second AdMob error cannot start two Unity
+  /// fallbacks.
+  bool _unityFallbackTried = false;
 
   /// Anchor for the payout token's start point.
   final GlobalKey _ctaKey = GlobalKey();
@@ -129,6 +134,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
   /// Plays the standard rewarded ad; SSV credits the coins server-side.
   Future<void> _watchAd() async {
     if (_remainingCooldown > 0) return;
+    _unityFallbackTried = false;
 
     final user = await Backend.currentUser();
     if (user == null) {
@@ -149,6 +155,16 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
     if (!mounted) return;
 
     void onError(String e) {
+      // AdMob may be limited/no-fill. Try the direct Unity path once, but only
+      // for "no ad available" errors — not for "already showing" or auth.
+      if (!_unityFallbackTried &&
+          UnityDirectAds.enabled &&
+          UnityDirectAds.isAdMobUnavailable(e)) {
+        _unityFallbackTried = true;
+        if (mounted) setState(() => status = 'Loading Unity ad…');
+        unawaited(_watchUnityAd());
+        return;
+      }
       if (mounted) {
         setState(() {
           busy = false;
@@ -194,6 +210,49 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
           status = 'Unable to play ad right now. Please try again in a moment.';
         });
       }
+    }
+  }
+
+  /// Direct Unity fallback. Coins are still credited by the Unity S2S
+  /// callback; this only shows the ad and starts the existing wallet poll.
+  Future<void> _watchUnityAd() async {
+    final user = await Backend.currentUser();
+    if (!mounted) return;
+    if (user == null) {
+      setState(() {
+        busy = false;
+        status = 'Sign in first.';
+      });
+      return;
+    }
+
+    setState(() => status = 'Loading Unity ad…');
+    final shown = await UnityDirectAds.instance.showRewarded(
+      userId: user.id,
+      onCompleted: () => unawaited(_verify()),
+      onClosed: () {
+        if (!mounted) return;
+        if (status == 'Loading Unity ad…') {
+          setState(() {
+            busy = false;
+            status = 'Ad closed before a reward was earned.';
+          });
+          _startCooldown(15);
+        }
+      },
+      onError: (e) {
+        if (!mounted) return;
+        setState(() {
+          busy = false;
+          status = e;
+        });
+      },
+    );
+    if (!shown && mounted && status == 'Loading Unity ad…') {
+      setState(() {
+        busy = false;
+        status = 'Unity ad is not available right now.';
+      });
     }
   }
 

@@ -79,11 +79,11 @@ App ID (already in the manifest): `ca-app-pub-7791552060229072~1855578469`.
    `https://ghossthub.com/api/v1/ads/ssv` → **Verify URL** → **Save**.
    Reward amount = coins per ad (currently `10`); it comes back as
    `reward_amount` in the signed callback.
-2. **Coins never arrive?** The API logs every rejection to PHP's error log
-   (`SSV blocked: <reason>`). On Hostinger that is
-   `public_html/logs/` / `error_log` in the File Manager. No log line at all
-   ⇒ the callback URL is wrong in AdMob. A logged signature error ⇒ the
-   verifier keys could not be fetched, not your URL.
+2. **Coins never arrive?** The API writes expected guard hits (`SSV blocked`)
+   to `ssv.log`; real failures go to PHP's error log (`error_log`). On
+   Hostinger those are `public_html/logs/` / `error_log` in the File Manager.
+   No log line at all ⇒ the callback URL is wrong in AdMob. A logged signature
+   error ⇒ the verifier keys could not be fetched, not your URL.
 3. **Unity Ads mediation fallback:** AdMob → Mediation → a rewarded group
    targeting both rewarded units, then Unity Ads as an ad source. Merely
    shipping `gma_mediation_unity` does not enable Unity inventory; startup
@@ -105,8 +105,24 @@ App ID (already in the manifest): `ca-app-pub-7791552060229072~1855578469`.
      cannot mint a balance.
    - Pacing is keyed on `sha256(lower(email))`, so deleting and re-registering
      the same address does not reset the daily cap.
-   Each rejection writes `SSV blocked: <reason>` — check the error log before
-   assuming the callback URL is wrong.
+   Each guard rejection writes `SSV blocked: <reason>` to `ssv.log` — check
+   that file before assuming the callback URL is wrong.
+
+6. **Direct Unity rewarded fallback (optional):** when AdMob has no fill and
+   `UNITY_DIRECT_ENABLED=true`, the app calls the Unity Ads SDK directly
+   (`lib/services/unity_direct_ads.dart`, Kotlin bridge in `MainActivity.kt`).
+   - Unity dashboard → create a rewarded placement `BP_Rewarded_Direct` (keep it
+     separate from the mediated `BP_Rewarded_Android`).
+   - Contact Unity Ads Support with Game ID `800392172` and callback URL
+     `https://ghossthub.com/api/v1/ads/unity-s2s`; they enable S2S and give you
+     the HMAC secret.
+   - Set `UNITY_S2S_SECRET` in `api/config.php` (or `GHOSST_UNITY_S2S_SECRET`).
+   - Build with `--dart-define=UNITY_DIRECT_ENABLED=true`. Leave the flag off
+     until the secret is set: a direct Unity ad would show but coins would not
+     be credited.
+   - QA: Unity test mode + `--dart-define=USE_TEST_ADS=false
+     --dart-define=ADMOB_TEST_DEVICE_IDS=<device-id>
+     --dart-define=UNITY_DIRECT_ENABLED=true`.
 
 ## 4. Run & test
 
@@ -119,6 +135,8 @@ flutter run --flavor play
 flutter run --flavor direct
 # QA ads:
 flutter run --release --flavor play --dart-define=USE_TEST_ADS=true
+# QA with real mediated units on a registered test device:
+flutter run --release --flavor play --dart-define=USE_TEST_ADS=false --dart-define=ADMOB_TEST_DEVICE_IDS=<device-id>
 flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=false
 flutter build apk --release --flavor direct
 ```

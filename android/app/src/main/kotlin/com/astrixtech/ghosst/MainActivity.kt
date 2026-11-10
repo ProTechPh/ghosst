@@ -13,6 +13,13 @@ import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import com.unity3d.ads.IUnityAdsInitializationListener
+import com.unity3d.ads.IUnityAdsLoadListener
+import com.unity3d.ads.IUnityAdsShowListener
+import com.unity3d.ads.UnityAds
+import com.unity3d.ads.UnityAdsLoadOptions
+import com.unity3d.ads.UnityAdsShowOptions
+import com.unity3d.ads.metadata.PlayerMetaData
 import java.security.MessageDigest
 import java.security.cert.CertificateFactory
 
@@ -30,6 +37,8 @@ import java.security.cert.CertificateFactory
 // emulators, installer=sideload. Those flag legitimate users as often as
 // crackers — the signature already settles the question.
 class MainActivity : FlutterActivity() {
+
+    private var unityChannel: MethodChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -98,6 +107,133 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+
+        val unity = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, UNITY_CHANNEL)
+        unityChannel = unity
+        unity.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "initialize" -> {
+                    val gameId = call.argument<String>("gameId")
+                    val testMode = call.argument<Boolean>("testMode") ?: false
+                    if (gameId.isNullOrBlank()) {
+                        result.error("bad-args", "gameId is required", null)
+                    } else {
+                        initializeUnity(gameId, testMode, result)
+                    }
+                }
+                "load" -> {
+                    val placementId = call.argument<String>("placementId")
+                    if (placementId.isNullOrBlank()) {
+                        result.error("bad-args", "placementId is required", null)
+                    } else {
+                        loadUnity(placementId, result)
+                    }
+                }
+                "show" -> {
+                    val placementId = call.argument<String>("placementId")
+                    val userId = call.argument<String>("userId")
+                    if (placementId.isNullOrBlank() || userId.isNullOrBlank()) {
+                        result.error("bad-args", "placementId and userId are required", null)
+                    } else {
+                        showUnity(placementId, userId, result)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    // ------------------------------------------------------------- Unity Ads
+
+    private fun initializeUnity(gameId: String, testMode: Boolean, result: MethodChannel.Result) {
+        if (UnityAds.isInitialized) {
+            result.success(true)
+            return
+        }
+        UnityAds.initialize(this, gameId, testMode, object : IUnityAdsInitializationListener {
+            override fun onInitializationComplete() {
+                result.success(true)
+            }
+
+            override fun onInitializationFailed(
+                error: UnityAds.UnityAdsInitializationError,
+                message: String,
+            ) {
+                emitUnityEvent("failed", message)
+                result.error("unity-init", message, null)
+            }
+        })
+    }
+
+    private fun loadUnity(placementId: String, result: MethodChannel.Result) {
+        UnityAds.load(placementId, UnityAdsLoadOptions(), object : IUnityAdsLoadListener {
+            override fun onUnityAdsAdLoaded(placementId: String) {
+                emitUnityEvent("loaded", null)
+                result.success(true)
+            }
+
+            override fun onUnityAdsFailedToLoad(
+                placementId: String,
+                error: UnityAds.UnityAdsLoadError,
+                message: String,
+            ) {
+                emitUnityEvent("loadFailed", message)
+                result.error("unity-load", message, null)
+            }
+        })
+    }
+
+    private fun showUnity(placementId: String, userId: String, result: MethodChannel.Result) {
+        val meta = PlayerMetaData(this)
+        meta.setServerId(userId)
+        meta.commit()
+
+        var settled = false
+        UnityAds.show(this, placementId, UnityAdsShowOptions(), object : IUnityAdsShowListener {
+            override fun onUnityAdsShowFailure(
+                placementId: String,
+                error: UnityAds.UnityAdsShowError,
+                message: String,
+            ) {
+                emitUnityEvent("failed", message)
+                if (!settled) {
+                    settled = true
+                    result.error("unity-show", message, null)
+                }
+            }
+
+            override fun onUnityAdsShowStart(placementId: String) {
+                emitUnityEvent("shown", null)
+                if (!settled) {
+                    settled = true
+                    result.success(true)
+                }
+            }
+
+            override fun onUnityAdsShowClick(placementId: String) {
+                // No-op; the SDK opens the advertiser itself.
+            }
+
+            override fun onUnityAdsShowComplete(
+                placementId: String,
+                state: UnityAds.UnityAdsShowCompletionState,
+            ) {
+                emitUnityEvent(
+                    if (state == UnityAds.UnityAdsShowCompletionState.COMPLETED) "completed" else "skipped",
+                    null,
+                )
+                emitUnityEvent("closed", null)
+            }
+        })
+    }
+
+    private fun emitUnityEvent(type: String, message: String?) {
+        runOnUiThread {
+            unityChannel?.invokeMethod(
+                "event",
+                mapOf("type" to type, "message" to (message ?: "")),
+            )
+        }
     }
 
     // ------------------------------------------------------------- download
@@ -291,6 +427,7 @@ class MainActivity : FlutterActivity() {
         private const val CHANNEL = "com.astrixtech.ghosst/security"
         private const val BUILD_CHANNEL = "com.astrixtech.ghosst/build"
         private const val APK_CHANNEL = "com.astrixtech.ghosst/apk"
+        private const val UNITY_CHANNEL = "com.astrixtech.ghosst/unityads"
         private const val APK_MIME = "application/vnd.android.package-archive"
 
         // SHA-256 of the official release certificate (`ghosst-release.jks`,

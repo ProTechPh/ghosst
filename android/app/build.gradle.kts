@@ -82,3 +82,9 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Direct Kotlin calls need the SDK on the app's compile classpath; the
+    // gma_mediation_unity plugin keeps its copy implementation-only.
+    implementation("com.unity3d.ads:unity-ads:4.20.1")
+}
