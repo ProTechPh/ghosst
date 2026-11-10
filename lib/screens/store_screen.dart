@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../premium.dart';
 import '../arcade.dart';
@@ -41,6 +42,9 @@ class StoreScreen extends StatefulWidget {
 
 class _StoreScreenState extends State<StoreScreen> {
   List<Product> products = [];
+
+  /// Website premium products (₱). Read-only - taps open ghossthub.com.
+  List<ShopItem> premium = const [];
   Map<String, int> stock = {};
   bool loading = true;
   String error = '';
@@ -169,6 +173,9 @@ class _StoreScreenState extends State<StoreScreen> {
   }
 
   Future<void> _load({bool silent = false}) async {
+    // The website shop is secondary: it loads beside the coin products and
+    // never blocks or fails the store.
+    unawaited(_loadPremium());
     if (!silent) {
       setState(() {
         loading = true;
@@ -211,6 +218,135 @@ class _StoreScreenState extends State<StoreScreen> {
       });
     }
   }
+
+  Future<void> _loadPremium() async {
+    try {
+      final items = await Backend.premiumShop();
+      if (mounted) setState(() => premium = items);
+    } catch (e) {
+      // Keep the last good rail; a shop outage must not break the store.
+      debugPrint('[Store] premium shop unavailable: $e');
+    }
+  }
+
+  Future<void> _openPremium(ShopItem item) async {
+    final uri = Uri.tryParse(item.url);
+    if (uri == null || uri.host.isEmpty) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Widget _premiumShelf() {
+    return SizedBox(
+      height: 248,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: premium.length,
+        separatorBuilder: (_, _) => const SizedBox(width: AppSpace.md),
+        itemBuilder: (_, i) => _premiumCard(premium[i]),
+      ),
+    );
+  }
+
+  Widget _premiumCard(ShopItem item) {
+    return Pressable(
+      onTap: () => _openPremium(item),
+      semanticLabel: '${item.name} - buy on ghossthub.com',
+      child: Container(
+        width: 168,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              height: 96,
+              width: double.infinity,
+              child: Semantics(
+                image: true,
+                label: item.name,
+                child: item.image.isEmpty
+                    ? _premiumImageFallback()
+                    : CachedNetworkImage(
+                        imageUrl: item.image,
+                        fit: BoxFit.cover,
+                        memCacheWidth: 400,
+                        errorWidget: (context, url, e) =>
+                            _premiumImageFallback(),
+                      ),
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.game.toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppText.label.copyWith(
+                        fontSize: 9,
+                        letterSpacing: 1,
+                        color: AppColors.cyan,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      item.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppText.subtitle.copyWith(fontSize: 13),
+                    ),
+                    const Spacer(),
+                    Text(
+                      item.priceLabel,
+                      style: AppText.figure.copyWith(
+                        fontSize: 15,
+                        color: AppColors.gold,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpace.xs),
+                    Row(
+                      children: [
+                        Text(
+                          'Buy on site',
+                          style: AppText.caption.copyWith(
+                            fontSize: 10,
+                            color: AppColors.textDim,
+                          ),
+                        ),
+                        const SizedBox(width: 2),
+                        const Icon(
+                          CupertinoIcons.arrow_up_right,
+                          size: 12,
+                          color: AppColors.textDim,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _premiumImageFallback() => ColoredBox(
+    color: AppColors.surfaceHigh,
+    child: Center(
+      child: Icon(
+        Icons.storefront_outlined,
+        color: AppColors.textDim.withValues(alpha: .7),
+      ),
+    ),
+  );
 
   /// Products on the current shelf.
   List<Product> get _shelf => products
@@ -517,6 +653,30 @@ class _StoreScreenState extends State<StoreScreen> {
                 ],
               ],
               const SizedBox(height: AppSpace.xl),
+
+              // ---- premium shop (website, pay on site) ---------------------
+              if (premium.isNotEmpty) ...[
+                ScrollReveal(
+                  child: SectionHeader(
+                    title: 'Premium shop',
+                    trailing: Text(
+                      'PAY ON SITE',
+                      style: AppText.label.copyWith(
+                        fontSize: 10,
+                        color: AppColors.textDim,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpace.xs),
+                Text(
+                  'Buy on ghossthub.com — in-app checkout is coming soon.',
+                  style: AppText.caption,
+                ),
+                const SizedBox(height: AppSpace.md),
+                ScrollReveal(child: _premiumShelf()),
+                const SizedBox(height: AppSpace.xl),
+              ],
 
               // ---- sponsored native ad ------------------------------------
               if (shelf.isNotEmpty && _nativeLoaded && _nativeAd != null) ...[
