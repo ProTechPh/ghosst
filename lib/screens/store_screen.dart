@@ -6,6 +6,7 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import '../premium.dart';
 import '../arcade.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../services/ad_service.dart';
 import '../services/worker_backend.dart';
 import '../services/distribution.dart';
@@ -176,17 +177,22 @@ class _StoreScreenState extends State<StoreScreen> {
     }
     try {
       final ps = await Backend.products();
-      final counts = <String, int>{};
+      final isAdmin = await Backend.isAdmin();
       // Stock counts are only readable by admins (team:admins can read `keys`).
-      if (await Backend.isAdmin()) {
-        for (final p in ps) {
-          if (p.isKey) counts[p.id] = await Backend.availableCount(p.id);
-        }
-      }
-      // Owned set is best-effort — an empty set only loses the "Owned" badge.
-      final mine = await Backend.ownedProductIds().catchError(
-        (_) => <String>{},
-      );
+      // Fetch them in parallel with the owned set — serial awaits made the
+      // store wait one round-trip per key product (N+1).
+      final keyIds = isAdmin
+          ? ps.where((p) => p.isKey).map((p) => p.id).toList()
+          : <String>[];
+      final results = await Future.wait<Object>([
+        ...keyIds.map((id) => Backend.availableCount(id)),
+        // Owned set is best-effort — an empty set only loses the "Owned" badge.
+        Backend.ownedProductIds().catchError((_) => <String>{}),
+      ]);
+      final counts = <String, int>{
+        for (var i = 0; i < keyIds.length; i++) keyIds[i]: results[i] as int,
+      };
+      final mine = results.last as Set<String>;
       if (!mounted) return;
       setState(() {
         products = !Distribution.showsDownloadStore
@@ -264,276 +270,286 @@ class _StoreScreenState extends State<StoreScreen> {
         RefreshIndicator(
           onRefresh: _load,
           child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(
-          AppSpace.xl,
-          AppSpace.md,
-          AppSpace.xl,
-          // Clears the floating nav pill so the last row is never covered.
-          AppSpace.huge + AppSpace.xxl,
-        ),
-        children: [
-          // ---- compact header (Magazine Cover) -------------------------
-          ScrollReveal(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Eyebrow(text: _tab == 'key' ? 'License store' : 'App store'),
-                      const SizedBox(height: AppSpace.xs),
-                      Text(
-                        _tab == 'key' ? 'Products' : 'Apps & files',
-                        style: AppText.headline,
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  '${widget.coins} coins',
-                  style: AppText.figure.copyWith(
-                    fontSize: 13,
-                    color: AppColors.gold,
-                  ),
-                ),
-              ],
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpace.xl,
+              AppSpace.md,
+              AppSpace.xl,
+              // Clears the floating nav pill so the last row is never covered.
+              AppSpace.huge + AppSpace.xxl,
             ),
-          ),
-          const SizedBox(height: AppSpace.md),
-
-          // ---- shelf switch (Keys | Apps) -------------------------------
-          if (Distribution.showsDownloadStore) ...[
-            ScrollReveal(
-              delay: const Duration(milliseconds: 60),
-              child: _segment(),
-            ),
-            const SizedBox(height: AppSpace.xl),
-          ],
-
-          // ---- balance strip -------------------------------------------
-          ScrollReveal(
-            delay: const Duration(milliseconds: 110),
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1A1508), Color(0xFF0C1C22)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(AppRadius.hero),
-                border: Border.all(color: AppColors.gold.withValues(alpha: .3), width: 1.5),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.gold.withValues(alpha: .25),
-                    blurRadius: 32,
-                    spreadRadius: -4,
-                    offset: const Offset(0, 12),
-                  ),
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: .4),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Pressable(
-                    onTap: widget.onOpenWallet,
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppSpace.lg),
-                      child: Row(
+            children: [
+              // ---- compact header (Magazine Cover) -------------------------
+              ScrollReveal(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const CoinMedallion(size: 56),
-                          const SizedBox(width: AppSpace.md + 2),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'YOUR BALANCE',
-                                  style: AppText.caption.copyWith(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 2.2,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Row(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.baseline,
-                                  textBaseline: TextBaseline.alphabetic,
-                                  children: [
-                                    AnimatedCounter(
-                                      value: widget.coins,
-                                      style: monoStyle(
-                                        fontSize: 34,
-                                        fontWeight: FontWeight.w800,
-                                        color: AppColors.gold,
-                                        height: 1.05,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text('coins', style: AppText.caption),
-                                  ],
-                                ),
-                              ],
-                            ),
+                          Eyebrow(
+                            text: _tab == 'key' ? 'License store' : 'App store',
                           ),
-                          Icon(
-                            Icons.chevron_right_rounded,
-                            size: 20,
-                            color: AppColors.textDim.withValues(alpha: 0.7),
+                          const SizedBox(height: AppSpace.xs),
+                          Text(
+                            _tab == 'key' ? 'Products' : 'Apps & files',
+                            style: AppText.headline,
                           ),
                         ],
                       ),
                     ),
-                  ),
-                  // Top-up lives inside the balance card: one object, two taps.
-                  if (widget.onGoToEarn != null) ...[
-                    Container(
-                      height: 1,
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: AppSpace.lg,
-                      ),
-                      color: Colors.white.withValues(alpha: 0.06),
-                    ),
-                    Pressable(
-                      onTap: widget.onGoToEarn,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpace.lg,
-                          AppSpace.md,
-                          AppSpace.lg,
-                          AppSpace.md,
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.play_circle_outline_rounded,
-                              size: 16,
-                              color: AppColors.primary,
-                            ),
-                            const SizedBox(width: AppSpace.sm),
-                            Text(
-                              'Watch an ad to top up',
-                              style: AppText.caption.copyWith(
-                                color: AppColors.text,
-                              ),
-                            ),
-                            const Spacer(),
-                            Text(
-                              'EARN',
-                              style: AppText.label.copyWith(
-                                fontSize: 9.5,
-                                letterSpacing: 2,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          ],
-                        ),
+                    Text(
+                      '${widget.coins} coins',
+                      style: AppText.figure.copyWith(
+                        fontSize: 13,
+                        color: AppColors.gold,
                       ),
                     ),
                   ],
-                ],
+                ),
               ),
-            ),
-          ),
-          const SizedBox(height: AppSpace.xxl),
+              const SizedBox(height: AppSpace.md),
 
-          // ---- products -------------------------------------------------
-          if (shelf.isEmpty)
-            ScrollReveal(
-              child: EmptyState(
-                icon: _tab == 'key'
-                    ? Icons.storefront_outlined
-                    : Icons.apps_outlined,
-                title: _tab == 'key' ? 'No products yet' : 'No apps yet',
-                message: _tab == 'key'
-                    ? 'Check back soon — new keys drop regularly.'
-                    : 'Apps and files you buy with coins show up here.',
-                action: widget.onGoToEarn == null
-                    ? null
-                    : IslandButton(
-                        expand: false,
-                        dense: true,
-                        label: 'Earn coins',
-                        icon: CupertinoIcons.play_rectangle,
-                        onPressed: widget.onGoToEarn,
+              // ---- shelf switch (Keys | Apps) -------------------------------
+              if (Distribution.showsDownloadStore) ...[
+                ScrollReveal(
+                  delay: const Duration(milliseconds: 60),
+                  child: _segment(),
+                ),
+                const SizedBox(height: AppSpace.xl),
+              ],
+
+              // ---- balance strip -------------------------------------------
+              ScrollReveal(
+                delay: const Duration(milliseconds: 110),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF1A1508), Color(0xFF0C1C22)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(AppRadius.hero),
+                    border: Border.all(
+                      color: AppColors.gold.withValues(alpha: .3),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.gold.withValues(alpha: .25),
+                        blurRadius: 32,
+                        spreadRadius: -4,
+                        offset: const Offset(0, 12),
                       ),
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: .4),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Pressable(
+                        semanticLabel: 'Open wallet',
+                        onTap: widget.onOpenWallet,
+                        child: Padding(
+                          padding: const EdgeInsets.all(AppSpace.lg),
+                          child: Row(
+                            children: [
+                              const CoinMedallion(size: 56),
+                              const SizedBox(width: AppSpace.md + 2),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'YOUR BALANCE',
+                                      style: AppText.caption.copyWith(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 2.2,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.baseline,
+                                      textBaseline: TextBaseline.alphabetic,
+                                      children: [
+                                        AnimatedCounter(
+                                          value: widget.coins,
+                                          style: monoStyle(
+                                            fontSize: 34,
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.gold,
+                                            height: 1.05,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text('coins', style: AppText.caption),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                Icons.chevron_right_rounded,
+                                size: 20,
+                                color: AppColors.textDim.withValues(alpha: 0.7),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      // Top-up lives inside the balance card: one object, two taps.
+                      if (widget.onGoToEarn != null) ...[
+                        Container(
+                          height: 1,
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: AppSpace.lg,
+                          ),
+                          color: Colors.white.withValues(alpha: 0.06),
+                        ),
+                        Pressable(
+                          semanticLabel: 'Go to earn coins',
+                          onTap: widget.onGoToEarn,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(
+                              AppSpace.lg,
+                              AppSpace.md,
+                              AppSpace.lg,
+                              AppSpace.md,
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.play_circle_outline_rounded,
+                                  size: 16,
+                                  color: AppColors.primary,
+                                ),
+                                const SizedBox(width: AppSpace.sm),
+                                Text(
+                                  'Watch an ad to top up',
+                                  style: AppText.caption.copyWith(
+                                    color: AppColors.text,
+                                  ),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  'EARN',
+                                  style: AppText.label.copyWith(
+                                    fontSize: 9.5,
+                                    letterSpacing: 2,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ),
-            )
-          else ...[
-            ScrollReveal(
-              child: SectionHeader(
-                title: 'Featured',
-                trailing: Text(
-                  _tab == 'key' ? 'LICENSE' : 'DOWNLOAD',
+              const SizedBox(height: AppSpace.xxl),
+
+              // ---- products -------------------------------------------------
+              if (shelf.isEmpty)
+                ScrollReveal(
+                  child: EmptyState(
+                    icon: _tab == 'key'
+                        ? Icons.storefront_outlined
+                        : Icons.apps_outlined,
+                    title: _tab == 'key' ? 'No products yet' : 'No apps yet',
+                    message: _tab == 'key'
+                        ? 'Check back soon — new keys drop regularly.'
+                        : 'Apps and files you buy with coins show up here.',
+                    action: widget.onGoToEarn == null
+                        ? null
+                        : IslandButton(
+                            expand: false,
+                            dense: true,
+                            label: 'Earn coins',
+                            icon: CupertinoIcons.play_rectangle,
+                            onPressed: widget.onGoToEarn,
+                          ),
+                  ),
+                )
+              else ...[
+                ScrollReveal(
+                  child: SectionHeader(
+                    title: 'Featured',
+                    trailing: Text(
+                      _tab == 'key' ? 'LICENSE' : 'DOWNLOAD',
+                      style: AppText.label.copyWith(
+                        fontSize: 10,
+                        color: AppColors.textDim,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpace.xs),
+                ScrollReveal(
+                  delay: const Duration(milliseconds: 60),
+                  child: _featuredCard(shelf.first),
+                ),
+                if (rest.isNotEmpty) ...[
+                  const SizedBox(height: AppSpace.xl),
+                  SectionHeader(
+                    title: 'More inside',
+                    trailing: Text(
+                      '${rest.length}',
+                      style: AppText.figure.copyWith(
+                        fontSize: 12,
+                        color: AppColors.textDim,
+                      ),
+                    ),
+                  ),
+                  _switchedShelf
+                      ? _cardShelf(rest)
+                      : ScrollReveal(
+                          delay: const Duration(milliseconds: 120),
+                          child: _cardShelf(rest),
+                        ),
+                ],
+              ],
+              const SizedBox(height: AppSpace.xl),
+
+              // ---- sponsored native ad ------------------------------------
+              if (shelf.isNotEmpty && _nativeLoaded && _nativeAd != null) ...[
+                const SectionHeader(title: 'Sponsored'),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    minHeight: 350,
+                    maxHeight: 400,
+                  ),
+                  // Stable key: the shelf above adds/removes siblings on tab
+                  // switch and reload, and a re-matched AdWidget element would
+                  // mount the same ad twice ("already in the Widget tree").
+                  child: AdWidget(
+                    key: const ValueKey('store-native-ad'),
+                    ad: _nativeAd!,
+                  ),
+                ),
+                const SizedBox(height: AppSpace.xl),
+              ],
+
+              Center(
+                child: Text(
+                  _tab == 'key'
+                      ? 'FRESH DROPS · DELIVERED INSTANTLY'
+                      : 'MEDIAFIRE BACKED · DOWNLOADS ANY TIME',
                   style: AppText.label.copyWith(
                     fontSize: 10,
+                    letterSpacing: 2.4,
                     color: AppColors.textDim,
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: AppSpace.xs),
-            ScrollReveal(
-              delay: const Duration(milliseconds: 60),
-              child: _featuredCard(shelf.first),
-            ),
-            if (rest.isNotEmpty) ...[
-              const SizedBox(height: AppSpace.xl),
-              SectionHeader(
-                title: 'More inside',
-                trailing: Text(
-                  '${rest.length}',
-                  style: AppText.figure.copyWith(
-                    fontSize: 12,
-                    color: AppColors.textDim,
-                  ),
-                ),
-              ),
-              _switchedShelf
-                  ? _cardShelf(rest)
-                  : ScrollReveal(
-                      delay: const Duration(milliseconds: 120),
-                      child: _cardShelf(rest),
-                    ),
             ],
-          ],
-          const SizedBox(height: AppSpace.xl),
-
-          // ---- sponsored native ad ------------------------------------
-          if (shelf.isNotEmpty && _nativeLoaded && _nativeAd != null) ...[
-            const SectionHeader(title: 'Sponsored'),
-            ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 350, maxHeight: 400),
-              // Stable key: the shelf above adds/removes siblings on tab
-              // switch and reload, and a re-matched AdWidget element would
-              // mount the same ad twice ("already in the Widget tree").
-              child: AdWidget(
-                key: const ValueKey('store-native-ad'),
-                ad: _nativeAd!,
-              ),
-            ),
-            const SizedBox(height: AppSpace.xl),
-          ],
-
-          Center(
-            child: Text(
-              _tab == 'key'
-                  ? 'FRESH DROPS · DELIVERED INSTANTLY'
-                  : 'MEDIAFIRE BACKED · DOWNLOADS ANY TIME',
-              style: AppText.label.copyWith(
-                fontSize: 10,
-                letterSpacing: 2.4,
-                color: AppColors.textDim,
-              ),
-            ),
-          ),
-        ],
           ),
         ),
       ],
@@ -550,6 +566,7 @@ class _StoreScreenState extends State<StoreScreen> {
       return Expanded(
         child: Pressable(
           scale: 0.97,
+          semanticLabel: label,
           onTap: () {
             if (_tab == id) return;
             setState(() {
@@ -562,7 +579,7 @@ class _StoreScreenState extends State<StoreScreen> {
             // of the perceived lag when swapping shelves.
             duration: const Duration(milliseconds: 240),
             curve: kPremiumCurve,
-            height: 44,
+            height: kTouchMin,
             decoration: BoxDecoration(
               gradient: on ? kNeonGradient : null,
               color: on ? null : Colors.transparent,
@@ -580,10 +597,12 @@ class _StoreScreenState extends State<StoreScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  icon,
-                  size: 15,
-                  color: on ? const Color(0xFF04212A) : AppColors.textDim,
+                ExcludeSemantics(
+                  child: Icon(
+                    icon,
+                    size: AppIcon.sm,
+                    color: on ? const Color(0xFF04212A) : AppColors.textDim,
+                  ),
                 ),
                 const SizedBox(width: AppSpace.sm - 1),
                 Text(
@@ -680,12 +699,20 @@ class _StoreScreenState extends State<StoreScreen> {
   // ---- product imagery -------------------------------------------------
   Widget _cover(Product p, {int width = 800}) {
     if (p.imageIds.isNotEmpty) {
-      return Image.network(
-        Backend.imageUrl(p.imageIds.first, width: width),
+      return Semantics(
+        label: p.name,
+        image: true,
+        child: CachedNetworkImage(
+        imageUrl: Backend.imageUrl(p.imageIds.first, width: width),
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
-        errorBuilder: (context, e, s) => _coverFallback(p),
+        // Decode at display size — full-res Cloudinary images made scroll
+        // hold 800px+ bitmaps for 200px cards.
+        memCacheWidth: width,
+        memCacheHeight: (width * 0.7).round(),
+        errorWidget: (context, url, e) => _coverFallback(p),
+      ),
       );
     }
     return _coverFallback(p);
@@ -721,10 +748,7 @@ class _StoreScreenState extends State<StoreScreen> {
         const SizedBox(width: AppSpace.xs),
         Text(
           groupDigits(cost),
-          style: AppText.figure.copyWith(
-            fontSize: size,
-            color: AppColors.gold,
-          ),
+          style: AppText.figure.copyWith(fontSize: size, color: AppColors.gold),
         ),
       ],
     );
@@ -765,7 +789,7 @@ class _StoreScreenState extends State<StoreScreen> {
                 ),
               ),
               if (soldOut)
-                ColoredBox(color: AppColors.bg.withValues(alpha: 0.45)),
+                ColoredBox(color: AppColors.bg.withValues(alpha: 0.65)),
               // Top-left issue/featured label.
               Positioned(
                 top: AppSpace.md,
@@ -888,10 +912,14 @@ class _StoreScreenState extends State<StoreScreen> {
                             ),
                             decoration: BoxDecoration(
                               gradient: kNeonGradient,
-                              borderRadius: BorderRadius.circular(AppRadius.pill),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.pill,
+                              ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: AppColors.primary.withValues(alpha: 0.35),
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.35,
+                                  ),
                                   blurRadius: 16,
                                   spreadRadius: -6,
                                   offset: const Offset(0, 4),
@@ -984,7 +1012,7 @@ class _StoreScreenState extends State<StoreScreen> {
                     children: [
                       _cover(p, width: 400),
                       if (soldOut)
-                        ColoredBox(color: AppColors.bg.withValues(alpha: .55)),
+                        ColoredBox(color: AppColors.bg.withValues(alpha: .65)),
                       Align(
                         alignment: Alignment.bottomCenter,
                         child: FractionallySizedBox(
@@ -1061,14 +1089,24 @@ class _OwnedSeal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 22,
-      height: 22,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: AppColors.cyan.withValues(alpha: .18),
+    return Semantics(
+      label: 'Owned',
+      child: Container(
+        width: 22,
+        height: 22,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: AppColors.cyan.withValues(alpha: .18),
+          border: Border.all(color: AppColors.cyan.withValues(alpha: .6)),
+        ),
+        child: const ExcludeSemantics(
+          child: Icon(
+            Icons.check_rounded,
+            size: AppIcon.xs,
+            color: AppColors.cyan,
+          ),
+        ),
       ),
-      child: const Icon(Icons.check_rounded, size: 13, color: AppColors.cyan),
     );
   }
 }
@@ -1083,7 +1121,8 @@ class _SoldOutStamp extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          border: Border.all(color: AppColors.textDim.withValues(alpha: .6)),
+          color: Colors.black.withValues(alpha: .55),
+          border: Border.all(color: AppColors.textDim.withValues(alpha: .9)),
           borderRadius: BorderRadius.circular(6),
         ),
         child: Text(
@@ -1091,7 +1130,7 @@ class _SoldOutStamp extends StatelessWidget {
           style: AppText.label.copyWith(
             fontSize: 10,
             letterSpacing: 3,
-            color: AppColors.textDim,
+            color: AppColors.text,
           ),
         ),
       ),

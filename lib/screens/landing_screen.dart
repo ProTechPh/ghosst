@@ -304,13 +304,26 @@ class _TickerState extends State<_Ticker> with SingleTickerProviderStateMixin {
     duration: const Duration(seconds: 34),
   );
 
+  bool _paused = false;
+
+  void _toggle() {
+    setState(() {
+      _paused = !_paused;
+      if (_paused) {
+        _scroll.stop();
+      } else if (!MediaQuery.disableAnimationsOf(context)) {
+        _scroll.repeat();
+      }
+    });
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (MediaQuery.disableAnimationsOf(context)) {
       _scroll.stop();
       _scroll.value = 0;
-    } else if (!_scroll.isAnimating) {
+    } else if (!_paused && !_scroll.isAnimating) {
       _scroll.repeat();
     }
   }
@@ -328,8 +341,17 @@ class _TickerState extends State<_Ticker> with SingleTickerProviderStateMixin {
       letterSpacing: 2.2,
       color: AppColors.textDim.withValues(alpha: 0.75),
     );
-    return SizedBox(
-      height: 18,
+    return Semantics(
+      button: true,
+      label: _paused ? 'Ticker, paused. Activate to resume.' : 'Ticker, running. Activate to pause.',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _toggle,
+        child: SizedBox(
+          height: kTouchMin,
+          child: Center(
+            child: SizedBox(
+              height: 18,
       child: ClipRect(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -361,6 +383,10 @@ class _TickerState extends State<_Ticker> with SingleTickerProviderStateMixin {
           },
         ),
       ),
+            ),
+          ),
+        ),
+        ),
     );
   }
 }
@@ -408,13 +434,15 @@ class _Steps extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: AppSpace.md),
-                Text(
-                  '0${i + 1}',
-                  style: monoStyle(
-                    fontSize: 34,
-                    fontWeight: FontWeight.w800,
-                    height: 1,
-                    color: AppColors.primary.withValues(alpha: 0.16),
+                ExcludeSemantics(
+                  child: Text(
+                    '0${i + 1}',
+                    style: monoStyle(
+                      fontSize: 34,
+                      fontWeight: FontWeight.w800,
+                      height: 1,
+                      color: AppColors.primary.withValues(alpha: 0.16),
+                    ),
                   ),
                 ),
               ],

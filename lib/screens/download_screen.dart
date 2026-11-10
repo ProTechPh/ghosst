@@ -13,6 +13,7 @@ import '../services/distribution.dart';
 import '../services/download_service.dart';
 import '../services/mediafire.dart';
 import '../theme.dart';
+import 'package:cached_network_image/cached_network_image.dart' hide DownloadProgress;
 
 enum _State { idle, running, done, failed }
 
@@ -293,74 +294,72 @@ class _DownloadScreenState extends State<DownloadScreen> {
       body: Stack(
         children: [
           const MeshBackground(),
-          const Positioned.fill(
-            child: IgnorePointer(child: TableSurface()),
-          ),
+          const Positioned.fill(child: IgnorePointer(child: TableSurface())),
           ListView(
-        padding: const EdgeInsets.fromLTRB(16, 6, 16, 32),
-        children: [
-          // ---- product header ------------------------------------------
-          GlowCard(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                _cover(),
-                const SizedBox(width: 13),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.title,
-                        style: const TextStyle(
-                          fontSize: 16.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.2,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 7,
-                        runSpacing: 6,
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 32),
+            children: [
+              // ---- product header ------------------------------------------
+              GlowCard(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    _cover(),
+                    const SizedBox(width: 13),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          NeonPill(
-                            icon: _isApk
-                                ? Icons.android_rounded
-                                : Icons.insert_drive_file_outlined,
-                            label: _isApk ? 'APK' : 'FILE',
-                            color: AppColors.cyan,
+                          Text(
+                            widget.title,
+                            style: const TextStyle(
+                              fontSize: 16.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.2,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          if (widget.version.isNotEmpty)
-                            NeonPill(
-                              icon: Icons.tag_rounded,
-                              label: widget.version,
-                              color: AppColors.textDim,
-                            ),
-                          if (widget.fileSize.isNotEmpty)
-                            NeonPill(
-                              icon: Icons.data_usage_rounded,
-                              label: widget.fileSize,
-                              color: AppColors.gold,
-                            ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 7,
+                            runSpacing: 6,
+                            children: [
+                              NeonPill(
+                                icon: _isApk
+                                    ? Icons.android_rounded
+                                    : Icons.insert_drive_file_outlined,
+                                label: _isApk ? 'APK' : 'FILE',
+                                color: AppColors.cyan,
+                              ),
+                              if (widget.version.isNotEmpty)
+                                NeonPill(
+                                  icon: Icons.tag_rounded,
+                                  label: widget.version,
+                                  color: AppColors.textDim,
+                                ),
+                              if (widget.fileSize.isNotEmpty)
+                                NeonPill(
+                                  icon: Icons.data_usage_rounded,
+                                  label: widget.fileSize,
+                                  color: AppColors.gold,
+                                ),
+                            ],
+                          ),
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
+              ),
+              const SizedBox(height: 18),
 
-          // ---- progress / result ---------------------------------------
-          if (_state == _State.idle) _idleView(),
-          if (_state == _State.running) _progressView(p, pct),
-          if (_state == _State.done) _doneView(),
-          if (_state == _State.failed) _failedView(),
-        ],
-      ),
+              // ---- progress / result ---------------------------------------
+              if (_state == _State.idle) _idleView(),
+              if (_state == _State.running) _progressView(p, pct),
+              if (_state == _State.done) _doneView(),
+              if (_state == _State.failed) _failedView(),
+            ],
+          ),
         ],
       ),
     );
@@ -376,12 +375,19 @@ class _DownloadScreenState extends State<DownloadScreen> {
     if (url.isEmpty) return _coverFallback();
     return ClipRRect(
       borderRadius: BorderRadius.circular(15),
-      child: Image.network(
-        url,
+      child: Semantics(
+        label: widget.title,
+        image: true,
+        child: CachedNetworkImage(
+        imageUrl: url,
         width: 52,
         height: 52,
         fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => _coverFallback(),
+        // 52px slot at 2x.
+        memCacheWidth: 104,
+        memCacheHeight: 104,
+        errorWidget: (_, _, _) => _coverFallback(),
+      ),
       ),
     );
   }

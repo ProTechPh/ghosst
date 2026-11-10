@@ -438,10 +438,13 @@ class _DownloadOfficialApkState extends State<_DownloadOfficialApk> {
             ),
           ),
           const SizedBox(height: 8),
-          GestureDetector(
-            onTap: _openInBrowser,
-            behavior: HitTestBehavior.opaque,
-            child: Padding(
+          Semantics(
+            link: true,
+            label: 'Open the download link in your browser instead',
+            child: GestureDetector(
+              onTap: _openInBrowser,
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Text(
                 'Open the link in your browser instead',
@@ -455,6 +458,7 @@ class _DownloadOfficialApkState extends State<_DownloadOfficialApk> {
                 ),
               ),
             ),
+          ),
           ),
           const SizedBox(height: 10),
         ],

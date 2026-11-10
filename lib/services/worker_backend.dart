@@ -59,14 +59,20 @@ class Backend {
   static Future<void> signIn(String email, String password) =>
       _startSession('/auth/login', {'email': email, 'password': password});
 
-  static Future<void> signUp(String email, String password, {String name = ''}) =>
-      _startSession('/auth/register', {
-        'email': email,
-        'password': password,
-        if (name.isNotEmpty) 'displayName': name,
-      });
+  static Future<void> signUp(
+    String email,
+    String password, {
+    String name = '',
+  }) => _startSession('/auth/register', {
+    'email': email,
+    'password': password,
+    if (name.isNotEmpty) 'displayName': name,
+  });
 
-  static Future<void> _startSession(String path, Map<String, dynamic> body) async {
+  static Future<void> _startSession(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
     final res = await _api.post(path, data: body);
     await _session.write(
       accessToken: res['accessToken'] as String,
@@ -158,7 +164,10 @@ class Backend {
 
   /// Admin: i-mute/unmute ang isang user sa world chat.
   static Future<void> setChatMuted(String userId, bool muted) async {
-    await _api.post('/admin/chat/mute', data: {'userId': userId, 'muted': muted});
+    await _api.post(
+      '/admin/chat/mute',
+      data: {'userId': userId, 'muted': muted},
+    );
   }
 
   /// Admin: lahat ng users na naka-mute sa world chat (para sa Admin screen).
@@ -200,10 +209,10 @@ class Backend {
     required bool blockLinks,
     required int muteHours,
   }) async {
-    await _api.post('/admin/moderation', data: {
-      'blockLinks': blockLinks,
-      'muteHours': muteHours,
-    });
+    await _api.post(
+      '/admin/moderation',
+      data: {'blockLinks': blockLinks, 'muteHours': muteHours},
+    );
   }
 
   // ---- profile ----
@@ -256,11 +265,7 @@ class Backend {
       // `availableCount` sa /products ay laging 0 (inilipat sa admin endpoint).
       final res = await _api.get(
         '/admin/keys',
-        query: {
-          'productId': productId,
-          'status': 'available',
-          'count': '1',
-        },
+        query: {'productId': productId, 'status': 'available', 'count': '1'},
       );
       return (res['total'] as num?)?.toInt() ?? 0;
     } on ApiException {
@@ -280,7 +285,9 @@ class Backend {
     return key;
   }
 
-  static Future<({String url, String? sha256})> claimApp(String productId) async {
+  static Future<({String url, String? sha256})> claimApp(
+    String productId,
+  ) async {
     final res = await _apiBackend.claim(productId);
     final url = res['downloadUrl'] as String?;
     if (url == null || url.trim().isEmpty) {
@@ -309,21 +316,23 @@ class Backend {
     // Failing the whole call beats returning [] — callers show an error with
     // Retry instead of "you own nothing".
     final raw = await _apiBackend.myClaims();
-    final out = <Claim>[];
-    for (final c in raw) {
-      // The claim row never carries the link; ask for a fresh one instead.
-      var url = '';
-      String? sha;
-      if (c.isDownload) {
+    // Download tickets in parallel — serial awaits made Purchases wait one
+    // round-trip per download claim (N+1).
+    final tickets = await Future.wait(
+      raw.map((c) async {
+        if (!c.isDownload) return null;
         try {
-          final ticket = await _apiBackend.downloadTicket(c.productId);
-          url = ticket.url;
-          sha = ticket.sha256;
+          return await _apiBackend.downloadTicket(c.productId);
         } on ApiException {
-          url = '';
+          return null;
         }
-      }
-      out.add(_claim(c, url, sha: sha ?? c.sha256));
+      }),
+    );
+    final out = <Claim>[];
+    for (var i = 0; i < raw.length; i++) {
+      final c = raw[i];
+      final ticket = tickets[i];
+      out.add(_claim(c, ticket?.url ?? '', sha: ticket?.sha256 ?? c.sha256));
     }
     return out;
   }
@@ -410,14 +419,25 @@ class Backend {
     return StockWriteResult(added: added, failed: 0, skipped: skipped);
   }
 
-  static Future<int> countKeys(String productId, {bool usedOnly = false}) async {
-    final rows = await _adminKeys(productId: productId, status: usedOnly ? 'claimed' : '');
+  static Future<int> countKeys(
+    String productId, {
+    bool usedOnly = false,
+  }) async {
+    final rows = await _adminKeys(
+      productId: productId,
+      status: usedOnly ? 'claimed' : '',
+    );
     return rows.length;
   }
 
-  static Future<int> countAvailableKeys(String productId, {String duration = ''}) async {
+  static Future<int> countAvailableKeys(
+    String productId, {
+    String duration = '',
+  }) async {
     final rows = await _adminKeys(productId: productId, status: 'available');
-    return duration.isEmpty ? rows.length : rows.where((k) => k.duration == duration).length;
+    return duration.isEmpty
+        ? rows.length
+        : rows.where((k) => k.duration == duration).length;
   }
 
   static Future<List<StockEntry>> listKeys() => _adminKeys();
@@ -428,7 +448,9 @@ class Backend {
     int limit = 5000,
   }) async {
     final rows = await _adminKeys(productId: productId, limit: limit);
-    return duration.isEmpty ? rows : rows.where((k) => k.duration == duration).toList();
+    return duration.isEmpty
+        ? rows
+        : rows.where((k) => k.duration == duration).toList();
   }
 
   static Future<List<StockEntry>> _adminKeys({
@@ -473,17 +495,20 @@ class Backend {
     String fileSize = '',
     String durations = '',
   }) async {
-    final res = await _api.post('/products', data: {
-      'name': name,
-      'cost': cost,
-      'description': description,
-      'youtubeUrl': youtubeUrl,
-      'type': type,
-      'version': version,
-      'fileSize': fileSize,
-      if (imageIds.isNotEmpty) 'imageKeys': imageIds,
-      if (durations.isNotEmpty) 'durations': _durations(durations),
-    });
+    final res = await _api.post(
+      '/products',
+      data: {
+        'name': name,
+        'cost': cost,
+        'description': description,
+        'youtubeUrl': youtubeUrl,
+        'type': type,
+        'version': version,
+        'fileSize': fileSize,
+        if (imageIds.isNotEmpty) 'imageKeys': imageIds,
+        if (durations.isNotEmpty) 'durations': _durations(durations),
+      },
+    );
     final id = res['id'] ?? (res['product'] as Map?)?['id'];
     if (id is! String || id.isEmpty) {
       throw const ApiException(
@@ -505,30 +530,35 @@ class Backend {
     String version = '',
     String fileSize = '',
     String durations = '',
-  }) =>
-      _api.patch('/products/$productId', data: {
-        'name': name,
-        'cost': cost,
-        'description': description,
-        'youtubeUrl': youtubeUrl,
-        'imageKeys': imageIds,
-        'type': type,
-        'version': version,
-        'fileSize': fileSize,
-        'durations': _durations(durations),
-      });
+  }) => _api.patch(
+    '/products/$productId',
+    data: {
+      'name': name,
+      'cost': cost,
+      'description': description,
+      'youtubeUrl': youtubeUrl,
+      'imageKeys': imageIds,
+      'type': type,
+      'version': version,
+      'fileSize': fileSize,
+      'durations': _durations(durations),
+    },
+  );
 
   static Future<void> setProductActive(String productId, bool active) =>
       _api.patch('/products/$productId', data: {'active': active});
 
-  static Future<void> deleteProduct(String productId) => _api.delete('/products/$productId');
+  static Future<void> deleteProduct(String productId) =>
+      _api.delete('/products/$productId');
 
   // ---- download link (admin) ----
 
   /// The stored link, for the admin form. Throws when it can't be read — an
   /// empty string would silently wipe a paid download on the next save.
   static Future<String> appFileFor(String productId) async {
-    final p = (await _api.get('/products/$productId'))['product'] as Map<String, dynamic>;
+    final p =
+        (await _api.get('/products/$productId'))['product']
+            as Map<String, dynamic>;
     return p['fileUrl'] as String? ?? '';
   }
 
@@ -568,7 +598,8 @@ class Backend {
   /// Images are links: an absolute URL, or a key the CDN will complete.
   static String imageUrl(String fileId, {int width = 900}) => fileId;
 
-  static Future<void> deleteKey(String keyId) => _api.delete('/admin/keys/$keyId');
+  static Future<void> deleteKey(String keyId) =>
+      _api.delete('/admin/keys/$keyId');
 
   static Future<int> deleteKeysForProduct(
     String productId, {
@@ -591,39 +622,41 @@ class Backend {
   // ---- mapping ----
 
   static Product _product(ApiProduct p) => Product(
-        id: p.id,
-        name: p.name,
-        cost: p.cost,
-        active: p.active,
-        description: p.description,
-        imageIds: p.imageUrls,
-        youtubeUrl: p.youtubeUrl,
-        type: p.type,
-        version: p.version,
-        fileSize: p.fileSize,
-        durations: p.durations
-            .map((d) => ProductDuration(label: d.label, cost: d.cost))
-            .toList(),
-      );
+    id: p.id,
+    name: p.name,
+    cost: p.cost,
+    active: p.active,
+    description: p.description,
+    imageIds: p.imageUrls,
+    youtubeUrl: p.youtubeUrl,
+    type: p.type,
+    version: p.version,
+    fileSize: p.fileSize,
+    durations: p.durations
+        .map((d) => ProductDuration(label: d.label, cost: d.cost))
+        .toList(),
+  );
 
   static Claim _claim(ApiClaim c, String downloadUrl, {String? sha}) => Claim(
-        id: c.id,
-        productId: c.productId,
-        productName: c.productName,
-        keyText: c.keyText,
-        cost: c.cost,
-        createdAt: c.createdAt?.toIso8601String() ?? '',
-        downloadUrl: downloadUrl,
-        duration: c.duration,
-        sha256: sha,
-      );
+    id: c.id,
+    productId: c.productId,
+    productName: c.productName,
+    keyText: c.keyText,
+    cost: c.cost,
+    createdAt: c.createdAt?.toIso8601String() ?? '',
+    downloadUrl: downloadUrl,
+    duration: c.duration,
+    sha256: sha,
+  );
 
   /// The admin UI still hands durations over as a JSON string.
   static List<Map<String, dynamic>> _durations(String raw) {
     if (raw.trim().isEmpty) return const [];
     try {
       final v = jsonDecode(raw);
-      return v is List ? v.whereType<Map>().map((m) => m.cast<String, dynamic>()).toList() : const [];
+      return v is List
+          ? v.whereType<Map>().map((m) => m.cast<String, dynamic>()).toList()
+          : const [];
     } catch (_) {
       return const [];
     }

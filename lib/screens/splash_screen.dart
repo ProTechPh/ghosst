@@ -88,12 +88,29 @@ class _SplashScreenState extends State<SplashScreen>
   bool _exited = false;
   bool _hapticFired = false;
 
+  bool _started = false;
+
   @override
   void initState() {
     super.initState();
     _intro.addListener(_onIntroTick);
     _intro.addStatusListener(_onIntroStatus);
-    _intro.forward();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      // Reduced motion: skip the cinematic intro, hold the finished frame
+      // while the app boots, then lift without the dolly-out.
+      _spin.stop();
+      _intro.value = 1;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _exit());
+    } else {
+      _intro.forward();
+    }
   }
 
   /// The "ring locks" beat — synced to the pop at ~0.36 of the intro itself,
@@ -153,6 +170,11 @@ class _SplashScreenState extends State<SplashScreen>
       if (ready != null) await Future.any<void>([ready, _bail.future]);
     } catch (_) {}
     if (!mounted) return;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _out.value = 1;
+      if (mounted) widget.onDone();
+      return;
+    }
     await _out.forward();
     if (mounted) widget.onDone();
   }
@@ -195,16 +217,21 @@ class _SplashScreenState extends State<SplashScreen>
     final radar = _seg(0.05, 0.58); // single scan rotation
     final radarAlpha = math.sin(radar * math.pi); // fades in and out once
     final glowBase = _seg(0.04, 0.30); // one-shot bloom (never pulses)
-    final glow = (glowBase * 0.8 + 0.35 * math.sin(pop * math.pi))
-        .clamp(0.0, 1.0);
+    final glow = (glowBase * 0.8 + 0.35 * math.sin(pop * math.pi)).clamp(
+      0.0,
+      1.0,
+    );
     final glint = _seg(0.44, 0.68); // light sweep across the emblem
     final progress = _seg(0.0, 0.94); // hairline load bar
     final skipIn = _seg(0.90, 1.0);
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _skip,
-      child: Column(
+    return Semantics(
+      button: true,
+      label: 'Skip splash screen',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _skip,
+        child: Column(
         children: [
           Expanded(
             child: Center(
@@ -250,6 +277,7 @@ class _SplashScreenState extends State<SplashScreen>
           ),
           const SizedBox(height: 44),
         ],
+      ),
       ),
     );
   }
@@ -323,8 +351,11 @@ class _SplashScreenState extends State<SplashScreen>
                       child: Image.asset(
                         'assets/images/logo.jpg',
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            Container(
+                        // 2x the 130px slot — cold start decoded the full
+                        // 250KB photo before the first frame.
+                        cacheWidth: 260,
+                        cacheHeight: 260,
+                        errorBuilder: (context, error, stackTrace) => Container(
                           decoration: const BoxDecoration(
                             shape: BoxShape.circle,
                             gradient: kNeonGradient,
@@ -367,7 +398,10 @@ class _SplashScreenState extends State<SplashScreen>
                         height: _logoSize,
                         child: Center(
                           child: Transform.translate(
-                            offset: Offset(-_logoSize * 0.75 + glint * _logoSize * 1.6, 0),
+                            offset: Offset(
+                              -_logoSize * 0.75 + glint * _logoSize * 1.6,
+                              0,
+                            ),
                             child: Transform.rotate(
                               angle: -0.4,
                               child: Container(
@@ -508,10 +542,7 @@ class _SplashScreenState extends State<SplashScreen>
   /// crisp reveal instead of a fade (fades read as blinking).
   Widget _riseIn(double v, {required double dy, required Widget child}) {
     return ClipRect(
-      child: Transform.translate(
-        offset: Offset(0, dy * (1 - v)),
-        child: child,
-      ),
+      child: Transform.translate(offset: Offset(0, dy * (1 - v)), child: child),
     );
   }
 }

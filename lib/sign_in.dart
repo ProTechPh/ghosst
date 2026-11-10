@@ -28,6 +28,8 @@ class SignIn extends StatefulWidget {
 class _SignInState extends State<SignIn> {
   final email = TextEditingController();
   final password = TextEditingController();
+  final emailFocus = FocusNode();
+  final passFocus = FocusNode();
   String error = '';
   String? emailErr;
   String? passErr;
@@ -38,6 +40,8 @@ class _SignInState extends State<SignIn> {
   void dispose() {
     email.dispose();
     password.dispose();
+    emailFocus.dispose();
+    passFocus.dispose();
     super.dispose();
   }
 
@@ -50,6 +54,11 @@ class _SignInState extends State<SignIn> {
         emailErr = emailMsg;
         passErr = passwordMsg;
       });
+      if (emailMsg != null) {
+        emailFocus.requestFocus();
+      } else {
+        passFocus.requestFocus();
+      }
       return;
     }
     setState(() {
@@ -109,6 +118,7 @@ class _SignInState extends State<SignIn> {
             const AuthFieldLabel('Email'),
             TextField(
               controller: email,
+              focusNode: emailFocus,
               keyboardType: TextInputType.emailAddress,
               textInputAction: TextInputAction.next,
               autocorrect: false,
@@ -117,6 +127,7 @@ class _SignInState extends State<SignIn> {
               onSubmitted: (_) => FocusScope.of(context).nextFocus(),
               decoration: authDecoration(
                 hint: 'you@example.com',
+                label: 'Email',
                 icon: Icons.alternate_email_rounded,
                 errorText: emailErr,
               ),
@@ -125,6 +136,7 @@ class _SignInState extends State<SignIn> {
             const AuthFieldLabel('Password'),
             TextField(
               controller: password,
+              focusNode: passFocus,
               obscureText: obscure,
               textInputAction: TextInputAction.done,
               keyboardType: TextInputType.visiblePassword,
@@ -133,6 +145,7 @@ class _SignInState extends State<SignIn> {
               onSubmitted: (_) => _submit(),
               decoration: authDecoration(
                 hint: 'Your password',
+                label: 'Password',
                 icon: Icons.lock_outline_rounded,
                 errorText: passErr,
                 suffixIcon: IconButton(

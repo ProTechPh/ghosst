@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-
 import 'package:flutter/material.dart';
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/services.dart';
@@ -18,6 +17,7 @@ import 'screens/chat_screen.dart';
 import 'screens/earn_screen.dart';
 import 'screens/landing_screen.dart';
 import 'screens/my_keys_screen.dart';
+import 'screens/notice_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/store_screen.dart';
@@ -30,6 +30,7 @@ import 'services/chat_service.dart';
 import 'services/worker_backend.dart';
 import 'services/consent_service.dart';
 import 'services/distribution.dart';
+import 'services/notice_store.dart';
 import 'services/play_store.dart';
 import 'services/push.dart';
 import 'services/security.dart';
@@ -58,14 +59,31 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Ghosst',
       debugShowCheckedModeBanner: false,
+      // Dark-only by brand intent (dark-neon OLED); darkTheme pins the same
+      // theme so system light mode never flashes a light UI.
       theme: AppTheme.dark,
+      darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.dark,
       // Fixed, pointer-events-none film grain over the whole app.
-      builder: (context, child) => Stack(
-        children: [
-          child ?? const SizedBox.shrink(),
-          const Positioned.fill(child: GrainOverlay()),
-        ],
-      ),
+      // Clamp text scaling so fixed chrome (nav bar, app bar) can't be
+      // pushed past its layout at extreme system text sizes.
+      builder: (context, child) {
+        final mq = MediaQuery.of(context);
+        return MediaQuery(
+          data: mq.copyWith(
+            textScaler: mq.textScaler.clamp(
+              minScaleFactor: 1.0,
+              maxScaleFactor: 1.3,
+            ),
+          ),
+          child: Stack(
+            children: [
+              child ?? const SizedBox.shrink(),
+              const Positioned.fill(child: GrainOverlay()),
+            ],
+          ),
+        );
+      },
       home: Scaffold(backgroundColor: AppColors.bg, body: const _AppEntry()),
     );
   }
@@ -82,6 +100,9 @@ class _AppEntry extends StatefulWidget {
 
 class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
   bool _splash = true;
+
+  /// Launch notice ("not an injector") — shown once per 24h after a skip.
+  bool _notice = false;
 
   /// Integrity verdict (cracked / re-packed / modded build). Null until the
   /// check answers — each leg is bounded and fails open.
@@ -104,6 +125,21 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
     // All legs run in parallel with the intro so the verdict (gate or
     // all-clear) is ready the moment the splash finishes.
     _boot = _launchChecks();
+    _checkNotice();
+  }
+
+  /// Fails open (shows the notice) if storage cannot be read.
+  Future<void> _checkNotice() async {
+    var hidden = false;
+    try {
+      hidden = await NoticeStore.hidden();
+    } catch (_) {}
+    if (!hidden && mounted) setState(() => _notice = true);
+  }
+
+  void _skipNotice() {
+    setState(() => _notice = false);
+    NoticeStore.skip().ignore();
   }
 
   Future<void> _launchChecks() async {
@@ -202,6 +238,9 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
                       ))
               : const Router(),
         ),
+        // Only after the intro: the 20s read window must not run behind the
+        // splash, and the notice must not cover a tamper/ad-block gate.
+        if (_notice && !_splash && !blocked) NoticeScreen(onSkip: _skipNotice),
         if (_splash)
           SplashScreen(
             // Held BEFORE the exit starts, so the intro never gets cut and the
@@ -298,9 +337,11 @@ class _HomeState extends State<Home> {
       if (mounted) setState(() => signedIn = user != null);
       if (user != null) {
         // Pre-authenticate world chat in the background while splash plays:
-        unawaited(ChatService.started.then((ready) {
-          if (ready) unawaited(ChatService().ensureSignedIn());
-        }));
+        unawaited(
+          ChatService.started.then((ready) {
+            if (ready) unawaited(ChatService().ensureSignedIn());
+          }),
+        );
       }
     } catch (_) {
       if (mounted) setState(() => signedIn = false);
@@ -375,9 +416,11 @@ class _HomeShellState extends State<HomeShell> {
     // The shell only exists when signed in and past the launch gates; the
     // request itself waits for the splash to finish.
     unawaited(Push.requestPermission());
-    unawaited(ChatService.started.then((ready) {
-      if (ready) unawaited(ChatService().ensureSignedIn());
-    }));
+    unawaited(
+      ChatService.started.then((ready) {
+        if (ready) unawaited(ChatService().ensureSignedIn());
+      }),
+    );
   }
 
   void _onAdsEnabledForBanner() {
@@ -484,12 +527,17 @@ class _HomeShellState extends State<HomeShell> {
   Future<void> _refresh() async {
     var balance = coins;
     var reason = '';
-    try {
-      balance = await Backend.coins();
-    } catch (e) {
+    // Run the balance fetch alongside the other three instead of serially
+    // before them — one round-trip shorter on every shell open.
+    final coinsFuture = Backend.coins().then<int>((v) => v).catchError((
+      Object e,
+    ) {
       // Keep the last known balance; a blip must not read as "0 coins".
-      reason = e is ApiException ? e.userMessage : 'The server did not respond.';
-    }
+      reason = e is ApiException
+          ? e.userMessage
+          : 'The server did not respond.';
+      return coins;
+    });
     final results = await Future.wait<Object>([
       Backend.isAdmin().catchError((_) => false),
       Backend.isModerator().catchError((_) => false),
@@ -499,6 +547,7 @@ class _HomeShellState extends State<HomeShell> {
           )
           .catchError((_) => ''),
     ]);
+    balance = await coinsFuture;
     // A failed banner fetch just means no banner; it must not break the shell.
     Announcement? fresh;
     try {
@@ -602,7 +651,7 @@ class _HomeShellState extends State<HomeShell> {
         active: tab == 2,
         onGoToStore: () => setState(() => tab = 0),
       ),
-      const AnnouncementsScreen(embedded: true),
+      AnnouncementsScreen(embedded: true, active: tab == 3),
       ChatScreen(
         embedded: true,
         active: tab == 4,
@@ -659,7 +708,7 @@ class _HomeShellState extends State<HomeShell> {
                   child: Text(
                     destinations[safeIndex].label.toUpperCase(),
                     style: AppText.label.copyWith(
-                      fontSize: 9.5,
+                      fontSize: 10,
                       letterSpacing: 2.2,
                       color: AppColors.textDim.withValues(alpha: 0.85),
                     ),
@@ -693,37 +742,43 @@ class _HomeShellState extends State<HomeShell> {
                 child: Pressable(
                   onTap: _openProfile,
                   scale: 0.92,
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      gradient: kNeonGradient,
-                      borderRadius: BorderRadius.circular(AppRadius.input),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primary.withValues(alpha: 0.22),
-                          blurRadius: 16,
-                          spreadRadius: -4,
-                        ),
-                      ],
-                    ),
+                  semanticLabel: 'Profile',
+                  child: SizedBox(
+                    // 48dp hit area, 36dp visual.
+                    width: kTouchMin,
+                    height: kTouchMin,
                     child: Container(
-                      width: 33,
-                      height: 33,
+                      width: 36,
+                      height: 36,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: AppColors.bg,
-                        borderRadius: BorderRadius.circular(
-                          AppRadius.input - 2,
-                        ),
+                        gradient: kNeonGradient,
+                        borderRadius: BorderRadius.circular(AppRadius.input),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withValues(alpha: 0.22),
+                            blurRadius: 16,
+                            spreadRadius: -4,
+                          ),
+                        ],
                       ),
-                      child: Text(
-                        display.trim().isEmpty
-                            ? 'G'
-                            : display.trim()[0].toUpperCase(),
-                        style: AppText.subtitle.copyWith(
-                          fontWeight: FontWeight.w800,
+                      child: Container(
+                        width: 33,
+                        height: 33,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: AppColors.bg,
+                          borderRadius: BorderRadius.circular(
+                            AppRadius.input - 2,
+                          ),
+                        ),
+                        child: Text(
+                          display.trim().isEmpty
+                              ? 'G'
+                              : display.trim()[0].toUpperCase(),
+                          style: AppText.subtitle.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ),
@@ -748,7 +803,9 @@ class _HomeShellState extends State<HomeShell> {
                     onDismiss: _dismissAnnouncement,
                   ),
                 ),
-              Expanded(child: IndexedStack(index: safeIndex, children: pages)),
+              Expanded(
+                child: IndexedStack(index: safeIndex, children: pages),
+              ),
             ],
           ),
           // Banner strip sits above the floating pill (visible on every tab);
@@ -835,9 +892,15 @@ class _GlassNavBarState extends State<_GlassNavBar>
   void didUpdateWidget(covariant _GlassNavBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.index != widget.index) {
-      _fromIndex = oldWidget.index;
-      _toIndex = widget.index;
-      _controller.forward(from: 0);
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _fromIndex = widget.index;
+        _toIndex = widget.index;
+        _controller.value = 1;
+      } else {
+        _fromIndex = oldWidget.index;
+        _toIndex = widget.index;
+        _controller.forward(from: 0);
+      }
     }
   }
 
@@ -886,114 +949,138 @@ class _GlassNavBarState extends State<_GlassNavBar>
             filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
             child: LayoutBuilder(
               builder: (context, constraints) {
-          final tabWidth = constraints.maxWidth / widget.items.length;
-          return SizedBox(
-            height: 64,
-            child: Stack(
-              children: [
-                // Morphing pill indicator.
-                AnimatedBuilder(
-                  animation: _controller,
-                  builder: (context, _) {
-                    final t = Curves.easeInOutCubic.transform(_controller.value);
-                    final fromLeft = _fromIndex * tabWidth;
-                    final toLeft = _toIndex * tabWidth;
-                    final left = fromLeft + (toLeft - fromLeft) * t;
-                    final distance = (_toIndex - _fromIndex).abs();
-                    final stretch =
-                        distance * tabWidth * (math.sin(math.pi * t));
-                    final width = tabWidth + stretch;
-                    return Positioned(
-                      left: left,
-                      top: 8,
-                      width: width,
-                      height: 48,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [Color(0xFF67E8F9), Color(0xFF22D3EE)],
-                          ),
-                          borderRadius: BorderRadius.circular(AppRadius.pill),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primary.withValues(alpha: 0.5),
-                              blurRadius: 24,
-                              spreadRadius: -4,
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                Row(
-                  children: [
-                    for (var i = 0; i < widget.items.length; i++)
-                      Expanded(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            widget.onSelected(i);
-                          },
-                          child: SizedBox(
-                            height: 64,
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Stack(
-                                  clipBehavior: Clip.none,
-                                  children: [
-                                    Icon(
-                                      i == widget.index
-                                          ? widget.items[i].selectedIcon
-                                          : widget.items[i].icon,
-                                      size: 20,
-                                      color: i == widget.index
-                                          ? const Color(0xFF04212A)
-                                          : AppColors.textDim,
-                                    ),
-                                    if (widget.badges.contains(i))
-                                      Positioned(
-                                        top: -2,
-                                        right: -4,
-                                        child: Container(
-                                          width: 8,
-                                          height: 8,
-                                          decoration: const BoxDecoration(
-                                            color: Colors.red,
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                      ),
+                final tabWidth = constraints.maxWidth / widget.items.length;
+                return SizedBox(
+                  height: 64,
+                  child: Stack(
+                    children: [
+                      // Morphing pill indicator.
+                      AnimatedBuilder(
+                        animation: _controller,
+                        builder: (context, _) {
+                          final t = Curves.easeInOutCubic.transform(
+                            _controller.value,
+                          );
+                          final fromLeft = _fromIndex * tabWidth;
+                          final toLeft = _toIndex * tabWidth;
+                          final left = fromLeft + (toLeft - fromLeft) * t;
+                          final distance = (_toIndex - _fromIndex).abs();
+                          final stretch =
+                              distance * tabWidth * (math.sin(math.pi * t));
+                          final width = tabWidth + stretch;
+                          return Positioned(
+                            left: left,
+                            top: 8,
+                            width: width,
+                            height: 48,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    Color(0xFF67E8F9),
+                                    Color(0xFF22D3EE),
                                   ],
                                 ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  widget.items[i].label,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppText.caption.copyWith(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w700,
-                                    color: i == widget.index
-                                        ? const Color(0xFF04212A)
-                                        : AppColors.textDim,
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.pill,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.primary.withValues(
+                                      alpha: 0.5,
+                                    ),
+                                    blurRadius: 24,
+                                    spreadRadius: -4,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      Row(
+                        children: [
+                          for (var i = 0; i < widget.items.length; i++)
+                            Expanded(
+                              child: Semantics(
+                                button: true,
+                                selected: i == widget.index,
+                                label:
+                                    '${widget.items[i].label}'
+                                    '${widget.badges.contains(i) ? ', unread messages' : ''}',
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () {
+                                    HapticFeedback.selectionClick();
+                                    widget.onSelected(i);
+                                  },
+                                  child: SizedBox(
+                                    height: 64,
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Stack(
+                                          clipBehavior: Clip.none,
+                                          children: [
+                                            ExcludeSemantics(
+                                              child: Icon(
+                                                i == widget.index
+                                                    ? widget.items[i].selectedIcon
+                                                    : widget.items[i].icon,
+                                                size: AppIcon.md,
+                                                color: i == widget.index
+                                                    ? const Color(0xFF04212A)
+                                                    : AppColors.textDim,
+                                              ),
+                                            ),
+                                            if (widget.badges.contains(i))
+                                              Positioned(
+                                                top: -2,
+                                                right: -4,
+                                                child: ExcludeSemantics(
+                                                  child: Container(
+                                                    width: 10,
+                                                    height: 10,
+                                                    decoration: BoxDecoration(
+                                                      color: AppColors.red,
+                                                      shape: BoxShape.circle,
+                                                      border: Border.all(
+                                                        color: AppColors.bg,
+                                                        width: 1.5,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          widget.items[i].label,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: AppText.caption.copyWith(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            color: i == widget.index
+                                                ? const Color(0xFF04212A)
+                                                : AppColors.textDim,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              ],
+                              ),
                             ),
-                          ),
-                        ),
+                        ],
                       ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        },
+                    ],
+                  ),
+                );
+              },
             ),
           ),
         ),

@@ -5,6 +5,7 @@ import '../arcade.dart';
 import '../premium.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'claim_reveal.dart';
 import 'download_screen.dart';
 
@@ -306,14 +307,23 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                         : p.isApk
                                         ? Icons.android_rounded
                                         : Icons.insert_drive_file_rounded,
-                                    color: AppColors.cyan.withValues(alpha: 0.55),
+                                    color: AppColors.cyan.withValues(
+                                      alpha: 0.55,
+                                    ),
                                     size: 48,
                                   ),
                                 ),
                               )
-                            : Image.network(
-                                Backend.imageUrl(p.imageIds.first, width: 300),
+                            : Semantics(
+                                 label: p.name,
+                                 image: true,
+                                 child: CachedNetworkImage(
+                                imageUrl: Backend.imageUrl(p.imageIds.first, width: 300),
                                 fit: BoxFit.cover,
+                                // 132px slot at 2x.
+                                memCacheWidth: 264,
+                                memCacheHeight: 264,
+                              ),
                               ),
                       ),
                     ),
@@ -322,7 +332,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SizedBox(height: MediaQuery.paddingOf(context).top + AppSpace.sm),
+                          SizedBox(
+                            height:
+                                MediaQuery.paddingOf(context).top + AppSpace.sm,
+                          ),
                           Text(
                             p.isApk
                                 ? 'ANDROID APP'
@@ -454,10 +467,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
-                                Image.network(
-                                  'https://i.ytimg.com/vi/$_ytId/hqdefault.jpg',
+                                CachedNetworkImage(
+                                  imageUrl: 'https://i.ytimg.com/vi/$_ytId/hqdefault.jpg',
                                   fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stack) =>
+                                  // hqdefault is 480x360 native; decode no larger.
+                                  memCacheWidth: 480,
+                                  memCacheHeight: 360,
+                                  errorWidget: (context, url, error) =>
                                       const ColoredBox(color: Colors.black),
                                 ),
                                 const ColoredBox(color: Color(0x2E000000)),
@@ -599,8 +615,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   Widget _glassBack(BuildContext context) {
     return Container(
-      width: 44,
-      height: 44,
+      width: kTouchMin,
+      height: kTouchMin,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: AppColors.bg.withValues(alpha: 0.55),
@@ -612,7 +628,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         onPressed: () => Navigator.of(context).maybePop(),
         icon: const Icon(
           Icons.arrow_back_rounded,
-          size: 20,
+          size: AppIcon.md,
           color: AppColors.text,
         ),
       ),
@@ -906,5 +922,4 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       ),
     );
   }
-
 }

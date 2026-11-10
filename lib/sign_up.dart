@@ -29,6 +29,8 @@ class _SignUpState extends State<SignUp> {
   final name = TextEditingController();
   final email = TextEditingController();
   final password = TextEditingController();
+  final emailFocus = FocusNode();
+  final passFocus = FocusNode();
   String error = '';
   String? emailErr;
   String? passErr;
@@ -40,6 +42,8 @@ class _SignUpState extends State<SignUp> {
     name.dispose();
     email.dispose();
     password.dispose();
+    emailFocus.dispose();
+    passFocus.dispose();
     super.dispose();
   }
 
@@ -52,6 +56,11 @@ class _SignUpState extends State<SignUp> {
         emailErr = emailMsg;
         passErr = passwordMsg;
       });
+      if (emailMsg != null) {
+        emailFocus.requestFocus();
+      } else {
+        passFocus.requestFocus();
+      }
       return;
     }
     setState(() {
@@ -120,6 +129,7 @@ class _SignUpState extends State<SignUp> {
               onSubmitted: (_) => FocusScope.of(context).nextFocus(),
               decoration: authDecoration(
                 hint: 'Your display name',
+                label: 'Name',
                 icon: Icons.person_outline_rounded,
               ),
             ),
@@ -127,6 +137,7 @@ class _SignUpState extends State<SignUp> {
             const AuthFieldLabel('Email'),
             TextField(
               controller: email,
+              focusNode: emailFocus,
               keyboardType: TextInputType.emailAddress,
               textInputAction: TextInputAction.next,
               autocorrect: false,
@@ -135,6 +146,7 @@ class _SignUpState extends State<SignUp> {
               onSubmitted: (_) => FocusScope.of(context).nextFocus(),
               decoration: authDecoration(
                 hint: 'you@example.com',
+                label: 'Email',
                 icon: Icons.alternate_email_rounded,
                 errorText: emailErr,
               ),
@@ -143,6 +155,7 @@ class _SignUpState extends State<SignUp> {
             const AuthFieldLabel('Password'),
             TextField(
               controller: password,
+              focusNode: passFocus,
               obscureText: obscure,
               textInputAction: TextInputAction.done,
               keyboardType: TextInputType.visiblePassword,
@@ -151,6 +164,7 @@ class _SignUpState extends State<SignUp> {
               onSubmitted: (_) => _submit(),
               decoration: authDecoration(
                 hint: 'Your password',
+                label: 'Password',
                 icon: Icons.lock_outline_rounded,
                 errorText: passErr,
                 helperText: 'Minimum 8 characters',
