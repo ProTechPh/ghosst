@@ -88,12 +88,29 @@ class _SplashScreenState extends State<SplashScreen>
   bool _exited = false;
   bool _hapticFired = false;
 
+  bool _started = false;
+
   @override
   void initState() {
     super.initState();
     _intro.addListener(_onIntroTick);
     _intro.addStatusListener(_onIntroStatus);
-    _intro.forward();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      // Reduced motion: skip the cinematic intro, hold the finished frame
+      // while the app boots, then lift without the dolly-out.
+      _spin.stop();
+      _intro.value = 1;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _exit());
+    } else {
+      _intro.forward();
+    }
   }
 
   /// The "ring locks" beat — synced to the pop at ~0.36 of the intro itself,
@@ -153,6 +170,11 @@ class _SplashScreenState extends State<SplashScreen>
       if (ready != null) await Future.any<void>([ready, _bail.future]);
     } catch (_) {}
     if (!mounted) return;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _out.value = 1;
+      if (mounted) widget.onDone();
+      return;
+    }
     await _out.forward();
     if (mounted) widget.onDone();
   }

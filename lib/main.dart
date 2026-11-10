@@ -17,6 +17,7 @@ import 'screens/chat_screen.dart';
 import 'screens/earn_screen.dart';
 import 'screens/landing_screen.dart';
 import 'screens/my_keys_screen.dart';
+import 'screens/notice_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/store_screen.dart';
@@ -29,6 +30,7 @@ import 'services/chat_service.dart';
 import 'services/worker_backend.dart';
 import 'services/consent_service.dart';
 import 'services/distribution.dart';
+import 'services/notice_store.dart';
 import 'services/play_store.dart';
 import 'services/push.dart';
 import 'services/security.dart';
@@ -63,12 +65,25 @@ class MyApp extends StatelessWidget {
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.dark,
       // Fixed, pointer-events-none film grain over the whole app.
-      builder: (context, child) => Stack(
-        children: [
-          child ?? const SizedBox.shrink(),
-          const Positioned.fill(child: GrainOverlay()),
-        ],
-      ),
+      // Clamp text scaling so fixed chrome (nav bar, app bar) can't be
+      // pushed past its layout at extreme system text sizes.
+      builder: (context, child) {
+        final mq = MediaQuery.of(context);
+        return MediaQuery(
+          data: mq.copyWith(
+            textScaler: mq.textScaler.clamp(
+              minScaleFactor: 1.0,
+              maxScaleFactor: 1.3,
+            ),
+          ),
+          child: Stack(
+            children: [
+              child ?? const SizedBox.shrink(),
+              const Positioned.fill(child: GrainOverlay()),
+            ],
+          ),
+        );
+      },
       home: Scaffold(backgroundColor: AppColors.bg, body: const _AppEntry()),
     );
   }
@@ -85,6 +100,9 @@ class _AppEntry extends StatefulWidget {
 
 class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
   bool _splash = true;
+
+  /// Launch notice ("not an injector") — shown once per 24h after a skip.
+  bool _notice = false;
 
   /// Integrity verdict (cracked / re-packed / modded build). Null until the
   /// check answers — each leg is bounded and fails open.
@@ -107,6 +125,21 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
     // All legs run in parallel with the intro so the verdict (gate or
     // all-clear) is ready the moment the splash finishes.
     _boot = _launchChecks();
+    _checkNotice();
+  }
+
+  /// Fails open (shows the notice) if storage cannot be read.
+  Future<void> _checkNotice() async {
+    var hidden = false;
+    try {
+      hidden = await NoticeStore.hidden();
+    } catch (_) {}
+    if (!hidden && mounted) setState(() => _notice = true);
+  }
+
+  void _skipNotice() {
+    setState(() => _notice = false);
+    NoticeStore.skip().ignore();
   }
 
   Future<void> _launchChecks() async {
@@ -205,6 +238,9 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
                       ))
               : const Router(),
         ),
+        // Only after the intro: the 20s read window must not run behind the
+        // splash, and the notice must not cover a tamper/ad-block gate.
+        if (_notice && !_splash && !blocked) NoticeScreen(onSkip: _skipNotice),
         if (_splash)
           SplashScreen(
             // Held BEFORE the exit starts, so the intro never gets cut and the
@@ -856,9 +892,15 @@ class _GlassNavBarState extends State<_GlassNavBar>
   void didUpdateWidget(covariant _GlassNavBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.index != widget.index) {
-      _fromIndex = oldWidget.index;
-      _toIndex = widget.index;
-      _controller.forward(from: 0);
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _fromIndex = widget.index;
+        _toIndex = widget.index;
+        _controller.value = 1;
+      } else {
+        _fromIndex = oldWidget.index;
+        _toIndex = widget.index;
+        _controller.forward(from: 0);
+      }
     }
   }
 

@@ -10,6 +10,7 @@ import '../premium.dart';
 import '../services/cloudinary.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key, this.onAnnouncementSent, this.active = true});
@@ -842,15 +843,15 @@ class _AdminScreenState extends State<AdminScreen> {
                           children: [
                             for (final id in [...remoteIds])
                               thumb(
-                                Image.network(
-                                  Backend.imageUrl(id, width: 200),
+                                CachedNetworkImage(
+                                  imageUrl: Backend.imageUrl(id, width: 200),
                                   fit: BoxFit.cover,
                                   width: 66,
                                   height: 66,
                                   // 66px thumb at 2x.
-                                  cacheWidth: 132,
-                                  cacheHeight: 132,
-                                  errorBuilder: (c, e, s) => Container(
+                                  memCacheWidth: 132,
+                                  memCacheHeight: 132,
+                                  errorWidget: (c, url, e) => Container(
                                     color: AppColors.surfaceHigh,
                                     child: const Icon(
                                       Icons.broken_image_outlined,
@@ -867,15 +868,15 @@ class _AdminScreenState extends State<AdminScreen> {
                               ),
                             for (final path in [...localPaths])
                               thumb(
-                                Image.network(
-                                  path,
+                                CachedNetworkImage(
+                                  imageUrl: path,
                                   fit: BoxFit.cover,
                                   width: 66,
                                   height: 66,
                                   // 66px thumb at 2x.
-                                  cacheWidth: 132,
-                                  cacheHeight: 132,
-                                  errorBuilder: (c, e, s) => Container(
+                                  memCacheWidth: 132,
+                                  memCacheHeight: 132,
+                                  errorWidget: (c, url, e) => Container(
                                     color: AppColors.surfaceHigh,
                                     child: const Icon(
                                       Icons.broken_image_outlined,
@@ -1843,14 +1844,14 @@ class _AdminScreenState extends State<AdminScreen> {
     children: [
       ClipRRect(
         borderRadius: BorderRadius.circular(12),
-        child: Image.network(
-          path,
+        child: CachedNetworkImage(
+          imageUrl: path,
           width: 66,
           height: 66,
           fit: BoxFit.cover,
           // 66px thumb at 2x.
-          cacheWidth: 132,
-          cacheHeight: 132,
+          memCacheWidth: 132,
+          memCacheHeight: 132,
         ),
       ),
       Positioned(

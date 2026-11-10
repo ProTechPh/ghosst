@@ -13,6 +13,7 @@ import '../services/distribution.dart';
 import '../services/download_service.dart';
 import '../services/mediafire.dart';
 import '../theme.dart';
+import 'package:cached_network_image/cached_network_image.dart' hide DownloadProgress;
 
 enum _State { idle, running, done, failed }
 
@@ -374,15 +375,19 @@ class _DownloadScreenState extends State<DownloadScreen> {
     if (url.isEmpty) return _coverFallback();
     return ClipRRect(
       borderRadius: BorderRadius.circular(15),
-      child: Image.network(
-        url,
+      child: Semantics(
+        label: widget.title,
+        image: true,
+        child: CachedNetworkImage(
+        imageUrl: url,
         width: 52,
         height: 52,
         fit: BoxFit.cover,
         // 52px slot at 2x.
-        cacheWidth: 104,
-        cacheHeight: 104,
-        errorBuilder: (_, _, _) => _coverFallback(),
+        memCacheWidth: 104,
+        memCacheHeight: 104,
+        errorWidget: (_, _, _) => _coverFallback(),
+      ),
       ),
     );
   }

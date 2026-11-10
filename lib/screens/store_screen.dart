@@ -6,6 +6,7 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import '../premium.dart';
 import '../arcade.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../services/ad_service.dart';
 import '../services/worker_backend.dart';
 import '../services/distribution.dart';
@@ -698,16 +699,20 @@ class _StoreScreenState extends State<StoreScreen> {
   // ---- product imagery -------------------------------------------------
   Widget _cover(Product p, {int width = 800}) {
     if (p.imageIds.isNotEmpty) {
-      return Image.network(
-        Backend.imageUrl(p.imageIds.first, width: width),
+      return Semantics(
+        label: p.name,
+        image: true,
+        child: CachedNetworkImage(
+        imageUrl: Backend.imageUrl(p.imageIds.first, width: width),
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
         // Decode at display size — full-res Cloudinary images made scroll
         // hold 800px+ bitmaps for 200px cards.
-        cacheWidth: width,
-        cacheHeight: (width * 0.7).round(),
-        errorBuilder: (context, e, s) => _coverFallback(p),
+        memCacheWidth: width,
+        memCacheHeight: (width * 0.7).round(),
+        errorWidget: (context, url, e) => _coverFallback(p),
+      ),
       );
     }
     return _coverFallback(p);

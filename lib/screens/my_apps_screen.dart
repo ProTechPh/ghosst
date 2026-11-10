@@ -4,6 +4,7 @@ import '../arcade.dart';
 import '../premium.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'download_screen.dart';
 
 /// One owned app, grouped from the purchase claims (newest claim wins).
@@ -131,15 +132,19 @@ class _MyAppsScreenState extends State<MyAppsScreen> {
     if (url.isEmpty) return fallback;
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppRadius.input),
-      child: Image.network(
-        url,
+      child: Semantics(
+        label: app.product?.name ?? 'App',
+        image: true,
+        child: CachedNetworkImage(
+        imageUrl: url,
         width: 44,
         height: 44,
         fit: BoxFit.cover,
         // 44px slot at 2x.
-        cacheWidth: 88,
-        cacheHeight: 88,
-        errorBuilder: (c, e, s) => fallback,
+        memCacheWidth: 88,
+        memCacheHeight: 88,
+        errorWidget: (c, url, e) => fallback,
+      ),
       ),
     );
   }

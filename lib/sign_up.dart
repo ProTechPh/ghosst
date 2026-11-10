@@ -29,6 +29,8 @@ class _SignUpState extends State<SignUp> {
   final name = TextEditingController();
   final email = TextEditingController();
   final password = TextEditingController();
+  final emailFocus = FocusNode();
+  final passFocus = FocusNode();
   String error = '';
   String? emailErr;
   String? passErr;
@@ -40,6 +42,8 @@ class _SignUpState extends State<SignUp> {
     name.dispose();
     email.dispose();
     password.dispose();
+    emailFocus.dispose();
+    passFocus.dispose();
     super.dispose();
   }
 
@@ -52,6 +56,11 @@ class _SignUpState extends State<SignUp> {
         emailErr = emailMsg;
         passErr = passwordMsg;
       });
+      if (emailMsg != null) {
+        emailFocus.requestFocus();
+      } else {
+        passFocus.requestFocus();
+      }
       return;
     }
     setState(() {
@@ -128,6 +137,7 @@ class _SignUpState extends State<SignUp> {
             const AuthFieldLabel('Email'),
             TextField(
               controller: email,
+              focusNode: emailFocus,
               keyboardType: TextInputType.emailAddress,
               textInputAction: TextInputAction.next,
               autocorrect: false,
@@ -145,6 +155,7 @@ class _SignUpState extends State<SignUp> {
             const AuthFieldLabel('Password'),
             TextField(
               controller: password,
+              focusNode: passFocus,
               obscureText: obscure,
               textInputAction: TextInputAction.done,
               keyboardType: TextInputType.visiblePassword,

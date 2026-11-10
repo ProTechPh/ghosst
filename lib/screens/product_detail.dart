@@ -5,6 +5,7 @@ import '../arcade.dart';
 import '../premium.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'claim_reveal.dart';
 import 'download_screen.dart';
 
@@ -313,12 +314,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                   ),
                                 ),
                               )
-                            : Image.network(
-                                Backend.imageUrl(p.imageIds.first, width: 300),
+                            : Semantics(
+                                 label: p.name,
+                                 image: true,
+                                 child: CachedNetworkImage(
+                                imageUrl: Backend.imageUrl(p.imageIds.first, width: 300),
                                 fit: BoxFit.cover,
                                 // 132px slot at 2x.
-                                cacheWidth: 264,
-                                cacheHeight: 264,
+                                memCacheWidth: 264,
+                                memCacheHeight: 264,
+                              ),
                               ),
                       ),
                     ),
@@ -462,13 +467,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
-                                Image.network(
-                                  'https://i.ytimg.com/vi/$_ytId/hqdefault.jpg',
+                                CachedNetworkImage(
+                                  imageUrl: 'https://i.ytimg.com/vi/$_ytId/hqdefault.jpg',
                                   fit: BoxFit.cover,
                                   // hqdefault is 480x360 native; decode no larger.
-                                  cacheWidth: 480,
-                                  cacheHeight: 360,
-                                  errorBuilder: (context, error, stack) =>
+                                  memCacheWidth: 480,
+                                  memCacheHeight: 360,
+                                  errorWidget: (context, url, error) =>
                                       const ColoredBox(color: Colors.black),
                                 ),
                                 const ColoredBox(color: Color(0x2E000000)),
