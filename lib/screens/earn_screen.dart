@@ -56,9 +56,6 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
     AdService.instance.adsEnabledNotifier.addListener(_onAdsEnabled);
     if (AdService.adsEnabled) {
       _ads.preload();
-      if (!_ads.riReady) {
-        _ads.preloadRewardedInterstitial();
-      }
     }
     _checkCooldown();
   }
@@ -66,7 +63,6 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
   void _onAdsEnabled() {
     if (AdService.adsEnabled && mounted) {
       if (!_ads.ready) _ads.preload();
-      if (!_ads.riReady) _ads.preloadRewardedInterstitial();
       setState(() {});
     }
   }
@@ -130,10 +126,8 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// [instant] prefers the rewarded interstitial. If that unit has no fill,
-  /// AdService automatically tries the other rewarded format. Both reward
-  /// coins through the same SSV callback.
-  Future<void> _watchAd({bool instant = false}) async {
+  /// Plays the standard rewarded ad; SSV credits the coins server-side.
+  Future<void> _watchAd() async {
     if (_remainingCooldown > 0) return;
 
     final user = await Backend.currentUser();
@@ -177,7 +171,6 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
     try {
       await _ads.showRewardedWithFallback(
         userId: user.id,
-        preferInterstitial: instant,
         onEarned: (_) {
           if (AdUnits.useTestAds) {
             if (!mounted) return;
@@ -737,7 +730,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
       expand: true,
       outline: true,
       glow: false,
-      onPressed: enabled ? () => _watchAd(instant: true) : null,
+      onPressed: enabled ? () => _watchAd() : null,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,

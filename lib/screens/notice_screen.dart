@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../premium.dart';
 import '../theme.dart';
 
-/// Launch notice: Ghosst sells keys and files, it is not an injector/cheat.
+/// Launch notice: Ghosst is for educational purposes only.
 /// The close button only unlocks after a 20s read window; skipping hides the
 /// notice for 24 hours (persisted by the caller).
 class NoticeScreen extends StatefulWidget {
@@ -63,15 +63,16 @@ class _NoticeScreenState extends State<NoticeScreen> {
                         const LogoBadge(size: 64),
                         const SizedBox(height: AppSpace.xl),
                         GradientText(
-                          'Not an injector.\nNot a cheat.',
+                          'For educational\npurposes only.',
                           style: AppText.display,
                         ),
                         const SizedBox(height: AppSpace.lg),
                         Text(
-                          'Ghosst only sells license keys and hosts app/file '
-                          'downloads. We are not a cheat, mod menu, or '
-                          'injector, and other apps or pages using a similar '
-                          'name are not us.',
+                          'This app is for educational purposes only. Ghosst '
+                          'sells license keys and hosts app/file downloads for '
+                          'learning and testing. We are not affiliated with '
+                          'any game publisher, and other apps or pages using '
+                          'a similar name are not us.',
                           style: AppText.body.copyWith(
                             color: AppColors.textDim,
                             height: 1.6,

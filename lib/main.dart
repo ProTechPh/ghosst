@@ -101,7 +101,7 @@ class _AppEntry extends StatefulWidget {
 class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
   bool _splash = true;
 
-  /// Launch notice ("not an injector") — shown once per 24h after a skip.
+  /// Launch notice (educational-use disclaimer) — shown once per 24h after a skip.
   bool _notice = false;
 
   /// Integrity verdict (cracked / re-packed / modded build). Null until the
@@ -803,16 +803,8 @@ class _HomeShellState extends State<HomeShell> {
                     onDismiss: _dismissAnnouncement,
                   ),
                 ),
-              Expanded(
-                child: IndexedStack(index: safeIndex, children: pages),
-              ),
-            ],
-          ),
-          // Banner strip sits above the floating pill (visible on every tab);
-          // only mounts once loaded, so a failed ad leaves no empty gap.
-          bottomNavigationBar: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+              // Banner sits under the app bar, not against the bottom nav:
+              // AdMob forbids ads adjacent to navigational controls.
               if (_banner != null)
                 SizedBox(
                   width: _banner!.size.width.toDouble(),
@@ -822,20 +814,23 @@ class _HomeShellState extends State<HomeShell> {
                     child: AdWidget(ad: _banner!),
                   ),
                 ),
-              // Floating glass pill — never an edge-to-edge Material bar.
-              _GlassNavBar(
-                index: safeIndex,
-                items: destinations,
-                badges: _chatUnread ? {4} : const {},
-                onSelected: (i) {
-                  // Re-tapping the current tab is not a tab switch — it must
-                  // not count towards (or fire) the interstitial.
-                  if (i == safeIndex) return;
-                  setState(() => tab = i);
-                  _maybeShowInterstitial();
-                },
+              Expanded(
+                child: IndexedStack(index: safeIndex, children: pages),
               ),
             ],
+          ),
+          // Floating glass pill — never an edge-to-edge Material bar.
+          bottomNavigationBar: _GlassNavBar(
+            index: safeIndex,
+            items: destinations,
+            badges: _chatUnread ? {4} : const {},
+            onSelected: (i) {
+              // Re-tapping the current tab is not a tab switch — it must
+              // not count towards (or fire) the interstitial.
+              if (i == safeIndex) return;
+              setState(() => tab = i);
+              _maybeShowInterstitial();
+            },
           ),
         ),
       ],
