@@ -56,12 +56,16 @@ class AdUnits {
 /// Lifecycle states for an individual advertisement slot.
 enum AdState { idle, loading, loaded, showing, failed }
 
-/// Centralized advertisement manager covering the five AdMob formats the app
-/// actually shows:
+/// Centralized advertisement manager covering the formats the app actually
+/// shows:
 ///
-/// * **Rewarded** & **Rewarded interstitial** â€” earn coins (SSV â†’ function).
+/// * **Rewarded** â€” earn coins (SSV â†’ function).
 /// * **Interstitial**, **Banner**, **Native** â€” passive revenue only; they
 ///   never touch the coin balance.
+///
+/// The rewarded-interstitial helpers below are retained for reference but are
+/// not called by any screen: AdMob requires an intro screen with an opt-out
+/// before that format, so the app earns through the standard rewarded unit.
 ///
 /// Enforces:
 /// - Explicit ad state management (idle, loading, loaded, showing, failed).
@@ -260,11 +264,11 @@ class AdService {
   /// Paces full-screen load requests [gap] apart â€” but only during the
   /// startup burst.
   ///
-  /// Rewarded, Rewarded Interstitial and Interstitial are kicked off by
-  /// different widgets (App boot, Earn tab, tab switching) that all mount in
-  /// the same few hundred milliseconds. Firing three simultaneous requests
-  /// from one device against a brand-new AdMob app looks like request spam
-  /// and can contribute to ad-serving limits and blanket no-fill responses.
+  /// Rewarded and Interstitial are kicked off by different widgets (App boot,
+  /// Earn tab, tab switching) that all mount in the same few hundred
+  /// milliseconds. Firing two simultaneous requests from one device against a
+  /// brand-new AdMob app looks like request spam and can contribute to
+  /// ad-serving limits and blanket no-fill responses.
   ///
   /// The window closes after [pacingWindow], so steady-state behaviour â€” a
   /// user tapping Watch, or a tab switch waiting on an interstitial â€” is
@@ -572,7 +576,8 @@ class AdService {
   }
 
   // ---------------------------------------------------------------------
-  // Rewarded interstitial â€” the second way to earn coins (SSV same as above).
+  // Rewarded interstitial helpers â€” NOT called by the app. AdMob requires an
+  // intro screen with a clear opt-out before this format; use only with one.
   // ---------------------------------------------------------------------
 
   Future<RewardedInterstitialAd?> preloadRewardedInterstitial({
@@ -787,90 +792,23 @@ class AdService {
     }
   }
 
-  /// Shows the requested rewarded format, then transparently falls back to the
-  /// other rewarded format when the preferred unit has no inventory.
-  ///
-  /// Network fallback (AdMob -> Unity Ads) happens inside each AdMob mediation
-  /// request. This method adds a second layer by trying both rewarded ad units,
-  /// because mediation groups and inventory can differ between the two units.
+  /// Shows the rewarded ad. The old rewarded-interstitial fallback was
+  /// removed: AdMob requires an intro screen with an opt-out for that format,
+  /// so the Earn screen uses the standard rewarded unit only.
   Future<void> showRewardedWithFallback({
     required String userId,
     required void Function(RewardItem reward) onEarned,
     required void Function(String error) onError,
     required void Function() onClosed,
-    bool preferInterstitial = false,
     Duration waitTimeout = const Duration(seconds: 8),
-  }) async {
-    if (!adsEnabled) {
-      onError('Ads are temporarily unavailable. Please try again shortly.');
-      return;
-    }
-    if (_isShowingFullScreenAd) {
-      onError('Another advertisement is already currently displaying.');
-      return;
-    }
-
-    // Load both units together. A cached ad returns immediately and an
-    // in-flight load is shared by the existing single-flight completers.
-    if (!ready && !riReady) {
-      await Future.wait([
-        preload(timeout: waitTimeout),
-        preloadRewardedInterstitial(timeout: waitTimeout),
-      ]);
-    } else {
-      // Keep the alternate warm without delaying a ready preferred format.
-      if (!ready) unawaited(preload(timeout: waitTimeout));
-      if (!riReady) {
-        unawaited(preloadRewardedInterstitial(timeout: waitTimeout));
-      }
-    }
-
-    final useInterstitial = preferInterstitial
-        ? (riReady || !ready)
-        : (!ready && riReady);
-
-    if (useInterstitial && riReady) {
-      await showRewardedInterstitial(
-        userId: userId,
-        onEarned: onEarned,
-        onError: onError,
-        onClosed: onClosed,
-        waitTimeout: waitTimeout,
-      );
-      return;
-    }
-    if (ready) {
-      await show(
-        userId: userId,
-        onEarned: onEarned,
-        onError: onError,
-        onClosed: onClosed,
-        waitTimeout: waitTimeout,
-      );
-      return;
-    }
-    if (riReady) {
-      await showRewardedInterstitial(
-        userId: userId,
-        onEarned: onEarned,
-        onError: onError,
-        onClosed: onClosed,
-        waitTimeout: waitTimeout,
-      );
-      return;
-    }
-
-    final codes = {_lastRewardedErrorCode, _lastRiErrorCode};
-    if (codes.contains(2)) {
-      onError(userFriendlyError(2));
-    } else if (_lastRewardedErrorCode == 3 && _lastRiErrorCode == 3) {
-      onError(
-        'No rewarded ads are available from any ad source right now. '
-        'Please try again in a few minutes.',
-      );
-    } else {
-      onError('Rewarded ads are still loading. Please try again shortly.');
-    }
+  }) {
+    return show(
+      userId: userId,
+      onEarned: onEarned,
+      onError: onError,
+      onClosed: onClosed,
+      waitTimeout: waitTimeout,
+    );
   }
 
   // ---------------------------------------------------------------------
