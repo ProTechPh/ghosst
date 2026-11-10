@@ -33,7 +33,7 @@ class _FakeClient implements ChatClient {
   /// Ang result ng refreshMuted() — hindi-muted default; i-set ng tests.
   bool refreshMutedResult = false;
 
-  final _controller = StreamController<List<ChatMessage>>();
+  final _controller = StreamController<ChatFeed>();
   final sent = <String>[];
   final sentReplyTo = <ChatMessage?>[];
   final muteCalls = <String>[];
@@ -69,7 +69,7 @@ class _FakeClient implements ChatClient {
   Future<List<MutedUser>> mutedUsers() async => mutedList;
 
   @override
-  Stream<List<ChatMessage>> messages() {
+  Stream<ChatFeed> messages() {
     subscribes++;
     return _controller.stream;
   }
@@ -160,10 +160,10 @@ void main() {
     await _pump(tester, client);
     await tester.pumpAndSettle();
 
-    client._controller.add([
+    client._controller.add(ChatFeed(messages: [
       _msg(uid: 'uid-2', text: 'Bagong stock mamaya', admin: true),
       _msg(uid: 'uid-2', name: '', text: 'Salamat boss'),
-    ]);
+    ]));
     // Stream delivery is a microtask; the first pump renders the pre-event
     // frame, so let the setState it schedules land too.
     await tester.pumpAndSettle();
@@ -172,6 +172,30 @@ void main() {
     expect(find.text('Salamat boss'), findsOneWidget);
     expect(find.text('ADMIN'), findsOneWidget);
     expect(find.text('Deleted user'), findsOneWidget);
+  });
+
+  testWidgets('cache-only snapshots stay CONNECTING; never shows CACHED',
+      (tester) async {
+    final client = _FakeClient();
+    await _pump(tester, client);
+    await tester.pump();
+
+    expect(find.text('CONNECTING'), findsOneWidget);
+
+    client._controller.add(const ChatFeed(messages: [], fromCache: true));
+    await tester.pumpAndSettle();
+    expect(find.text('CACHED'), findsNothing);
+    expect(find.text('CONNECTING'), findsOneWidget);
+
+    client._controller.add(
+      const ChatFeed(messages: [], hasPendingWrites: true),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('SENDING'), findsOneWidget);
+
+    client._controller.add(const ChatFeed(messages: []));
+    await tester.pumpAndSettle();
+    expect(find.text('LIVE'), findsOneWidget);
   });
 
   testWidgets('empty input never sends; typed text does', (tester) async {
@@ -224,7 +248,7 @@ void main() {
     await _pump(tester, client);
     await tester.pumpAndSettle();
 
-    client._controller.add([_msg(uid: 'uid-2', text: 'Hello')]);
+    client._controller.add(ChatFeed(messages: [_msg(uid: 'uid-2', text: 'Hello')]));
     await tester.pumpAndSettle();
 
     await tester.drag(find.text('Hello'), const Offset(600, 0));
@@ -245,7 +269,7 @@ void main() {
     await _pump(tester, client);
     await tester.pumpAndSettle();
 
-    client._controller.add([_msg(uid: 'uid-2', text: 'Hello')]);
+    client._controller.add(ChatFeed(messages: [_msg(uid: 'uid-2', text: 'Hello')]));
     await tester.pumpAndSettle();
 
     await tester.drag(find.text('Hello'), const Offset(600, 0));
@@ -296,7 +320,7 @@ void main() {
     expect(find.text('Loading chat…'), findsOneWidget);
     expect(find.text('No messages yet. Be the first.'), findsNothing);
 
-    client._controller.add([]);
+    client._controller.add(ChatFeed(messages: []));
     await tester.pumpAndSettle();
 
     expect(find.text('No messages yet. Be the first.'), findsOneWidget);
@@ -307,7 +331,7 @@ void main() {
     await _pump(tester, client, isAdmin: true);
     await tester.pumpAndSettle();
 
-    client._controller.add([_msg(uid: 'uid-2', text: 'Hello')]);
+    client._controller.add(ChatFeed(messages: [_msg(uid: 'uid-2', text: 'Hello')]));
     await tester.pumpAndSettle();
 
     await tester.longPress(find.text('Hello'));
@@ -340,7 +364,7 @@ void main() {
     await _pump(tester, client, isAdmin: true);
     await tester.pumpAndSettle();
 
-    client._controller.add([_msg(uid: 'uid-2', text: 'Hello')]);
+    client._controller.add(ChatFeed(messages: [_msg(uid: 'uid-2', text: 'Hello')]));
     await tester.pumpAndSettle();
 
     await tester.longPress(find.text('Hello'));
@@ -362,7 +386,7 @@ void main() {
     await _pump(tester, client);
     await tester.pumpAndSettle();
 
-    client._controller.add([_msg(uid: 'uid-2', text: 'Hello')]);
+    client._controller.add(ChatFeed(messages: [_msg(uid: 'uid-2', text: 'Hello')]));
     await tester.pumpAndSettle();
 
     await tester.longPress(find.text('Hello'));
@@ -378,7 +402,7 @@ void main() {
     await _pump(tester, client, isAdmin: true);
     await tester.pumpAndSettle();
 
-    client._controller.add([_msg(text: 'Mine')]);
+    client._controller.add(ChatFeed(messages: [_msg(text: 'Mine')]));
     await tester.pumpAndSettle();
 
     await tester.longPress(find.text('Mine'));
@@ -427,14 +451,14 @@ void main() {
     await _pump(tester, client);
     await tester.pumpAndSettle();
 
-    client._controller.add([
+    client._controller.add(ChatFeed(messages: [
       _msg(
         uid: 'uid-2',
         text: 'Sagot ko',
         replyName: 'Abbie',
         replyText: 'Tanong niya',
       ),
-    ]);
+    ]));
     await tester.pumpAndSettle();
 
     expect(find.text('Abbie'), findsOneWidget);

@@ -37,6 +37,25 @@ class ChatMessage {
   final String? replyToId;
 }
 
+/// Isang Firestore snapshot kasama ang connectivity metadata — para hindi
+/// mawala ang `isFromCache`/`hasPendingWrites` sa UI layer.
+@immutable
+class ChatFeed {
+  const ChatFeed({
+    required this.messages,
+    this.fromCache = false,
+    this.hasPendingWrites = false,
+  });
+
+  final List<ChatMessage> messages;
+
+  /// True kapag galing sa local cache — hindi pa nakakausap ang server.
+  final bool fromCache;
+
+  /// True kapag may lokal na write na hindi pa na-ack ng server.
+  final bool hasPendingWrites;
+}
+
 /// Ang surface na ginagamit ng [ChatScreen] — fake ito sa widget tests.
 abstract class ChatClient {
   bool get ready;
@@ -66,7 +85,7 @@ abstract class ChatClient {
   /// Admin: ang listahan ng naka-mute (para sa dialog state + Admin screen).
   Future<List<MutedUser>> mutedUsers();
 
-  Stream<List<ChatMessage>> messages();
+  Stream<ChatFeed> messages();
   /// Kumuha ng mas lumang messages bago ang [beforeTsMillis] (pagination).
   Future<List<ChatMessage>> loadOlder(int beforeTsMillis);
   Future<String?> send(String text, {ChatMessage? replyTo});
@@ -281,13 +300,15 @@ class ChatService implements ChatClient {
   /// (lokal na naipadala pero naghihintay pa ng server timestamp) — kaya
   /// lalabas agad ang sariling chat bubble nang walang pagkaantala.
   @override
-  Stream<List<ChatMessage>> messages() {
-    if (!_ready) return const Stream<List<ChatMessage>>.empty();
+  Stream<ChatFeed> messages() {
+    if (!_ready) return const Stream<ChatFeed>.empty();
     return FirebaseFirestore.instance
         .collection('world_chat')
         .orderBy('ts', descending: true)
         .limit(_pageSize)
-        .snapshots()
+        // Needed so CACHED -> LIVE flips when the server confirms the same
+        // data; without it Firestore only emits on document changes.
+        .snapshots(includeMetadataChanges: true)
         .map((snap) {
           final list = <ChatMessage>[];
           for (final doc in snap.docs) {
@@ -315,7 +336,11 @@ class ChatService implements ChatClient {
               replyToId: data['replyToId'] as String?,
             ));
           }
-          return list;
+          return ChatFeed(
+            messages: list,
+            fromCache: snap.metadata.isFromCache,
+            hasPendingWrites: snap.metadata.hasPendingWrites,
+          );
         });
   }
 
