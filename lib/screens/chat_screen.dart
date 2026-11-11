@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../services/chat_service.dart';
+import '../services/read_store.dart';
 import '../theme.dart';
 
 /// World chat room. Identity is the backend UUID (see [ChatService]); there
@@ -33,7 +34,9 @@ class ChatScreen extends StatefulWidget {
   /// True kapag admin ang naka-sign-in — lumalabas ang long-press mute menu.
   final bool isAdmin;
   final bool isModerator;
-  final ValueChanged<bool>? onUnreadChanged;
+
+  /// Tab badge: messages from other users newer than the last seen marker.
+  final ValueChanged<int>? onUnreadChanged;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -56,6 +59,9 @@ class _ChatScreenState extends State<ChatScreen> {
   ChatMessage? _replyTo;
   bool _loadingMore = false;
   bool _hasMore = true;
+
+  /// Newest message ts the user has seen; drives the unread badge.
+  int _lastSeenMs = 0;
 
   /// Chat link state: CONNECTING hanggang may server snapshot, tapos LIVE.
   /// Cache-only snapshots ay CONNECTING pa rin — hindi natin ipinapakita ang
@@ -84,7 +90,7 @@ class _ChatScreenState extends State<ChatScreen> {
       // nag-unmute/mute) — i-recheck sa bawat pagbalik, hindi sa restart.
       if (_sub != null) _recheckMuted();
       // Nalimutan na ang unread reply kapag binuksan ang tab.
-      widget.onUnreadChanged?.call(false);
+      _markChatSeen(_messages);
     }
   }
 
@@ -131,6 +137,14 @@ class _ChatScreenState extends State<ChatScreen> {
       }
       return;
     }
+
+    // Load the seen marker without blocking the first paint/subscribe — a
+    // slow or absent keychain must never leave the chat on "Loading".
+    unawaited(
+      ReadStore.chatSeenAtMs().then((v) {
+        if (v > _lastSeenMs) _lastSeenMs = v;
+      }).catchError((_) {}),
+    );
 
     if (_client.hasSession) {
       // Fast path: may persisted session na. Subscribe AGAD — ang uid ay
@@ -209,19 +223,15 @@ class _ChatScreenState extends State<ChatScreen> {
           debugPrint(
               '[ChatScreen] first snapshot (${list.length} msgs) in ${sw.elapsedMilliseconds}ms');
         }
-        final oldIds = _messages.map((m) => m.id).toSet();
-        // Build a set of my message ids for O(1) reply-target lookup
-        // instead of O(n) inner scan per new message.
-        final myMsgIds = <String>{
-          for (final m in _messages) if (m.uid == _myUid) m.id,
-        };
-        final hasNewReply = list.any((m) =>
-            m.uid != _myUid &&
-            m.replyToId != null &&
-            myMsgIds.contains(m.replyToId) &&
-            !oldIds.contains(m.id));
-        if (hasNewReply && !widget.active) {
-          widget.onUnreadChanged?.call(true);
+        // Badge = messages from other people newer than the last seen marker.
+        // While this tab is open everything counts as seen.
+        if (widget.active) {
+          _markChatSeen(list);
+        } else {
+          final unread = list
+              .where((m) => m.uid != _myUid && m.tsMillis > _lastSeenMs)
+              .length;
+          widget.onUnreadChanged?.call(unread);
         }
         setState(() {
           _messages = list;
@@ -264,6 +274,18 @@ class _ChatScreenState extends State<ChatScreen> {
     _input.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  /// Marks every loaded message as seen, persists the marker, clears the badge.
+  void _markChatSeen(List<ChatMessage> list) {
+    if (list.isNotEmpty) {
+      final newest = list.first.tsMillis;
+      if (newest > _lastSeenMs) {
+        _lastSeenMs = newest;
+        unawaited(ReadStore.markChatSeen(newest));
+      }
+    }
+    widget.onUnreadChanged?.call(0);
   }
 
   /// Cache-only snapshots are normal while a local write waits for its ack

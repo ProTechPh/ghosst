@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/services.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'announcement_banner.dart';
 import 'api/api_exception.dart';
@@ -22,6 +23,7 @@ import 'screens/profile_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/store_screen.dart';
 import 'screens/tamper_screen.dart';
+import 'screens/update_screen.dart';
 import 'screens/wallet_screen.dart';
 import 'services/ad_service.dart';
 import 'services/adblock_detector.dart';
@@ -31,8 +33,10 @@ import 'services/worker_backend.dart';
 import 'services/consent_service.dart';
 import 'services/distribution.dart';
 import 'services/notice_store.dart';
+import 'services/play_integrity.dart';
 import 'services/play_store.dart';
 import 'services/push.dart';
+import 'services/read_store.dart';
 import 'services/security.dart';
 import 'sign_in.dart';
 import 'sign_up.dart';
@@ -112,9 +116,22 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
   /// only positive evidence (ads blocked while the network works) locks.
   AdblockReport? _adblock;
 
+  /// Update gate (server config + installed version). Both must land before
+  /// an install can be declared outdated.
+  AppConfig? _appConfig;
+  int _installedVersion = 0;
+
   /// Throttle stamp: launch + resume re-checks run at most once a minute
   /// so returning from a settings screen never hammers the probes.
   DateTime? _lastAdblockCheck;
+
+  /// Update checks run on launch and every resume (throttled) — an install
+  /// left open for days must still be forced to update.
+  DateTime? _lastUpdateCheck;
+
+  /// Set when Play itself reports an update (the store's own full-screen
+  /// flow drives the install; this keeps our gate up if the user backs out).
+  int? _playUpdateVersion;
 
   late final Future<void> _boot;
 
@@ -143,11 +160,29 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
   }
 
   Future<void> _launchChecks() async {
+    // Fire-and-forget: never delays the splash and never blocks a launch.
+    unawaited(_reportPlayIntegrity());
     await Future.wait<void>([
       _initializeAds(),
       _checkSecurity(),
       _checkAdblock(),
+      _checkUpdate(),
     ]);
+  }
+
+  /// Observe-only Play Integrity: the API decodes the token and logs the
+  /// verdict. No verdict is trusted on the device, and no failure is shown.
+  Future<void> _reportPlayIntegrity() async {
+    try {
+      if (await Backend.currentUser() == null) return;
+      if (!await PlayIntegrity.due()) return;
+      final proof = await PlayIntegrity.request();
+      if (proof == null) return;
+      await Backend.reportIntegrity(proof.token, proof.nonce);
+      await PlayIntegrity.markReported();
+    } catch (_) {
+      // Telemetry only.
+    }
   }
 
   Future<void> _initializeAds() async {
@@ -171,7 +206,14 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
   /// device starts filtering ads again (throttled, fails open).
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _checkAdblock();
+    if (state != AppLifecycleState.resumed) return;
+    _checkAdblock();
+    // Logged-in users keep the app open for days — re-check on every open.
+    final last = _lastUpdateCheck;
+    if (last == null ||
+        DateTime.now().difference(last) >= const Duration(seconds: 30)) {
+      unawaited(_checkUpdate());
+    }
   }
 
   @override
@@ -196,6 +238,42 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
     setState(() => _security = report);
   }
 
+  /// Server-driven update gate. Fails open on any error (offline, API down,
+  /// package info missing) — an outage must not lock everyone out.
+  Future<void> _checkUpdate() async {
+    _lastUpdateCheck = DateTime.now();
+
+    // Play Store first, for Play installs: this is the same full-screen
+    // update flow the store shows. Direct/sideloaded builds can't be asked,
+    // so they fall through to the server's minVersionCode gate.
+    if (Distribution.isPlay) {
+      final playVersion = await PlayStore.updateVersionCode();
+      if (playVersion != null) {
+        if (!mounted) return;
+        setState(() => _playUpdateVersion = playVersion);
+        unawaited(PlayStore.startImmediateUpdate());
+        return;
+      }
+    }
+
+    try {
+      final info = await PackageInfo.fromPlatform();
+      // On Android buildNumber is the versionCode (pubspec `+N`).
+      final installed = int.tryParse(info.buildNumber) ?? 0;
+      final config = await Backend.appConfig().timeout(
+        const Duration(seconds: 6),
+        onTimeout: () => null,
+      );
+      if (!mounted) return;
+      setState(() {
+        _installedVersion = installed;
+        if (config != null) _appConfig = config;
+      });
+    } catch (_) {
+      // Fail open.
+    }
+  }
+
   /// Probes ad endpoints against our own backend to spot a DNS/VPN filter.
   /// Throttled so rapid resume cycles share one run (the stamp lands before
   /// the network call). Fails open: offline / timeout / broken probe means
@@ -214,8 +292,13 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    // A modified build outranks the ad-blocker gate. App updates are handled
-    // exclusively by Google Play and never block launch from inside the app.
+    // Update outranks everything: an install below the API's minimum (or one
+    // Play has flagged) cannot use the app at all.
+    final playVersion = _playUpdateVersion ?? 0;
+    final playUpdate = playVersion > 0;
+    final config = _appConfig;
+    final serverUpdate = config != null && config.blocks(_installedVersion);
+    final forceUpdate = playUpdate || serverUpdate;
     final tampered = _security?.blocked ?? false;
     final adBlocked = _adblock?.blocked ?? false;
     final blocked = tampered || adBlocked;
@@ -224,7 +307,25 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
         // The gate replaces the entire router — nothing to pop, no UI to
         // reach while a newer build is waiting.
         SafeArea(
-          child: blocked
+          child: forceUpdate
+              ? UpdateScreen(
+                  installedVersion: _installedVersion,
+                  requiredVersion: playUpdate
+                      ? playVersion
+                      : (config!.latestVersionCode > 0
+                            ? config.latestVersionCode
+                            : config.minVersionCode),
+                  updateUrl: playUpdate
+                      ? PlayStore.webUrl
+                      : (config?.updateUrl(isPlay: Distribution.isPlay) ?? ''),
+                  onUpdate: playUpdate
+                      ? () async {
+                          await PlayStore.startImmediateUpdate();
+                        }
+                      : null,
+                  onRetry: _checkUpdate,
+                )
+              : blocked
               ? (tampered
                     ? TamperDetectedScreen(
                         flags: _security?.flags ?? const <String>[],
@@ -239,8 +340,9 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
               : const Router(),
         ),
         // Only after the intro: the 20s read window must not run behind the
-        // splash, and the notice must not cover a tamper/ad-block gate.
-        if (_notice && !_splash && !blocked) NoticeScreen(onSkip: _skipNotice),
+        // splash, and the notice must not cover a gate.
+        if (_notice && !_splash && !blocked && !forceUpdate)
+          NoticeScreen(onSkip: _skipNotice),
         if (_splash)
           SplashScreen(
             // Held BEFORE the exit starts, so the intro never gets cut and the
@@ -391,7 +493,9 @@ class _HomeShellState extends State<HomeShell> {
   bool isModerator = false;
   bool loading = true;
   String display = '';
-  bool _chatUnread = false;
+  int _chatUnread = 0;
+  int _announcementUnread = 0;
+  List<Announcement> _announcements = const [];
   Announcement? announcement;
 
   /// Passive formats (banner + interstitial) — profit only, no coins.
@@ -548,9 +652,19 @@ class _HomeShellState extends State<HomeShell> {
     balance = await coinsFuture;
     // A failed banner fetch just means no banner; it must not break the shell.
     Announcement? fresh;
+    var unreadAnnouncements = 0;
+    var allAnnouncements = const <Announcement>[];
     try {
       final stored = await AnnouncementStore.dismissedId();
-      fresh = unreadAnnouncement(await Backend.announcement(), stored);
+      final seenAt = await ReadStore.sync();
+      allAnnouncements = await Backend.announcements();
+      unreadAnnouncements = allAnnouncements
+          .where((a) => a.createdAt.compareTo(seenAt) > 0)
+          .length;
+      fresh = unreadAnnouncement(
+        allAnnouncements.isNotEmpty ? allAnnouncements.first : null,
+        stored,
+      );
     } catch (_) {
       fresh = null;
     }
@@ -561,6 +675,8 @@ class _HomeShellState extends State<HomeShell> {
       isModerator = results[1] as bool;
       display = results[2] as String;
       announcement = fresh;
+      _announcements = allAnnouncements;
+      _announcementUnread = unreadAnnouncements;
       loading = false;
     });
     if (reason.isNotEmpty && mounted) {
@@ -579,6 +695,13 @@ class _HomeShellState extends State<HomeShell> {
     final id = announcement?.id ?? '';
     setState(() => announcement = null);
     if (id.isNotEmpty) await AnnouncementStore.dismiss(id);
+  }
+
+  /// Opening the News tab clears its badge up to the newest item.
+  void _markAnnouncementsSeen() {
+    if (_announcements.isEmpty) return;
+    unawaited(ReadStore.markAnnouncementsSeen(_announcements.first.createdAt));
+    if (_announcementUnread != 0) setState(() => _announcementUnread = 0);
   }
 
   void _openWallet() {
@@ -655,8 +778,8 @@ class _HomeShellState extends State<HomeShell> {
         active: tab == 4,
         isAdmin: isAdmin,
         isModerator: isModerator,
-        onUnreadChanged: (v) {
-          if (_chatUnread != v) setState(() => _chatUnread = v);
+        onUnreadChanged: (count) {
+          if (_chatUnread != count) setState(() => _chatUnread = count);
         },
       ),
       if (isAdmin) AdminScreen(onAnnouncementSent: _refresh, active: tab == 5),
@@ -821,12 +944,16 @@ class _HomeShellState extends State<HomeShell> {
           bottomNavigationBar: _GlassNavBar(
             index: safeIndex,
             items: destinations,
-            badges: _chatUnread ? {4} : const {},
+            unread: {
+              if (_announcementUnread > 0) 3: _announcementUnread,
+              if (_chatUnread > 0) 4: _chatUnread,
+            },
             onSelected: (i) {
               // Re-tapping the current tab is not a tab switch — it must
               // not count towards (or fire) the interstitial.
               if (i == safeIndex) return;
               setState(() => tab = i);
+              if (i == 3) _markAnnouncementsSeen();
               _maybeShowInterstitial();
             },
           ),
@@ -852,13 +979,15 @@ class _GlassNavBar extends StatefulWidget {
     required this.index,
     required this.items,
     required this.onSelected,
-    this.badges = const {},
+    this.unread = const {},
   });
 
   final int index;
   final List<_NavItem> items;
   final ValueChanged<int> onSelected;
-  final Set<int> badges;
+
+  /// tab index → unread count. Zero/absent tabs show no badge.
+  final Map<int, int> unread;
 
   @override
   State<_GlassNavBar> createState() => _GlassNavBarState();
@@ -1002,7 +1131,7 @@ class _GlassNavBarState extends State<_GlassNavBar>
                                 selected: i == widget.index,
                                 label:
                                     '${widget.items[i].label}'
-                                    '${widget.badges.contains(i) ? ', unread messages' : ''}',
+                                    '${(widget.unread[i] ?? 0) > 0 ? ', ${widget.unread[i]} unread' : ''}',
                                 child: GestureDetector(
                                   behavior: HitTestBehavior.opaque,
                                   onTap: () {
@@ -1028,20 +1157,39 @@ class _GlassNavBarState extends State<_GlassNavBar>
                                                     : AppColors.textDim,
                                               ),
                                             ),
-                                            if (widget.badges.contains(i))
+                                            if ((widget.unread[i] ?? 0) > 0)
                                               Positioned(
-                                                top: -2,
-                                                right: -4,
+                                                top: -6,
+                                                right: -12,
                                                 child: ExcludeSemantics(
                                                   child: Container(
-                                                    width: 10,
-                                                    height: 10,
+                                                    constraints: const BoxConstraints(
+                                                      minWidth: 16,
+                                                    ),
+                                                    height: 16,
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 4,
+                                                        ),
+                                                    alignment: Alignment.center,
                                                     decoration: BoxDecoration(
                                                       color: AppColors.red,
-                                                      shape: BoxShape.circle,
+                                                      borderRadius:
+                                                          BorderRadius.circular(8),
                                                       border: Border.all(
                                                         color: AppColors.bg,
                                                         width: 1.5,
+                                                      ),
+                                                    ),
+                                                    child: Text(
+                                                      widget.unread[i]! > 9
+                                                          ? '9+'
+                                                          : '${widget.unread[i]}',
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: 9,
+                                                        fontWeight: FontWeight.w800,
+                                                        height: 1,
                                                       ),
                                                     ),
                                                   ),

@@ -280,7 +280,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       body: Stack(
         children: [
           ListView(
-            padding: const EdgeInsets.only(bottom: AppSpace.lg),
+            // Keep the header clear of the floating back button.
+            padding: EdgeInsets.only(
+              top: MediaQuery.paddingOf(context).top + kTouchMin + AppSpace.md,
+              bottom: AppSpace.lg,
+            ),
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(
@@ -332,10 +336,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SizedBox(
-                            height:
-                                MediaQuery.paddingOf(context).top + AppSpace.sm,
-                          ),
                           Text(
                             p.isApk
                                 ? 'ANDROID APP'

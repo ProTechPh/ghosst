@@ -11,6 +11,9 @@ class PlayStore {
   static const appId = 'com.astrixtech.ghosst';
   static const _web = 'https://play.google.com/store/apps/details?id=$appId';
 
+  /// Public listing link (used as the update fallback).
+  static const webUrl = _web;
+
   /// Opens the listing in the Play app, falling back to the browser.
   static Future<void> rate() async {
     if (await _open(Uri.parse('market://details?id=$appId'))) return;
@@ -40,6 +43,33 @@ class PlayStore {
       return true;
     } catch (_) {
       return false;
+    }
+  }
+
+  /// Version code Play wants to install, or null when there is no update /
+  /// this is not a Play install. Play Core cannot be asked on the `direct`
+  /// flavor, so that path keeps using the server's `minVersionCode`.
+  static Future<int?> updateVersionCode() async {
+    if (kIsWeb || !Distribution.isPlay) return null;
+    try {
+      final info = await InAppUpdate.checkForUpdate();
+      if (info.updateAvailability != UpdateAvailability.updateAvailable) {
+        return null;
+      }
+      return info.availableVersionCode;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Shows Google Play's full-screen (immediate) update flow. Requires a
+  /// preceding [updateVersionCode]/[checkForUpdate] call in the same session.
+  static Future<void> startImmediateUpdate() async {
+    if (kIsWeb || !Distribution.isPlay) return;
+    try {
+      await InAppUpdate.performImmediateUpdate();
+    } catch (_) {
+      // The gate screen offers a retry.
     }
   }
 }
