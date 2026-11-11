@@ -198,6 +198,42 @@ void main() {
     expect(find.text('LIVE'), findsOneWidget);
   });
 
+  testWidgets('a send does not flash CONNECTING', (tester) async {
+    final client = _FakeClient();
+    await _pump(tester, client);
+    await tester.pumpAndSettle();
+
+    client._controller.add(const ChatFeed(messages: []));
+    await tester.pumpAndSettle();
+    expect(find.text('LIVE'), findsOneWidget);
+
+    // Firestore's optimistic snapshot for the local write is cache-only.
+    client._controller.add(const ChatFeed(messages: [], fromCache: true));
+    await tester.pump();
+    expect(find.text('LIVE'), findsOneWidget);
+    expect(find.text('CONNECTING'), findsNothing);
+
+    // The server ack lands inside the grace period.
+    client._controller.add(const ChatFeed(messages: []));
+    await tester.pump();
+    expect(find.text('LIVE'), findsOneWidget);
+  });
+
+  testWidgets('shows how many users are online', (tester) async {
+    final client = _FakeClient();
+    await _pump(tester, client);
+    await tester.pumpAndSettle();
+
+    client._controller.add(ChatFeed(messages: [
+      _msg(uid: 'uid-1', text: 'mine'),
+      _msg(uid: 'uid-2', text: 'hello'),
+      _msg(uid: 'uid-3', name: 'Ana', text: 'yo'),
+    ]));
+    await tester.pumpAndSettle();
+
+    expect(find.text('3 ONLINE'), findsOneWidget);
+  });
+
   testWidgets('empty input never sends; typed text does', (tester) async {
     final client = _FakeClient();
     await _pump(tester, client);

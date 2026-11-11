@@ -835,6 +835,11 @@ class _FloatingCoinState extends State<FloatingCoin>
                           style: AppText.figure.copyWith(
                             fontSize: 13,
                             color: AppColors.gold,
+                            // The token lives in the Overlay, outside any
+                            // Material, so it would otherwise inherit
+                            // MaterialApp's debug fallback style (double
+                            // yellow underline).
+                            decoration: TextDecoration.none,
                           ),
                         ),
                       ],

@@ -391,6 +391,26 @@ class ShopGame {
   String get priceLabel => shopPriceLabel(currency, price, priceMax);
 }
 
+/// Rolling 24h reward budget from `GET /v1/ads/status` (advisory only —
+/// the SSV handler still owns crediting).
+class AdsRewardStatus {
+  const AdsRewardStatus({
+    required this.rewardsToday,
+    required this.limit,
+    required this.remaining,
+    required this.nextRewardIn,
+  });
+
+  final int rewardsToday;
+  final int limit;
+  final int remaining;
+
+  /// Seconds until the 15s pacing gap clears (0 = ready now).
+  final int nextRewardIn;
+
+  bool get atCap => remaining <= 0;
+}
+
 /// `₱620`, `₱99.50`, or `₱620 – ₱1,200` when keys are priced differently.
 String shopPriceLabel(String currency, double price, double priceMax) {
   String money(double v) {

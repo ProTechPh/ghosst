@@ -45,6 +45,16 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
   bool _lastActionSucceeded = false;
   Completer<void>? _verificationWakeup;
 
+  /// Balance before the reward — a late SSV credit is compared against this so
+  /// the user can re-check without watching another ad.
+  int _rewardBaseline = 0;
+  bool _verifyTimedOut = false;
+  bool _rechecking = false;
+
+  /// Rolling 24h budget; null until the first status fetch lands.
+  AdsRewardStatus? _rewardStatus;
+  Timer? _capTimer;
+
   /// Anchor for the payout token's start point.
   final GlobalKey _ctaKey = GlobalKey();
   OverlayEntry? _coinEntry;
@@ -58,6 +68,31 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
       _ads.preload();
     }
     _checkCooldown();
+    unawaited(_loadRewardStatus());
+  }
+
+  /// Advisory budget check: disables the button at 0 so nobody watches an ad
+  /// that the API's daily cap would drop. Failures never block the button.
+  Future<void> _loadRewardStatus() async {
+    try {
+      if (await Backend.currentUser() == null) return;
+      final status = await Backend.adsRewardStatus();
+      if (!mounted) return;
+      setState(() => _rewardStatus = status);
+      if (status.atCap) {
+        // A rolling window frees a slot at an arbitrary time; re-check so the
+        // button does not stay dead while the user sits on this tab.
+        _capTimer ??= Timer(const Duration(minutes: 5), () {
+          _capTimer = null;
+          if (mounted) unawaited(_loadRewardStatus());
+        });
+      } else {
+        _capTimer?.cancel();
+        _capTimer = null;
+      }
+    } catch (_) {
+      // Network/API blip — keep the last known status.
+    }
   }
 
   void _onAdsEnabled() {
@@ -75,6 +110,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
     final wakeup = _verificationWakeup;
     if (wakeup != null && !wakeup.isCompleted) wakeup.complete();
     _ticker?.cancel();
+    _capTimer?.cancel();
     super.dispose();
   }
 
@@ -82,6 +118,11 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed || !mounted) return;
     _checkCooldown();
+
+    // SSV can land while the app was backgrounded — check again instead of
+    // leaving the "taking longer than usual" message up.
+    if (_verifyTimedOut && !_rechecking) unawaited(_recheck());
+    unawaited(_loadRewardStatus());
 
     // An ad click can temporarily move the user to Play Store. Wake the SSV
     // poll immediately on return instead of leaving the UI on "Verifying".
@@ -138,6 +179,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
     setState(() {
       busy = true;
       _lastActionSucceeded = false;
+      _verifyTimedOut = false;
       status = 'Loading ad…';
     });
 
@@ -204,9 +246,11 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
     setState(() {
       verifying = true;
       verifyProgress = 0;
+      _verifyTimedOut = false;
       status = 'Reward earned — verifying with server…';
     });
-    final before = widget.coins;
+    _rewardBaseline = widget.coins;
+    final before = _rewardBaseline;
     final deadline = DateTime.now().add(const Duration(seconds: 75));
     for (var i = 0; i < 23; i++) {
       await _waitForVerificationPoll();
@@ -232,10 +276,12 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
           setState(() {
             verifying = false;
             busy = false;
+            _verifyTimedOut = false;
             status = 'Coins added!';
           });
           _startCooldown(30);
           _celebrate();
+          unawaited(_loadRewardStatus());
         }
         return;
       }
@@ -245,10 +291,12 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
       setState(() {
         verifying = false;
         busy = false;
+        _verifyTimedOut = true;
         status =
             'Verification is taking longer than usual. Your coins will be added automatically once your reward is confirmed.';
       });
       _startCooldown(30);
+      unawaited(_loadRewardStatus());
       // A late SSV credit must become visible without waiting for the next
       // ad — re-read the balance once after giving up.
       try {
@@ -269,6 +317,41 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
     if (identical(_verificationWakeup, wakeup)) {
       _verificationWakeup = null;
     }
+  }
+
+  /// Second look after the 75 s window. SSV can land late, so this compares
+  /// the balance against what it was when the reward was earned.
+  Future<void> _recheck() async {
+    if (_rechecking) return;
+    setState(() {
+      _rechecking = true;
+      status = 'Checking your balance…';
+    });
+    final now = await Backend.coins()
+        .timeout(const Duration(seconds: 6), onTimeout: () => _rewardBaseline)
+        .catchError((_) => _rewardBaseline);
+    if (!mounted) return;
+    if (now > _rewardBaseline) {
+      try {
+        await widget.onRefresh();
+      } catch (_) {
+        // The pill catches up on the next shell refresh.
+      }
+      if (!mounted) return;
+      setState(() {
+        _rechecking = false;
+        _verifyTimedOut = false;
+        status = 'Coins added!';
+      });
+      _celebrate();
+      unawaited(_loadRewardStatus());
+      return;
+    }
+    setState(() {
+      _rechecking = false;
+      status =
+          'Still not confirmed. Coins land automatically once the reward is verified — try again in a minute.';
+    });
   }
 
   /// One gold token per verified payout: button → app-bar coin pill.
@@ -317,7 +400,11 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final success = status == 'Coins added!' || _lastActionSucceeded;
+    final atCap = _rewardStatus?.atCap ?? false;
+    final shownStatus = atCap && !busy && !verifying
+        ? 'Daily limit reached (${_rewardStatus!.limit} ads / 24h). Coins unlock again as older rewards expire.'
+        : status;
+    final success = (status == 'Coins added!' || _lastActionSucceeded) && !atCap;
     final statusColor = success ? AppColors.green : AppColors.cyan;
     final inCooldown = _remainingCooldown > 0;
     final cooldownFill = _cooldownSpan <= 0
@@ -340,13 +427,13 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
             const SizedBox(height: AppSpace.lg),
             _statsGrid(inCooldown),
             const SizedBox(height: AppSpace.lg),
-            if (status.isNotEmpty) ...[
-              _statusPanel(statusColor, success),
+            if (shownStatus.isNotEmpty) ...[
+              _statusPanel(shownStatus, statusColor, success),
               const SizedBox(height: AppSpace.md),
             ],
             KeyedSubtree(
               key: _ctaKey,
-              child: _primaryAction(inCooldown, cooldownFill),
+              child: _primaryAction(inCooldown, cooldownFill, atCap),
             ),
             if (!inCooldown) ...[
               const SizedBox(height: AppSpace.md),
@@ -599,7 +686,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
 
   // ---- status -----------------------------------------------------------
 
-  Widget _statusPanel(Color statusColor, bool success) {
+  Widget _statusPanel(String text, Color statusColor, bool success) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(
@@ -627,7 +714,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
               if (!verifying) const SizedBox(width: AppSpace.sm + 2),
               Expanded(
                 child: Text(
-                  status,
+                  text,
                   style: AppText.body.copyWith(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w600,
@@ -638,6 +725,27 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
               ),
             ],
           ),
+          if (_verifyTimedOut && !verifying && !(_rewardStatus?.atCap ?? false)) ...[
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _rechecking ? null : _recheck,
+                icon: _rechecking
+                    ? const SizedBox(
+                        width: 13,
+                        height: 13,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh, size: 16),
+                label: Text(_rechecking ? 'Checking…' : 'Check again'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.cyan,
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ),
+          ],
           if (verifying) ...[
             const SizedBox(height: AppSpace.md),
             ClipRRect(
@@ -678,10 +786,10 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
 
   // ---- actions ----------------------------------------------------------
 
-  Widget _primaryAction(bool inCooldown, double cooldownFill) {
+  Widget _primaryAction(bool inCooldown, double cooldownFill, bool atCap) {
     return NeonButton(
       expand: true,
-      onPressed: (busy || inCooldown) ? null : () => _watchAd(),
+      onPressed: (busy || inCooldown || atCap) ? null : () => _watchAd(),
       child: busy
           ? Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -705,6 +813,16 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
                 const Text('Next ad in'),
                 const SizedBox(width: AppSpace.xs + 2),
                 Text('${_remainingCooldown}s', style: monoStyle(fontWeight: FontWeight.w800)),
+              ],
+            )
+          : atCap
+          ? const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.block, size: 18, color: AppColors.textDim),
+                SizedBox(width: AppSpace.sm),
+                Text('Daily limit reached'),
               ],
             )
           : Padding(

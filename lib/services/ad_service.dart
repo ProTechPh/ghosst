@@ -116,6 +116,11 @@ class AdService {
   DateTime? _lastRiFailTime;
   DateTime? _lastInterFailTime;
 
+  // Unity's first load after init can answer INIT_UNKNOWN while its gateway
+  // session warms up, so the earliest failures get their own short retry.
+  Timer? _rewardedWarmupTimer;
+  int _rewardedWarmupRetries = 0;
+
   int? _lastRewardedErrorCode;
   int? _lastRiErrorCode;
   int? _lastInterErrorCode;
@@ -251,6 +256,22 @@ class AdService {
     return Duration(seconds: clamped + jitter);
   }
 
+  /// Unity answers the first load after initialization with
+  /// `PUBLIC_ERROR_CODE_INIT_UNKNOWN` until its gateway session is warm
+  /// (measured on device: fail at +1 s, same placement fills at +6 s). Two
+  /// short automatic retries absorb that window; after that the normal
+  /// backoff applies so a real no-fill is not hammered.
+  void _scheduleRewardedWarmupRetry() {
+    if (_rewardedWarmupRetries >= 2) return;
+    final delay = Duration(seconds: _rewardedWarmupRetries == 0 ? 5 : 15);
+    _rewardedWarmupRetries++;
+    _rewardedWarmupTimer?.cancel();
+    _rewardedWarmupTimer = Timer(delay, () {
+      _rewardedRetryDelay = null;
+      if (adsEnabled && _ad == null) unawaited(preload());
+    });
+  }
+
   // ---------------------------------------------------------------------
   // Startup request pacing
   // ---------------------------------------------------------------------
@@ -299,8 +320,10 @@ class AdService {
     }
   }
 
-  /// Structured diagnostic logging for all ad lifecycle events.
-  static void _logAdError(
+  /// Structured diagnostic logging for all ad lifecycle events. Banner and
+  /// native listeners in the screens call this too, so every format prints the
+  /// same code/domain/message/adapter/responseInfo shape.
+  static void logAdError(
     String format,
     String adUnitId,
     dynamic error, {
@@ -431,6 +454,8 @@ class AdService {
             _lastRewardedErrorCode = null;
             _rewardedRetryAttempts = 0;
             _rewardedRetryDelay = null;
+            _rewardedWarmupRetries = 0;
+            _rewardedWarmupTimer?.cancel();
             _ad?.dispose();
             _ad = ad;
             _rewardedCompleter = null;
@@ -454,7 +479,8 @@ class AdService {
               _rewardedRetryAttempts,
               isNoFill: err.code == 3,
             );
-            _logAdError('Rewarded', AdUnits.rewarded, err, action: 'load');
+            logAdError('Rewarded', AdUnits.rewarded, err, action: 'load');
+            _scheduleRewardedWarmupRetry();
             _rewardedCompleter = null;
             if (!completer.isCompleted) completer.complete(null);
           },
@@ -465,7 +491,7 @@ class AdService {
       _lastRewardedFailTime = DateTime.now();
       _rewardedRetryAttempts++;
       _rewardedRetryDelay = _calculateBackoff(_rewardedRetryAttempts);
-      _logAdError('Rewarded', AdUnits.rewarded, e, action: 'load_exception');
+      logAdError('Rewarded', AdUnits.rewarded, e, action: 'load_exception');
       _rewardedCompleter = null;
       if (!completer.isCompleted) completer.complete(null);
     }
@@ -496,6 +522,11 @@ class AdService {
       onError('Another advertisement is already currently displaying.');
       return;
     }
+
+    // A tap is a deliberate retry: drop the passive-preload no-fill backoff,
+    // otherwise a cached code 3 is replayed for up to a minute and neither
+    // AdMob nor Unity ever sees a new request.
+    _rewardedRetryDelay = null;
 
     final ad = _ad ?? await preload(timeout: waitTimeout);
 
@@ -542,7 +573,7 @@ class AdService {
         unawaited(preload());
       },
       onAdFailedToShowFullScreenContent: (a, error) {
-        _logAdError('Rewarded', AdUnits.rewarded, error, action: 'show');
+        logAdError('Rewarded', AdUnits.rewarded, error, action: 'show');
         a.dispose();
         _isShowingFullScreenAd = false;
         _adState = AdState.idle;
@@ -660,7 +691,7 @@ class AdService {
               _riRetryAttempts,
               isNoFill: err.code == 3,
             );
-            _logAdError(
+            logAdError(
               'RewardedInterstitial',
               AdUnits.rewardedInterstitial,
               err,
@@ -676,7 +707,7 @@ class AdService {
       _lastRiFailTime = DateTime.now();
       _riRetryAttempts++;
       _riRetryDelay = _calculateBackoff(_riRetryAttempts);
-      _logAdError(
+      logAdError(
         'RewardedInterstitial',
         AdUnits.rewardedInterstitial,
         e,
@@ -756,7 +787,7 @@ class AdService {
         // to avoid ad-hoarding penalties.
       },
       onAdFailedToShowFullScreenContent: (a, error) {
-        _logAdError(
+        logAdError(
           'RewardedInterstitial',
           AdUnits.rewardedInterstitial,
           error,
@@ -800,7 +831,8 @@ class AdService {
     required void Function(RewardItem reward) onEarned,
     required void Function(String error) onError,
     required void Function() onClosed,
-    Duration waitTimeout = const Duration(seconds: 8),
+    // Long enough for a cold Unity waterfall; a no-fill still answers in ~1-2s.
+    Duration waitTimeout = const Duration(seconds: 12),
   }) {
     return show(
       userId: userId,
@@ -889,7 +921,7 @@ class AdService {
               _interRetryAttempts,
               isNoFill: err.code == 3,
             );
-            _logAdError(
+            logAdError(
               'Interstitial',
               AdUnits.interstitial,
               err,
@@ -905,7 +937,7 @@ class AdService {
       _lastInterFailTime = DateTime.now();
       _interRetryAttempts++;
       _interRetryDelay = _calculateBackoff(_interRetryAttempts);
-      _logAdError(
+      logAdError(
         'Interstitial',
         AdUnits.interstitial,
         e,
@@ -973,7 +1005,7 @@ class AdService {
         unawaited(preloadInterstitial());
       },
       onAdFailedToShowFullScreenContent: (a, error) {
-        _logAdError(
+        logAdError(
           'Interstitial',
           AdUnits.interstitial,
           error,
@@ -1004,6 +1036,10 @@ class AdService {
   /// Application-wide teardown (only when the whole application process terminates).
   /// Individual widgets MUST NOT call this method on the singleton.
   void dispose() {
+    _rewardedWarmupTimer?.cancel();
+    _rewardedWarmupTimer = null;
+    _rewardedWarmupRetries = 0;
+
     _ad?.dispose();
     _ad = null;
     _adState = AdState.idle;

@@ -45,6 +45,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final _scroll = ScrollController();
   StreamSubscription<ChatFeed>? _sub;
   Timer? _retryTimer;
+  Timer? _cacheTimer;
   List<ChatMessage> _messages = const [];
   bool _sending = false;
   bool _booting = false;
@@ -226,9 +227,7 @@ class _ChatScreenState extends State<ChatScreen> {
           _messages = list;
           _booted = true;
           _unavailable = false;
-          _connecting = false;
-          _fromCache = feed.fromCache;
-          _pendingWrites = feed.hasPendingWrites;
+          _applyFeedMeta(feed);
         });
       },
       onError: (Object e) {
@@ -260,10 +259,45 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _retryTimer?.cancel();
+    _cacheTimer?.cancel();
     _sub?.cancel();
     _input.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  /// Cache-only snapshots are normal while a local write waits for its ack
+  /// (Firestore marks the optimistic snapshot as from-cache), so a 2 s grace
+  /// period keeps a send from flashing CONNECTING. Only a cache state that
+  /// persists means we are actually offline.
+  void _applyFeedMeta(ChatFeed feed) {
+    _fromCache = feed.fromCache;
+    _pendingWrites = feed.hasPendingWrites;
+    if (!feed.fromCache) {
+      _cacheTimer?.cancel();
+      _cacheTimer = null;
+      _connecting = false;
+      return;
+    }
+    _cacheTimer ??= Timer(const Duration(seconds: 2), () {
+      if (!mounted || !_fromCache) return;
+      setState(() => _connecting = true);
+    });
+  }
+
+  /// Unique senders in the loaded window, plus you. Firestore has no presence
+  /// without a rules change, so this is "active in the last 10 minutes".
+  static const Duration _onlineWindow = Duration(minutes: 10);
+
+  int get _onlineCount {
+    final cutoff =
+        DateTime.now().subtract(_onlineWindow).millisecondsSinceEpoch;
+    final uids = <String>{
+      for (final m in _messages)
+        if (m.uid.isNotEmpty && m.tsMillis >= cutoff) m.uid,
+    };
+    if (_myUid != null) uids.add(_myUid!);
+    return uids.length;
   }
 
   /// Long-press sa message ng ibang user (admin lang): mute/unmute dialog.
@@ -395,7 +429,7 @@ class _ChatScreenState extends State<ChatScreen> {
         color: AppColors.gold,
       );
     }
-    if (_connecting || _fromCache) {
+    if (_connecting) {
       return (
         label: 'CONNECTING',
         icon: Icons.sync,
@@ -405,8 +439,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return (label: 'LIVE', icon: Icons.bolt, color: AppColors.green);
   }
 
-  /// Maliit na status chip sa taas ng chat: LIVE, SENDING, o CONNECTING.
-  /// Cache-only snapshots ay CONNECTING — walang "CACHED" label.
+  /// Status bar sa taas ng chat: online count sa kaliwa, link state sa kanan.
   Widget _connectionBar() {
     final status = _connectionStatus;
     return Padding(
@@ -416,16 +449,27 @@ class _ChatScreenState extends State<ChatScreen> {
         AppSpace.lg,
         0,
       ),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Semantics(
-          label: 'Chat status: ${status.label.toLowerCase()}',
-          child: NeonPill(
-            label: status.label,
-            icon: status.icon,
-            color: status.color,
+      child: Row(
+        children: [
+          if (_booted)
+            Semantics(
+              label: '$_onlineCount online',
+              child: NeonPill(
+                label: '$_onlineCount ONLINE',
+                icon: Icons.people_alt_outlined,
+                color: AppColors.cyan,
+              ),
+            ),
+          const Spacer(),
+          Semantics(
+            label: 'Chat status: ${status.label.toLowerCase()}',
+            child: NeonPill(
+              label: status.label,
+              icon: status.icon,
+              color: status.color,
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

@@ -228,6 +228,18 @@ class Backend {
     }
   }
 
+  /// Remaining reward budget for the rolling 24h window. Advisory: the SSV
+  /// handler still decides whether a callback is credited.
+  static Future<AdsRewardStatus> adsRewardStatus() async {
+    final res = await _api.get('/ads/status');
+    return AdsRewardStatus(
+      rewardsToday: res['rewards_today'] as int? ?? 0,
+      limit: res['limit'] as int? ?? 40,
+      remaining: res['remaining'] as int? ?? 40,
+      nextRewardIn: res['next_reward_in'] as int? ?? 0,
+    );
+  }
+
   /// Failures where the screen should keep showing what it had.
   static bool _transient(ApiException e) =>
       e.kind == ApiErrorKind.network ||
