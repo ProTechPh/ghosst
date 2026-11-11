@@ -97,7 +97,7 @@ App ID (already in the manifest): `ca-app-pub-7791552060229072~1855578469`.
    after the signature check, before the credit):
    - `ad_unit` must sit under our publisher id `ca-app-pub-7791552060229072/`.
      A callback signed for anyone else's ad unit is their ad, not ours.
-   - 40 paid rewards per account per rolling 24 h, minimum 15 s apart. The
+   - 50 paid rewards per account per rolling 24 h, minimum 15 s apart. The
      30 s cooldown in the app is client-side and dies with an APK patch.
    - One reward per `transaction_id`; callbacks without one are keyed by their
      signed payload hash, so a replay cannot create a second credit.

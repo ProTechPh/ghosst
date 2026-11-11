@@ -43,7 +43,8 @@ class ApiException implements Exception {
         ApiErrorKind.network => 'No internet connection. Try again.',
         ApiErrorKind.timeout => 'The response is taking too long. Try again.',
         ApiErrorKind.unauthorized => 'Your session has expired. Sign in again.',
-        ApiErrorKind.forbidden => 'You do not have access to this.',
+        ApiErrorKind.forbidden => 'You do not have access to this. '
+        'If you use a VPN or Private DNS, turn it off and try again.',
         ApiErrorKind.notFound => 'This item is no longer available.',
         ApiErrorKind.conflict => message,
         ApiErrorKind.rateLimited => 'Too many requests. Try again in a bit.',
