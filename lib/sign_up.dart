@@ -72,10 +72,22 @@ class _SignUpState extends State<SignUp> {
       await Backend.signUp(cleanEmail, password.text, name: name.text.trim());
       widget.onSignedUp();
     } on ApiException catch (e) {
+      // A previous attempt may have created the account even if its response
+      // was blocked (WAF/gateway). Try the same password before dead-ending.
+      if (e.code == 'email_taken') {
+        try {
+          await Backend.signIn(email.text.trim(), password.text);
+          if (mounted) widget.onSignedUp();
+          return;
+        } on ApiException {
+          // Fall through to the normal message.
+        }
+      }
       if (mounted) {
         setState(() {
           error = switch (e.code) {
-            'email_taken' => 'That email is already registered.',
+            'email_taken' => 'That email is already registered. '
+                'Try signing in instead.',
             'invalid_email' => "That email doesn't look right.",
             'weak_password' => 'Password must be at least 8 characters.',
             _ => e.userMessage,

@@ -229,6 +229,24 @@ class _RetryInterceptor extends Interceptor {
     final attempt = (options.extra['retryAttempt'] as int? ?? 0) + 1;
     if (attempt > _maxAttempts) return handler.next(err);
 
+    // A 403 with an HTML body is a gateway/host block (Cloudflare "Attention
+    // required", WAF), not our JSON envelope. Those are often transient, and
+    // auth writes are safe to replay: register dedupes by email, login is
+    // read-only. One retry, then give up.
+    final blockedHtml = err.response?.statusCode == 403 &&
+        err.response?.data is String &&
+        (options.path.startsWith('/auth/') || options.path.contains('/ads/'));
+    if (blockedHtml && attempt <= 1) {
+      await Future<void>.delayed(const Duration(milliseconds: 800));
+      final next = options..extra['retryAttempt'] = attempt;
+      try {
+        handler.resolve(await _dio.fetch<dynamic>(next));
+      } on DioException catch (e) {
+        handler.next(e);
+      }
+      return;
+    }
+
     final api = ApiException.fromDio(err);
 
     // POST/PATCH are only safe to replay when the caller supplied an
