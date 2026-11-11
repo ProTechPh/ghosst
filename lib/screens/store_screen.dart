@@ -684,38 +684,6 @@ class _StoreScreenState extends State<StoreScreen> {
               ),
               const SizedBox(height: AppSpace.xxl),
 
-              // ---- tutorials (website CMS) ---------------------------------
-              if (!isPremium && _tutorials.isNotEmpty) ...[
-                ScrollReveal(
-                  delay: const Duration(milliseconds: 20),
-                  child: SectionHeader(
-                    title: 'Tutorials',
-                    trailing: TextButton(
-                      onPressed: _openTutorials,
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.cyan,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      child: const Text('See all'),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: AppSpace.sm),
-                SizedBox(
-                  height: 240,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    clipBehavior: Clip.none,
-                    itemCount: _tutorials.length,
-                    separatorBuilder: (_, _) =>
-                        const SizedBox(width: AppSpace.md),
-                    itemBuilder: (_, i) =>
-                        TutorialCard(tutorial: _tutorials[i], width: 230),
-                  ),
-                ),
-                const SizedBox(height: AppSpace.xxl),
-              ],
-
               // ---- products -------------------------------------------------
               if (!isPremium && shelf.isEmpty)
                 ScrollReveal(
@@ -777,6 +745,38 @@ class _StoreScreenState extends State<StoreScreen> {
                 ],
               ],
               const SizedBox(height: AppSpace.xl),
+
+              // ---- tutorials (website CMS) — keys first, guides after ------
+              if (!isPremium && _tutorials.isNotEmpty) ...[
+                ScrollReveal(
+                  delay: const Duration(milliseconds: 20),
+                  child: SectionHeader(
+                    title: 'Tutorials',
+                    trailing: TextButton(
+                      onPressed: _openTutorials,
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.cyan,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      child: const Text('See all'),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpace.sm),
+                SizedBox(
+                  height: 240,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    clipBehavior: Clip.none,
+                    itemCount: _tutorials.length,
+                    separatorBuilder: (_, _) =>
+                        const SizedBox(width: AppSpace.md),
+                    itemBuilder: (_, i) =>
+                        TutorialCard(tutorial: _tutorials[i], width: 230),
+                  ),
+                ),
+                const SizedBox(height: AppSpace.xl),
+              ],
 
               // ---- premium shelf (website games, pay on site) ---------------
               if (isPremium) ..._premiumBody(),
