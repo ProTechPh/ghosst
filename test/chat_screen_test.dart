@@ -98,6 +98,7 @@ ChatMessage _msg({
   bool admin = false,
   String? replyName,
   String? replyText,
+  int? tsMillis,
 }) {
   return ChatMessage(
     id: id ?? 'doc-$text',
@@ -105,7 +106,7 @@ ChatMessage _msg({
     name: name,
     text: text,
     admin: admin,
-    tsMillis: DateTime.now().millisecondsSinceEpoch,
+    tsMillis: tsMillis ?? DateTime.now().millisecondsSinceEpoch,
     replyName: replyName,
     replyText: replyText,
   );
@@ -232,6 +233,52 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('3 ONLINE'), findsOneWidget);
+  });
+
+  testWidgets('counts messages that arrived while the tab was closed',
+      (tester) async {
+    final client = _FakeClient();
+    final counts = <int>[];
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.dark,
+      home: Scaffold(
+        body: ChatScreen(
+          client: client,
+          active: true,
+          onUnreadChanged: counts.add,
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Seen while the tab is open.
+    client._controller.add(ChatFeed(messages: [
+      _msg(uid: 'uid-2', text: 'seen', tsMillis: 1000),
+    ]));
+    await tester.pumpAndSettle();
+    expect(counts.last, 0);
+
+    // Leave the tab; new messages from others must count, mine must not.
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.dark,
+      home: Scaffold(
+        body: ChatScreen(
+          client: client,
+          active: false,
+          onUnreadChanged: counts.add,
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    client._controller.add(ChatFeed(messages: [
+      _msg(uid: 'uid-2', text: 'one', tsMillis: 4000),
+      _msg(uid: 'uid-3', name: 'Ana', text: 'two', tsMillis: 3000),
+      _msg(uid: 'uid-1', text: 'mine', tsMillis: 2000),
+    ]));
+    await tester.pumpAndSettle();
+
+    expect(counts.last, 2);
   });
 
   testWidgets('empty input never sends; typed text does', (tester) async {

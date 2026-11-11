@@ -411,6 +411,37 @@ class AdsRewardStatus {
   bool get atCap => remaining <= 0;
 }
 
+/// Server-driven update gate (`GET /v1/app/config`).
+class AppConfig {
+  const AppConfig({
+    required this.minVersionCode,
+    required this.latestVersionCode,
+    required this.playUrl,
+    required this.directUrl,
+  });
+
+  final int minVersionCode;
+  final int latestVersionCode;
+  final String playUrl;
+  final String directUrl;
+
+  factory AppConfig.fromJson(Map<String, dynamic> json) => AppConfig(
+        minVersionCode: (json['minVersionCode'] as num?)?.toInt() ?? 0,
+        latestVersionCode: (json['latestVersionCode'] as num?)?.toInt() ?? 0,
+        playUrl: json['playUrl'] as String? ?? '',
+        directUrl: json['directUrl'] as String? ?? '',
+      );
+
+  /// True when this install must update before it can be used. A min of 0
+  /// means the gate is off (nothing published yet).
+  bool blocks(int installedVersionCode) =>
+      minVersionCode > 0 && installedVersionCode < minVersionCode;
+
+  /// Store link for the current distribution.
+  String updateUrl({required bool isPlay}) =>
+      isPlay || directUrl.isEmpty ? playUrl : directUrl;
+}
+
 /// `₱620`, `₱99.50`, or `₱620 – ₱1,200` when keys are priced differently.
 String shopPriceLabel(String currency, double price, double priceMax) {
   String money(double v) {

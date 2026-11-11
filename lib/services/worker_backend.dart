@@ -240,6 +240,52 @@ class Backend {
     );
   }
 
+  /// Sends a Play Integrity token for server-side decoding. Observe-only —
+  /// the caller swallows failures.
+  static Future<void> reportIntegrity(String token, String nonce) async {
+    await _api.post('/integrity/check', data: {'token': token, 'nonce': nonce});
+  }
+
+  /// Update gate config. Null on any failure — the caller must fail open.
+  static Future<AppConfig?> appConfig() async {
+    try {
+      return AppConfig.fromJson(await _api.get('/app/config'));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Server-owned read markers. Null when signed out or the call fails.
+  static Future<({String announcementsSeenAt, int chatSeenAtMs})?> reads() async {
+    try {
+      if (await _session.accessToken() == null) return null;
+      final res = await _api.get('/reads');
+      return (
+        announcementsSeenAt: res['announcementsSeenAt'] as String? ?? '',
+        chatSeenAtMs: (res['chatSeenAtMs'] as num?)?.toInt() ?? 0,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Advances the account's markers. Best effort: a failure keeps the local
+  /// copy and retries on the next mark/sync.
+  static Future<void> markReads({
+    String? announcementsSeenAt,
+    int? chatSeenAtMs,
+  }) async {
+    try {
+      if (await _session.accessToken() == null) return;
+      await _api.post('/reads', data: {
+        'announcementsSeenAt': ?announcementsSeenAt,
+        'chatSeenAtMs': ?chatSeenAtMs,
+      });
+    } catch (_) {
+      // Best effort.
+    }
+  }
+
   /// Failures where the screen should keep showing what it had.
   static bool _transient(ApiException e) =>
       e.kind == ApiErrorKind.network ||

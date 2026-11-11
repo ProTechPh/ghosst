@@ -10,10 +10,14 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
+import android.util.Base64
+import com.google.android.play.core.integrity.IntegrityManagerFactory
+import com.google.android.play.core.integrity.IntegrityTokenRequest
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.security.MessageDigest
+import java.security.SecureRandom
 import java.security.cert.CertificateFactory
 
 // Cold-start integrity gate for release builds.
@@ -37,6 +41,7 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "verifyIntegrity" -> result.success(verifyIntegrity())
+                    "requestPlayIntegrity" -> requestPlayIntegrity(result)
                     "uninstallSelf" -> result.success(uninstallSelf())
                     "getPrivateDns" -> result.success(privateDns())
                     else -> result.notImplemented()
@@ -98,6 +103,49 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    // ------------------------------------------------------- play integrity
+
+    // Classic Play Integrity request: returns a Google-signed token that the
+    // API decodes with its service account. Observe-only — a failed request
+    // returns an error to Dart, which swallows it and never blocks a launch.
+    //
+    // The nonce is generated here and echoed back so the server can reject a
+    // replayed token; 24 random bytes is well above the 16-byte minimum.
+    private fun requestPlayIntegrity(result: MethodChannel.Result) {
+        val nonceBytes = ByteArray(24)
+        SecureRandom().nextBytes(nonceBytes)
+        val nonce = Base64.encodeToString(
+            nonceBytes,
+            Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING,
+        )
+
+        try {
+            val request = IntegrityTokenRequest.builder()
+                .setCloudProjectNumber(PLAY_INTEGRITY_PROJECT)
+                .setNonce(nonce)
+                .build()
+            IntegrityManagerFactory.create(applicationContext)
+                .requestIntegrityToken(request)
+                .addOnSuccessListener { response ->
+                    result.success(mapOf("token" to response.token(), "nonce" to nonce))
+                }
+                .addOnFailureListener { e ->
+                    result.error(
+                        "integrity-failed",
+                        e.message ?: "Play Integrity request failed",
+                        null,
+                    )
+                }
+        } catch (e: Exception) {
+            // Missing Play Services / sideloaded install / disabled API.
+            result.error(
+                "integrity-unavailable",
+                e.message ?: "Play Integrity unavailable",
+                null,
+            )
+        }
     }
 
     // ------------------------------------------------------------- download
@@ -292,6 +340,11 @@ class MainActivity : FlutterActivity() {
         private const val BUILD_CHANNEL = "com.astrixtech.ghosst/build"
         private const val APK_CHANNEL = "com.astrixtech.ghosst/apk"
         private const val APK_MIME = "application/vnd.android.package-archive"
+
+        // Cloud project that owns the Play Integrity API (`ghosst-6f23e`,
+        // see google-services.json). Must match the project where the API is
+        // enabled, otherwise every request fails with a 400 from Google.
+        private const val PLAY_INTEGRITY_PROJECT = 108562765887L
 
         // SHA-256 of the official release certificate (`ghosst-release.jks`,
         // alias `ghosst`). Re-derive any time the keystore changes:

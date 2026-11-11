@@ -84,6 +84,8 @@ flutter {
 }
 
 dependencies {
+    // Play Integrity (classic) — server-side decode, observe-only.
+    implementation("com.google.android.play:integrity:1.6.0")
     // gma_mediation_unity 1.11.1 pins unity-ads 4.17.0, but the adapter it
     // bundles (com.google.ads.mediation:unity:4.20.1.0) targets 4.20.1.
     // Align runtime SDK to the adapter — 4.17 answers every load with
