@@ -14,6 +14,7 @@ import '../services/distribution.dart';
 import '../theme.dart';
 import 'premium_game_screen.dart';
 import 'product_detail.dart';
+import 'tutorials_screen.dart';
 
 class StoreScreen extends StatefulWidget {
   const StoreScreen({
@@ -48,6 +49,9 @@ class _StoreScreenState extends State<StoreScreen> {
   /// finishes on ghossthub.com.
   List<ShopGame> premium = const [];
   bool _premiumLoading = true;
+
+  /// Latest tutorials from the website CMS — shown on the home shelf.
+  List<Tutorial> _tutorials = const [];
   Map<String, int> stock = {};
   bool loading = true;
   String error = '';
@@ -177,6 +181,7 @@ class _StoreScreenState extends State<StoreScreen> {
     // The website shop is secondary: it loads beside the coin products and
     // never blocks or fails the store.
     unawaited(_loadPremium());
+    unawaited(_loadTutorials());
     if (!silent) {
       setState(() {
         loading = true;
@@ -220,8 +225,20 @@ class _StoreScreenState extends State<StoreScreen> {
     }
   }
 
-  Future<void> _loadPremium() async {
-    try {
+  /// Website tutorials for the home shelf; failure keeps the shelf hidden.
+  Future<void> _loadTutorials() async {
+    final list = await Backend.tutorials();
+    if (!mounted || list.isEmpty) return;
+    setState(() => _tutorials = list);
+  }
+
+  void _openTutorials() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const TutorialsScreen()),
+    );
+  }
+
+  Future<void> _loadPremium() async {    try {
       final games = await Backend.premiumShop();
       if (mounted) {
         setState(() {
@@ -666,6 +683,38 @@ class _StoreScreenState extends State<StoreScreen> {
                 ),
               ),
               const SizedBox(height: AppSpace.xxl),
+
+              // ---- tutorials (website CMS) ---------------------------------
+              if (!isPremium && _tutorials.isNotEmpty) ...[
+                ScrollReveal(
+                  delay: const Duration(milliseconds: 20),
+                  child: SectionHeader(
+                    title: 'Tutorials',
+                    trailing: TextButton(
+                      onPressed: _openTutorials,
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.cyan,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      child: const Text('See all'),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpace.sm),
+                SizedBox(
+                  height: 240,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    clipBehavior: Clip.none,
+                    itemCount: _tutorials.length,
+                    separatorBuilder: (_, _) =>
+                        const SizedBox(width: AppSpace.md),
+                    itemBuilder: (_, i) =>
+                        TutorialCard(tutorial: _tutorials[i], width: 230),
+                  ),
+                ),
+                const SizedBox(height: AppSpace.xxl),
+              ],
 
               // ---- products -------------------------------------------------
               if (!isPremium && shelf.isEmpty)

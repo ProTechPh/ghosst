@@ -255,6 +255,21 @@ class Backend {
     }
   }
 
+  /// Website tutorials; a failure reads as "none", never an error screen.
+  static Future<List<Tutorial>> tutorials() async {
+    try {
+      final res = await _api.get('/tutorials');
+      final list = res['tutorials'];
+      if (list is! List) return const [];
+      return [
+        for (final t in list)
+          if (t is Map<String, dynamic>) Tutorial.fromJson(t),
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
   /// Server-owned read markers. Null when signed out or the call fails.
   static Future<({String announcementsSeenAt, int chatSeenAtMs})?> reads() async {
     try {

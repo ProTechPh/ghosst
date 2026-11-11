@@ -442,6 +442,42 @@ class AppConfig {
       isPlay || directUrl.isEmpty ? playUrl : directUrl;
 }
 
+/// One tutorial row from the website CMS (`GET /v1/tutorials`).
+class Tutorial {
+  const Tutorial({
+    required this.id,
+    required this.title,
+    required this.slug,
+    required this.category,
+    required this.videoUrl,
+    required this.content,
+    required this.views,
+    required this.createdAt,
+  });
+
+  final int id;
+  final String title;
+  final String slug;
+  final String category;
+
+  /// Empty when the tutorial is text-only.
+  final String videoUrl;
+  final String content;
+  final int views;
+  final String createdAt;
+
+  factory Tutorial.fromJson(Map<String, dynamic> json) => Tutorial(
+        id: (json['id'] as num?)?.toInt() ?? 0,
+        title: json['title'] as String? ?? '',
+        slug: json['slug'] as String? ?? '',
+        category: json['category'] as String? ?? '',
+        videoUrl: json['videoUrl'] as String? ?? '',
+        content: json['content'] as String? ?? '',
+        views: (json['views'] as num?)?.toInt() ?? 0,
+        createdAt: json['createdAt'] as String? ?? '',
+      );
+}
+
 /// `₱620`, `₱99.50`, or `₱620 – ₱1,200` when keys are priced differently.
 String shopPriceLabel(String currency, double price, double priceMax) {
   String money(double v) {
