@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../arcade.dart';
 import '../premium.dart';
 import '../services/worker_backend.dart';
+import '../services/youtube.dart';
 import '../theme.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'claim_reveal.dart';
@@ -52,7 +53,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   String _durationLabel = '';
 
   /// Parsed video id — drives the poster frame and the tap-to-play link.
-  late final String? _ytId = _youtubeId(widget.product.youtubeUrl);
+  late final String? _ytId = youtubeId(widget.product.youtubeUrl);
 
   @override
   void initState() {
@@ -90,35 +91,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     // Only ever moves towards owned — a stale parent snapshot must not undo
     // a purchase this screen already recorded.
     if (widget.owned && !_owned) _owned = true;
-  }
-
-  /// Extracts the video id from a watch / shorts / embed / youtu.be URL.
-  String? _youtubeId(String raw) {
-    final value = raw.trim();
-    if (value.isEmpty) return null;
-    // Already a bare 11-character id.
-    if (RegExp(r'^[\w-]{11}$').hasMatch(value)) return value;
-    final u = Uri.tryParse(value);
-    if (u == null) return null;
-    final host = u.host.toLowerCase();
-    if (host.endsWith('youtu.be')) {
-      final seg = u.pathSegments;
-      if (seg.isNotEmpty && seg.first.isNotEmpty) return seg.first;
-      return null;
-    }
-    if (host.contains('youtube.com')) {
-      if (u.path == '/watch') {
-        final v = u.queryParameters['v'];
-        if (v != null && v.isNotEmpty) return v;
-      }
-      final seg = u.pathSegments;
-      if (seg.length >= 2 &&
-          const ['shorts', 'embed', 'live', 'v'].contains(seg[0]) &&
-          seg[1].isNotEmpty) {
-        return seg[1];
-      }
-    }
-    return null;
   }
 
   /// URL from an earlier purchase (owned products never re-spend coins).

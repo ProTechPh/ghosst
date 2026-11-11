@@ -15,6 +15,7 @@ import '../services/play_store.dart';
 import '../theme.dart';
 import 'my_apps_screen.dart';
 import 'announcements_screen.dart';
+import 'tutorials_screen.dart';
 import 'wallet_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -243,6 +244,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  void _openTutorials() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const TutorialsScreen()),
+    );
+  }
+
   void _openAppOwned() {
     Navigator.of(
       context,
@@ -374,6 +381,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     label: 'Announcements',
                     hint: 'News and updates',
                     onTap: _openAnnouncements,
+                  ),
+                  _row(
+                    icon: Icons.play_circle_outline_rounded,
+                    label: 'Tutorials',
+                    hint: 'Guides',
+                    onTap: _openTutorials,
                   ),
                   _row(
                     icon: Icons.privacy_tip_outlined,
