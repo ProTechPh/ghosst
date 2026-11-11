@@ -123,9 +123,7 @@ class _StoreScreenState extends State<StoreScreen> {
         },
         onAdFailedToLoad: (a, error) {
           a.dispose();
-          debugPrint(
-            '[StoreScreen] NativeAd failed to load: code ${error.code}, message: ${error.message}, domain: ${error.domain}',
-          );
+          AdService.logAdError('Native', AdUnits.native, error, action: 'load');
           if (!mounted) return;
           setState(() {
             _nativeAd = null;

@@ -45,6 +45,12 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
   bool _lastActionSucceeded = false;
   Completer<void>? _verificationWakeup;
 
+  /// Balance before the reward — a late SSV credit is compared against this so
+  /// the user can re-check without watching another ad.
+  int _rewardBaseline = 0;
+  bool _verifyTimedOut = false;
+  bool _rechecking = false;
+
   /// Anchor for the payout token's start point.
   final GlobalKey _ctaKey = GlobalKey();
   OverlayEntry? _coinEntry;
@@ -82,6 +88,10 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed || !mounted) return;
     _checkCooldown();
+
+    // SSV can land while the app was backgrounded — check again instead of
+    // leaving the "taking longer than usual" message up.
+    if (_verifyTimedOut && !_rechecking) unawaited(_recheck());
 
     // An ad click can temporarily move the user to Play Store. Wake the SSV
     // poll immediately on return instead of leaving the UI on "Verifying".
@@ -138,6 +148,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
     setState(() {
       busy = true;
       _lastActionSucceeded = false;
+      _verifyTimedOut = false;
       status = 'Loading ad…';
     });
 
@@ -204,9 +215,11 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
     setState(() {
       verifying = true;
       verifyProgress = 0;
+      _verifyTimedOut = false;
       status = 'Reward earned — verifying with server…';
     });
-    final before = widget.coins;
+    _rewardBaseline = widget.coins;
+    final before = _rewardBaseline;
     final deadline = DateTime.now().add(const Duration(seconds: 75));
     for (var i = 0; i < 23; i++) {
       await _waitForVerificationPoll();
@@ -232,6 +245,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
           setState(() {
             verifying = false;
             busy = false;
+            _verifyTimedOut = false;
             status = 'Coins added!';
           });
           _startCooldown(30);
@@ -245,6 +259,7 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
       setState(() {
         verifying = false;
         busy = false;
+        _verifyTimedOut = true;
         status =
             'Verification is taking longer than usual. Your coins will be added automatically once your reward is confirmed.';
       });
@@ -269,6 +284,40 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
     if (identical(_verificationWakeup, wakeup)) {
       _verificationWakeup = null;
     }
+  }
+
+  /// Second look after the 75 s window. SSV can land late, so this compares
+  /// the balance against what it was when the reward was earned.
+  Future<void> _recheck() async {
+    if (_rechecking) return;
+    setState(() {
+      _rechecking = true;
+      status = 'Checking your balance…';
+    });
+    final now = await Backend.coins()
+        .timeout(const Duration(seconds: 6), onTimeout: () => _rewardBaseline)
+        .catchError((_) => _rewardBaseline);
+    if (!mounted) return;
+    if (now > _rewardBaseline) {
+      try {
+        await widget.onRefresh();
+      } catch (_) {
+        // The pill catches up on the next shell refresh.
+      }
+      if (!mounted) return;
+      setState(() {
+        _rechecking = false;
+        _verifyTimedOut = false;
+        status = 'Coins added!';
+      });
+      _celebrate();
+      return;
+    }
+    setState(() {
+      _rechecking = false;
+      status =
+          'Still not confirmed. Coins land automatically once the reward is verified — try again in a minute.';
+    });
   }
 
   /// One gold token per verified payout: button → app-bar coin pill.
@@ -638,6 +687,27 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
               ),
             ],
           ),
+          if (_verifyTimedOut && !verifying) ...[
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _rechecking ? null : _recheck,
+                icon: _rechecking
+                    ? const SizedBox(
+                        width: 13,
+                        height: 13,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh, size: 16),
+                label: Text(_rechecking ? 'Checking…' : 'Check again'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.cyan,
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ),
+          ],
           if (verifying) ...[
             const SizedBox(height: AppSpace.md),
             ClipRRect(

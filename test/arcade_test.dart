@@ -169,4 +169,23 @@ void main() {
     await tester.pump(const Duration(milliseconds: 40));
     expect(landed, 1);
   });
+
+  testWidgets('payout token never inherits the fallback underline',
+      (tester) async {
+    // No Material ancestor here: this is exactly the overlay situation that
+    // used to paint MaterialApp's debug style (double yellow underline).
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: FloatingCoin(
+          from: Offset(20, 300),
+          to: Offset(300, 40),
+          label: '+10',
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 950));
+
+    final text = tester.widget<Text>(find.text('+10'));
+    expect(text.style?.decoration, TextDecoration.none);
+  });
 }

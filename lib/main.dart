@@ -478,9 +478,7 @@ class _HomeShellState extends State<HomeShell> {
         },
         onAdFailedToLoad: (a, error) {
           a.dispose();
-          debugPrint(
-            '[HomeShell] BannerAd failed to load: code ${error.code}, message: ${error.message}, domain: ${error.domain}',
-          );
+          AdService.logAdError('Banner', AdUnits.banner, error, action: 'load');
           if (!mounted) return;
           setState(() => _banner = null);
           if (error.code == 3) {

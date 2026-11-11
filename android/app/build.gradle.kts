@@ -82,3 +82,11 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // gma_mediation_unity 1.11.1 pins unity-ads 4.17.0, but the adapter it
+    // bundles (com.google.ads.mediation:unity:4.20.1.0) targets 4.20.1.
+    // Align runtime SDK to the adapter — 4.17 answers every load with
+    // PUBLIC_ERROR_CODE_INIT_UNKNOWN on the gateway.
+    implementation("com.unity3d.ads:unity-ads:4.20.1")
+}
