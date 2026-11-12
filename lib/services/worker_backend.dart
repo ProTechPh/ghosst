@@ -234,9 +234,10 @@ class Backend {
     final res = await _api.get('/ads/status');
     return AdsRewardStatus(
       rewardsToday: res['rewards_today'] as int? ?? 0,
-      limit: res['limit'] as int? ?? 40,
-      remaining: res['remaining'] as int? ?? 40,
+      limit: res['limit'] as int? ?? 50,
+      remaining: res['remaining'] as int? ?? 50,
       nextRewardIn: res['next_reward_in'] as int? ?? 0,
+      coinsPerReward: res['coins_per_reward'] as int? ?? 10,
     );
   }
 

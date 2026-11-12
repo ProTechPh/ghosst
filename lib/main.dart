@@ -623,6 +623,10 @@ class _HomeShellState extends State<HomeShell> {
 
   /// Fire-and-forget so ad loading never stalls navigation.
   Future<void> _showInterstitial() async {
+    // Same accidental-click guard as the rewarded path — the tab tap that
+    // triggered this must be over before a full-screen ad takes the screen.
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    if (!mounted) return;
     await _ads.showInterstitial();
   }
 

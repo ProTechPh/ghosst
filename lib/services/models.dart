@@ -399,6 +399,7 @@ class AdsRewardStatus {
     required this.limit,
     required this.remaining,
     required this.nextRewardIn,
+    this.coinsPerReward = 10,
   });
 
   final int rewardsToday;
@@ -407,6 +408,10 @@ class AdsRewardStatus {
 
   /// Seconds until the 15s pacing gap clears (0 = ready now).
   final int nextRewardIn;
+
+  /// Payout the SSV handler will credit — the UI must never advertise a
+  /// different number than the server pays.
+  final int coinsPerReward;
 
   bool get atCap => remaining <= 0;
 }

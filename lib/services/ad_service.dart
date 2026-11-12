@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
+import 'install_id.dart';
+
 /// Every ad unit the app uses, in one place.
 ///
 /// AdMob app ID: `ca-app-pub-7791552060229072~1855578469` (configured in
@@ -32,9 +34,15 @@ class AdUnits {
   static const testInterstitial = 'ca-app-pub-3940256099942544/1033173712';
   static const testNative = 'ca-app-pub-3940256099942544/2247696110';
 
-  /// No production device is registered as an AdMob test device. Builds using
-  /// [useTestAds] remain safe because they use Google's official sample units.
-  static const List<String> testDeviceIds = [];
+  /// QA on a real device with live units: pass
+  /// `--dart-define=TEST_DEVICE_IDS=ABC123,DEF456` so AdMob serves test
+  /// creatives instead of logging your own taps as invalid traffic.
+  static final List<String> testDeviceIds =
+      const String.fromEnvironment('TEST_DEVICE_IDS')
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
 
   /// Debug builds use Google's guaranteed-fill sample inventory. Release builds
   /// use the real Ghosst units unless explicitly overridden for release QA with
@@ -64,8 +72,8 @@ enum AdState { idle, loading, loaded, showing, failed }
 ///   never touch the coin balance.
 ///
 /// The rewarded-interstitial helpers below are retained for reference but are
-/// not called by any screen: AdMob requires an intro screen with an opt-out
-/// before that format, so the app earns through the standard rewarded unit.
+/// not called by any screen — the Earn tab earns through the standard rewarded
+/// unit, so there is one reward contract to keep correct.
 ///
 /// Enforces:
 /// - Explicit ad state management (idle, loading, loaded, showing, failed).
@@ -543,12 +551,22 @@ class AdService {
     _adState = AdState.showing;
     _isShowingFullScreenAd = true;
 
+    final installId = await InstallId.get();
     try {
       await ad.setServerSideOptions(
-        ServerSideVerificationOptions(userId: userId),
+        ServerSideVerificationOptions(userId: userId, customData: installId),
       );
     } catch (e) {
+      // No SSV options = no reward. Showing it anyway burns a view the user
+      // can never be paid for, which the rewarded policy forbids.
       debugPrint('[AdService] Failed to set SSV options: $e');
+      ad.dispose();
+      _isShowingFullScreenAd = false;
+      _adState = AdState.idle;
+      onError('Ad is temporarily unavailable. Please try again shortly.');
+      onClosed();
+      unawaited(preload());
+      return;
     }
 
     var rewardGranted = false;
@@ -607,8 +625,8 @@ class AdService {
   }
 
   // ---------------------------------------------------------------------
-  // Rewarded interstitial helpers â€” NOT called by the app. AdMob requires an
-  // intro screen with a clear opt-out before this format; use only with one.
+  // Rewarded interstitial helpers — NOT called by the app. Same SSV contract
+  // as the standard rewarded unit if a screen ever adopts the format.
   // ---------------------------------------------------------------------
 
   Future<RewardedInterstitialAd?> preloadRewardedInterstitial({
@@ -757,12 +775,20 @@ class AdService {
     _riState = AdState.showing;
     _isShowingFullScreenAd = true;
 
+    final installId = await InstallId.get();
     try {
       await ad.setServerSideOptions(
-        ServerSideVerificationOptions(userId: userId),
+        ServerSideVerificationOptions(userId: userId, customData: installId),
       );
     } catch (e) {
+      // Same contract as show(): an RI watched without SSV pays nothing.
       debugPrint('[AdService] Failed to set RI SSV options: $e');
+      ad.dispose();
+      _isShowingFullScreenAd = false;
+      _riState = AdState.idle;
+      onError('Ad is temporarily unavailable. Please try again shortly.');
+      onClosed();
+      return;
     }
 
     var rewardGranted = false;
