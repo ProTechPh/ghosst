@@ -69,7 +69,7 @@ Every unit ID lives in `lib/services/ad_service.dart` (`class AdUnits`).
 | Rewarded | coins (SSV) | Earn tab — "Watch ad & earn coins" |
 | Rewarded interstitial | coins (SSV) | Earn tab — "Instant ad & earn coins" |
 | Interstitial | revenue only | every other tab switch, ≥45 s cooldown |
-| Banner | revenue only | strip above the bottom nav |
+| Banner | revenue only | strip under the app bar (never against the nav) |
 | Native (medium) | revenue only | "Sponsored" card at the end of the Store |
 
 App ID (already in the manifest): `ca-app-pub-7791552060229072~1855578469`.
@@ -77,8 +77,12 @@ App ID (already in the manifest): `ca-app-pub-7791552060229072~1855578469`.
 1. **Rewarded units** (both): Ad unit → **Edit** → **Server-side
    verification** → set the bare URL
    `https://ghossthub.com/api/v1/ads/ssv` → **Verify URL** → **Save**.
+   Tick **Apply to all networks in Mediation groups** before saving: without
+   it a Unity-filled rewarded view never calls the SSV URL, so the user
+   watches the ad and is never paid.
    Reward amount = coins per ad (currently `10`); it comes back as
-   `reward_amount` in the signed callback.
+   `reward_amount` in the signed callback. `/v1/ads/status` must expose the
+   same number as `coins_per_reward` — the Earn screen advertises that value.
 2. **Coins never arrive?** The API logs every rejection to PHP's error log
    (`SSV blocked: <reason>`). On Hostinger that is
    `public_html/logs/` / `error_log` in the File Manager. No log line at all
@@ -88,12 +92,15 @@ App ID (already in the manifest): `ca-app-pub-7791552060229072~1855578469`.
    targeting both rewarded units, then Unity Ads as an ad source. Merely
    shipping `gma_mediation_unity` does not enable Unity inventory; startup
    logs must show `Unity Ads Adapter: ready`.
-4. **Ad-blocker gate:** `lib/services/adblock_detector.dart` probes AdMob
+4. **`app-ads.txt`:** `https://ghossthub.com/app-ads.txt` must serve the
+   publisher line for the website on the Play listing. Missing it lets other
+   domains resell your inventory and can cost you demand.
+5. **Ad-blocker gate:** `lib/services/adblock_detector.dart` probes AdMob
    hosts with `$API_BASE_URL/products` as the control. 2 of 3 ad hosts
    blocked while the control answers = gate (`lib/screens/adblock_screen.dart`,
    third gate in `main.dart`, re-checked on resume). Fails open when offline or
    inconclusive; Private DNS is shown as context, never a standalone trigger.
-5. **Coin-farm guards** (`api/lib/rewards.php`, enforced in `routes/ads.php`
+6. **Coin-farm guards** (`api/lib/rewards.php`, enforced in `routes/ads.php`
    after the signature check, before the credit):
    - `ad_unit` must sit under our publisher id `ca-app-pub-7791552060229072/`.
      A callback signed for anyone else's ad unit is their ad, not ours.
@@ -105,6 +112,10 @@ App ID (already in the manifest): `ca-app-pub-7791552060229072~1855578469`.
      cannot mint a balance.
    - Pacing is keyed on `sha256(lower(email))`, so deleting and re-registering
      the same address does not reset the daily cap.
+   - 60 rewards per install per window, keyed on the hashed install id the app
+     sends as SSV `custom_data` (`lib/services/install_id.dart`). Rejections log
+     `SSV blocked: device_cap`. The column is created lazily on the first
+     callback; `database/mobile_app_ad_device.sql` adds it plus the index.
    Each rejection writes `SSV blocked: <reason>` — check the error log before
    assuming the callback URL is wrong.
 
@@ -119,6 +130,9 @@ flutter run --flavor play
 flutter run --flavor direct
 # QA ads:
 flutter run --release --flavor play --dart-define=USE_TEST_ADS=true
+# live units on your own device: register it as a test device first, or your
+# own taps count as invalid traffic.
+flutter run --release --flavor play --dart-define=TEST_DEVICE_IDS=ABC123DEF456
 flutter build appbundle --release --flavor play --dart-define=USE_TEST_ADS=false
 flutter build apk --release --flavor direct
 ```
@@ -150,9 +164,16 @@ The API base URL defaults to production; point it at a local server with
 
 - [ ] Real AdMob app ID in the manifest and real unit IDs for all five formats
       in `AdUnits`, and SSV enabled on **both rewarded units** pointing at
-      `https://ghossthub.com/api/v1/ads/ssv`.
-- [ ] `api/` uploaded to `public_html/api/` and both SQL files applied to the
-      production DB.
+      `https://ghossthub.com/api/v1/ads/ssv`, with **Apply to all networks in
+      Mediation groups** ticked (otherwise Unity fills pay nothing).
+- [ ] `https://ghossthub.com/app-ads.txt` serves the publisher line.
+- [ ] Reward pacing is not email-only: add per-IP and per-device caps and make
+      Play Integrity blocking for SSV credits. Registering a new address must
+      not reset the budget — coins convert to sellable keys, so a farmer is
+      your suspension risk, not the SDK's.
+- [ ] `api/` uploaded to `public_html/api/` and the SQL files applied to the
+      production DB — including `database/mobile_app_ad_device.sql` (the
+      column self-creates on first use; the file adds the index).
 - [ ] `JWT_SECRET` in `api/config.php` changed from the placeholder.
 - [ ] `CLOUDINARY_API_SECRET` set, so deleting a product also deletes its
       images.

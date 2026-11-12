@@ -72,12 +72,14 @@ and rollback. `JWT_SECRET` and `CLOUDINARY_API_SECRET` live in `api/config.php`.
   (`https://ghossthub.com/api/v1`); override with
   `--dart-define=API_BASE_URL=...`. The ad-block gate probes this same base as
   its control host, so a wrong URL makes that gate inconclusive, not blocked.
-- Both rewarded units must keep their AdMob **server-side verification** URL
-  pointed at `/v1/ads/ssv`. If coins never land, check the PHP error log
-  (Hostinger File Manager): no request at all means the URL in AdMob is wrong,
-  and the code cannot fix that. The handler also rejects foreign ad units and
-  paces rewards by a keyed hash of the account email (`api/lib/rewards.php`), so
-  deleting and re-registering the same address does not reset the daily cap; a
+- Rewarded units must keep their AdMob **server-side verification** URL
+  pointed at `/v1/ads/ssv`, with **Apply to all networks in Mediation groups**
+  ticked (Unity fills are not verified otherwise). If coins never land, check
+  the PHP error log (Hostinger File Manager): no request at all means the URL
+  in AdMob is wrong, and the code cannot fix that. The handler also rejects
+  foreign ad units and paces rewards by a keyed hash of the account email
+  (`api/lib/rewards.php`) *and* of the install id (`custom_data`), so neither
+  a fresh address nor a fresh account on the same phone resets the daily cap; a
   logged `SSV blocked:` is that guard, not the URL.
 - Coins/stock are mutated only inside the API. A claim runs in a MySQL
   transaction that locks the user row first (`SELECT coins ... FOR UPDATE`), then

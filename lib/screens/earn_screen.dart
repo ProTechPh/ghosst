@@ -9,11 +9,8 @@ import '../services/ad_service.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
 
-/// Coins per rewarded ad. The Worker owns the real value
-/// (`COINS_PER_REWARD`, default 10) and exposes no endpoint for it.
-/// shortcut: update this mirror when the operator changes the Worker var.
-const int _rewardCoins = 10;
-
+/// One rewarded ad pays `coinsPerReward` from `/ads/status` (the SSV handler
+/// owns the real value; 10 is the fallback while the status fetch is pending).
 class EarnScreen extends StatefulWidget {
   const EarnScreen({super.key, required this.coins, required this.onRefresh});
 
@@ -54,6 +51,9 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
   /// Rolling 24h budget; null until the first status fetch lands.
   AdsRewardStatus? _rewardStatus;
   Timer? _capTimer;
+
+  /// Payout the server will actually credit — never a hardcoded mirror.
+  int get _rewardCoins => _rewardStatus?.coinsPerReward ?? 10;
 
   /// Anchor for the payout token's start point.
   final GlobalKey _ctaKey = GlobalKey();
@@ -435,10 +435,6 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
               key: _ctaKey,
               child: _primaryAction(inCooldown, cooldownFill, atCap),
             ),
-            if (!inCooldown) ...[
-              const SizedBox(height: AppSpace.md),
-              _secondAction(inCooldown),
-            ],
             const SizedBox(height: AppSpace.md),
             if (inCooldown) ...[
               _cooldownProgress(cooldownFill),
@@ -839,35 +835,6 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
                 ],
               ),
             ),
-    );
-  }
-
-  Widget _secondAction(bool inCooldown) {
-    final enabled = !busy && !inCooldown;
-    return NeonButton(
-      expand: true,
-      outline: true,
-      glow: false,
-      onPressed: enabled ? () => _watchAd() : null,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            inCooldown ? Icons.hourglass_empty_rounded : Icons.flash_on_rounded,
-            size: 17,
-            color: enabled ? AppColors.cyan : AppColors.textDim,
-          ),
-          const SizedBox(width: AppSpace.sm),
-          if (inCooldown) ...[
-            const Text('Cooldown'),
-            const SizedBox(width: AppSpace.xs + 2),
-            Text('${_remainingCooldown}s', style: monoStyle(fontWeight: FontWeight.w700, color: AppColors.textDim)),
-          ] else ...[
-            Text('Watch another ad', style: TextStyle(color: enabled ? AppColors.cyan : AppColors.textDim)),
-          ],
-        ],
-      ),
     );
   }
 
