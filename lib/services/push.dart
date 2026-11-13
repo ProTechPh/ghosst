@@ -1,4 +1,5 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 
 import 'install_id.dart';
 import 'worker_backend.dart';
@@ -17,10 +18,20 @@ class Push {
 
   static bool get canAsk => splashDone;
 
-  /// Firebase is already up (`ChatService.init()` runs first): ask for the FCM
-  /// token, hand it to the API, and repeat on every rotation.
+  /// Bumped for every push that lands while the app is in front. Android does
+  /// not show FCM `notification` messages in that state, so the shell listens
+  /// here and reloads the announcement banner instead of a tray notification.
+  static final ValueNotifier<int> foreground = ValueNotifier<int>(0);
+
+  static void handleForeground(RemoteMessage _) => foreground.value++;
+
+  /// Firebase is already up (`ChatService.init()` runs first): listen for
+  /// foreground messages, ask for the FCM token, hand it to the API, and
+  /// repeat on every rotation.
   static Future<void> init() async {
     try {
+      FirebaseMessaging.onMessage.listen(handleForeground);
+
       // shortcut: firebase_messaging 17 points at register()/onRegistered
       // (Firebase Installation ID) instead; Novu's FCM provider still wants a
       // registration token. Upgrade when Novu accepts FID targets.

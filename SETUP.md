@@ -309,5 +309,12 @@ failing the request.
 duration pool getting keys again (`keys_add`, silent on top-ups), and the
 Admin tab's announcement card (saved in `app_announcements`, shown as a
 dismissible banner for 7 days). Pushes are fire-and-forget: a failed send is
-logged (`push failed: ...` / `push skipped: host/key`) and never fails the
+logged (`novu failed: ...` / `push skipped: host/key`) and never fails the
 admin request.
+
+With the app in the foreground Android shows no tray notification; the shell
+reloads on the message instead, so the announcement appears as the banner.
+
+Before the first broadcast, confirm `NOVU_API_URL` is the API and not the
+dashboard: `<NOVU_API_URL>/v1/subscribers` with the `ApiKey` header must answer
+JSON (401 without the header is fine), not an HTML page.

@@ -11,8 +11,11 @@ until they update.
 
 ## Goals
 
-- Identical behaviour: one title/body push per event, to every device, app closed
-  or open; `pushed` in the admin response keeps meaning "handed to the sender".
+- One title/body push per event, to every device. App in background/killed: the
+  Android tray shows it. App in front: FCM does not display notifications there,
+  so the shell reloads and the announcement appears as the in-app banner — same
+  end result, no duplicate tray entry. `pushed` in the admin response keeps
+  meaning "handed to the sender".
 - No account data to Novu. Subscriber id = the existing anonymous `InstallId`
   (32 hex, per install), same stance as today's anonymous OneSignal device.
 - Fail-open: Novu being down/slow never fails the admin action that fired it.
@@ -122,8 +125,13 @@ committed — removing it is a side win). `PUSH_HOST` stays.
   same as today's OneSignal failures.
 - Fan-out: one workflow event per subscriber per broadcast; a slow self-hosted
   instance lags behind OneSignal's managed edge.
-- The register endpoint is public; it can be fed fake tokens. Validation only —
-  the worst case is log noise and failed sends.
+- The register endpoint is public and unthrottled: every call with a valid-looking
+  pair creates a Novu subscriber plus a topic membership. Fake or abandoned
+  installs inflate the topic, and a topic trigger fans out one job and one FCM
+  send **per subscriber**, so the blast radius is delivery cost and latency, not
+  just log noise. Same exposure class as the already-public `POST /v1/auth/register`;
+  rate-limit `/v1/push/register` at the edge if it is ever abused, and prune
+  subscribers idle for ~90 days.
 - Endpoint paths (`/v1/subscribers`, `/v1/events/trigger`, `/v2/topics/...`)
   will be confirmed against the instance version during implementation; Novu
   has v1 and v2 surfaces side by side.
