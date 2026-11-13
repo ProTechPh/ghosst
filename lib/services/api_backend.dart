@@ -212,6 +212,11 @@ class ApiBackend {
     return res['pushed'] as bool? ?? false;
   }
 
+  /// Anonymous per-device FCM token registration; the server owns Novu.
+  Future<void> registerPush({required String installId, required String token}) async {
+    await _api.post('/push/register', data: {'installId': installId, 'token': token});
+  }
+
   static String _randomKey() {
     final random = math.Random.secure();
     return List.generate(

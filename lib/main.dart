@@ -44,8 +44,11 @@ import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  unawaited(Push.init());
-  unawaited(ChatService.init().then((_) => ChatService.warm()));
+  // One init, two dependents: the second init() below would return at its
+  // _initStarted guard and warm() would run before Firebase is up.
+  final chatReady = ChatService.init();
+  unawaited(chatReady.then((_) => Push.init()));
+  unawaited(chatReady.then((_) => ChatService.warm()));
   await Distribution.initialize();
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
@@ -511,6 +514,9 @@ class _HomeShellState extends State<HomeShell> {
     // First interstitial can only appear after the cooldown, not on open.
     _lastInterstitial = DateTime.now();
     _refresh();
+    // A push that lands while the app is in front has no tray notification on
+    // Android; reload the shell so an announcement shows as the banner.
+    Push.foreground.addListener(_onForegroundPush);
     // The shell only exists when signed in and past the launch gates; the
     // request itself waits for the splash to finish.
     unawaited(Push.requestPermission());
@@ -540,8 +546,13 @@ class _HomeShellState extends State<HomeShell> {
     }
   }
 
+  void _onForegroundPush() {
+    if (mounted) unawaited(_refresh());
+  }
+
   @override
   void dispose() {
+    Push.foreground.removeListener(_onForegroundPush);
     _bannerRetryTimer?.cancel();
     AdService.instance.adsEnabledNotifier.removeListener(
       _onAdsEnabledForBanner,

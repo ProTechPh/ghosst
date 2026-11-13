@@ -21,6 +21,8 @@
     <!-- Network access (Appwrite, AdMob, product images, YouTube player). -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- FCM display on Android 13+; OneSignal's AAR used to declare it. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="${appLabel}"
         android:name="${applicationName}"

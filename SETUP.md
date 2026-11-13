@@ -223,7 +223,7 @@ The API base URL defaults to production; point it at a local server with
 - [ ] `JWT_SECRET` in `api/config.php` changed from the placeholder.
 - [ ] `CLOUDINARY_API_SECRET` set, so deleting a product also deletes its
       images.
-- [ ] Push notifications: `ONESIGNAL_APP_ID` / `ONESIGNAL_REST_KEY` set in
+- [ ] Push notifications: `NOVU_API_URL` / `NOVU_API_KEY` set in
       `api/config.php` on the host (blank = push silently off), and
       `android/app/google-services.json` present with **both** packages
       (`com.astrixtech.ghosst`, `com.astrixtech.ghosst.direct`). See §8.
@@ -254,7 +254,7 @@ The API base URL defaults to production; point it at a local server with
 | APK won't install | `REQUEST_INSTALL_PACKAGES` missing from the manifest (play flavor) or "install unknown apps" disabled for Ghosst |
 | Release: `Missing classes detected while running R8` | Copy the `-dontwarn` lines from `build/app/outputs/mapping/<variant>/missing_rules.txt` into `android/app/proguard-rules.pro` |
 | Release: `Gradle build daemon disappeared` | `org.gradle.jvmargs` too big for the machine — 4G works on 12 GB Windows and 7 GB CI runners |
-| No notification arrives | `google-services.json` missing or its package name does not match the installed flavor; device not under OneSignal → Audience → Subscriptions; `ONESIGNAL_REST_KEY` not set on the host (a dev host is skipped on purpose) |
+| No notification arrives | `google-services.json` missing or its package name does not match the installed flavor; Firebase service-account JSON not in Novu → Integrations → FCM; `ghosst-broadcast` not published; subscriber missing from topic `ghosst` (check Novu → Subscribers); `NOVU_API_KEY` blank or a dev host (skipped on purpose) |
 
 ## 7. Trust boundaries
 
@@ -272,34 +272,49 @@ The API base URL defaults to production; point it at a local server with
 - A modded client can only send requests faster; idempotency + the locked
   transaction make that useless.
 
-## 8. Push notifications (OneSignal + FCM)
+## 8. Push notifications (Novu self-hosted + FCM)
 
-The API broadcasts through OneSignal; the app only holds the public app id.
-Everything here is optional: with a blank REST key, or on any host other than
+The API broadcasts through the Novu instance at `novu.astrixstudio.tech`; the
+app only reports its FCM token, keyed by the anonymous install id. Everything
+here is optional: with a blank API key, or on any host other than
 `ghossthub.com`, `push_send()` logs `push skipped` and the feature is off.
 
 **One-time setup (owner):**
 
-1. OneSignal ? Settings ? **Push & In-App ? Platforms ? Google Android (FCM)**:
-   upload the Firebase **service account** JSON (Project settings ? Service
-   accounts ? Generate new private key). The plain `google-services.json` is
-   rejected there (wrong file).
-2. Firebase: one project (`ghosst-6f23e`) holds **both** Android apps,
+1. Firebase project `ghosst-6f23e` → Project settings → Service accounts →
+   Generate new private key. Upload **that** JSON (not `google-services.json`,
+   which is rejected — wrong file) to Novu → Integrations → **FCM (Android)**.
+2. Firebase: one project holds **both** Android apps,
    `com.astrixtech.ghosst` and `com.astrixtech.ghosst.direct` (the `direct`
    flavor has `applicationIdSuffix = .direct`). Their merged config is checked
    in at `android/app/google-services.json`; the Google Services plugin is in
    `android/settings.gradle.kts` + `android/app/build.gradle.kts`. Both apps
    must stay registered or the build fails for that flavor.
-3. The public app id is the default in `lib/services/push.dart`. Override with
-   `--dart-define=ONESIGNAL_APP_ID=<id>` only if the OneSignal app changes;
-   an empty define disables push.
-4. In `api/config.php` on Hostinger set `ONESIGNAL_APP_ID` and
-   `ONESIGNAL_REST_KEY` (env overrides `GHOSST_ONESIGNAL_APP_ID` /
-   `GHOSST_ONESIGNAL_REST_KEY`). REST key: OneSignal ? API keys, never committed.
+3. Novu → Workflows → new workflow `ghosst-broadcast` with one **Push** step:
+   subject `{{payload.title}}`, body `{{payload.body}}`. Publish it in the
+   environment the API key belongs to.
+4. Topic `ghosst` is created by the first device registration; no manual step.
+5. In `api/config.php` on Hostinger set `NOVU_API_URL` (the Novu API root),
+   `NOVU_API_KEY` (Novu → API keys, never committed), `NOVU_WORKFLOW_ID` and
+   `NOVU_TOPIC_KEY`; optional `NOVU_FCM_INTEGRATION` when more than one FCM
+   integration exists. Env overrides are `GHOSST_NOVU_*`.
+
+The app registers its token at `POST /v1/push/register` on every launch and on
+every rotation; the endpoint is public so signed-out devices still get
+broadcasts, exactly like the old OneSignal device subscription. It always
+answers `{ok:true}` and logs `push register skipped` / `novu failed` instead of
+failing the request.
 
 **What sends a notification:** a new product (`products_create`), a sold-out
 duration pool getting keys again (`keys_add`, silent on top-ups), and the
 Admin tab's announcement card (saved in `app_announcements`, shown as a
 dismissible banner for 7 days). Pushes are fire-and-forget: a failed send is
-logged (`push failed: ...` / `push skipped: host/key`) and never fails the
+logged (`novu failed: ...` / `push skipped: host/key`) and never fails the
 admin request.
+
+With the app in the foreground Android shows no tray notification; the shell
+reloads on the message instead, so the announcement appears as the banner.
+
+Before the first broadcast, confirm `NOVU_API_URL` is the API and not the
+dashboard: `<NOVU_API_URL>/v1/subscribers` with the `ApiKey` header must answer
+JSON (401 without the header is fine), not an HTML page.
