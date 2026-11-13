@@ -28,14 +28,18 @@ void main() {
       theme: AppTheme.dark,
       home: TutorialsScreen(load: () async => [_t()]),
     ));
-    await tester.pumpAndSettle();
+    // Explicit pumps: the list carries the "SCROLL DOWN" cue, whose bob
+    // animation repeats forever — pumpAndSettle would never settle.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.text('How to deposit'), findsOneWidget);
     expect(find.text('12 reads'), findsOneWidget);
     expect(find.text('GENERAL'), findsOneWidget);
 
     await tester.tap(find.text('How to deposit'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400)); // route transition
 
     expect(find.text('Watch tutorial'), findsOneWidget);
     expect(find.text('Step one\nStep two'), findsOneWidget);
