@@ -137,10 +137,22 @@ class TutorialCard extends StatelessWidget {
 /// Tutorials ni-publish sa website CMS (`/v1/tutorials`) — isang lugar lang
 /// ang ina-update ng admin, automatic na lumalabas dito at sa home shelf.
 class TutorialsScreen extends StatefulWidget {
-  const TutorialsScreen({super.key, this.load});
+  const TutorialsScreen({
+    super.key,
+    this.load,
+    this.embedded = false,
+    this.active = true,
+  });
 
   /// Injectable for tests; defaults to the API.
   final Future<List<Tutorial>> Function()? load;
+
+  /// True when shown as a shell tab (the shell supplies the bar).
+  final bool embedded;
+
+  /// False while hidden inside `IndexedStack` — defers the fetch until the
+  /// tab is first opened (same gate as the News/Chat tabs).
+  final bool active;
 
   @override
   State<TutorialsScreen> createState() => _TutorialsScreenState();
@@ -153,7 +165,13 @@ class _TutorialsScreenState extends State<TutorialsScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    if (widget.active) _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant TutorialsScreen old) {
+    super.didUpdateWidget(old);
+    if (widget.active && !old.active) _load();
   }
 
   Future<void> _load() async {
@@ -167,18 +185,16 @@ class _TutorialsScreenState extends State<TutorialsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(title: const Text('Tutorials')),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : items.isEmpty
-          ? const EmptyState(
-              icon: Icons.play_circle_outline_rounded,
-              title: 'No tutorials yet',
-              message: 'Check back later for guides.',
-            )
-          : ListView.separated(
+    final body = loading
+        ? const Center(child: CircularProgressIndicator())
+        : items.isEmpty
+        ? const EmptyState(
+            icon: Icons.play_circle_outline_rounded,
+            title: 'No tutorials yet',
+            message: 'Check back later for guides.',
+          )
+        : ScrollDownCue(
+            child: ListView.separated(
               padding: const EdgeInsets.fromLTRB(
                 AppSpace.lg,
                 AppSpace.md,
@@ -189,6 +205,14 @@ class _TutorialsScreenState extends State<TutorialsScreen> {
               separatorBuilder: (_, _) => const SizedBox(height: AppSpace.lg),
               itemBuilder: (_, i) => TutorialCard(tutorial: items[i]),
             ),
+          );
+
+    if (widget.embedded) return body;
+
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      appBar: AppBar(title: const Text('Tutorials')),
+      body: body,
     );
   }
 }

@@ -51,6 +51,174 @@ String groupDigits(int value) {
 }
 
 // ---------------------------------------------------------------------------
+// ScrollDownCue — "SCROLL DOWN" pill over a scrollable
+// ---------------------------------------------------------------------------
+
+/// Floats a "SCROLL DOWN" pill over a scrollable until the user actually
+/// scrolls — or when there is nothing below the fold to scroll to.
+///
+/// Wrap the scrollable itself (a ListView, or a RefreshIndicator around one):
+/// the wrapper reads its own notifications, so the call site needs no
+/// controller or callback.
+class ScrollDownCue extends StatefulWidget {
+  const ScrollDownCue({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<ScrollDownCue> createState() => _ScrollDownCueState();
+}
+
+class _ScrollDownCueState extends State<ScrollDownCue> {
+  bool _visible = true;
+  bool _scrollable = false;
+
+  bool _onNotification(Notification n) {
+    if (n is ScrollMetricsNotification) {
+      final scrollable = n.metrics.maxScrollExtent > 0;
+      if (scrollable != _scrollable) {
+        setState(() => _scrollable = scrollable);
+      }
+    } else if (n is ScrollNotification && _visible && n.metrics.pixels > 12) {
+      setState(() => _visible = false);
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final show = _visible && _scrollable;
+    return Stack(
+      children: [
+        NotificationListener<Notification>(
+          onNotification: _onNotification,
+          child: widget.child,
+        ),
+        // Scrim so the pill reads as UI, not as part of the card above it.
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: IgnorePointer(
+            child: AnimatedOpacity(
+              duration: kMotionStandard,
+              opacity: show ? 1 : 0,
+              child: Container(
+                padding: const EdgeInsets.only(
+                  top: AppSpace.huge,
+                  bottom: AppSpace.xl,
+                ),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      AppColors.bg.withValues(alpha: 0),
+                      AppColors.bg.withValues(alpha: 0.88),
+                      AppColors.bg,
+                    ],
+                    stops: const [0, 0.55, 1],
+                  ),
+                ),
+                child: const Center(child: _ScrollDownPill()),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The pill itself: bobbing chevron, hidden from screen readers (the list is
+/// already announced as scrollable).
+class _ScrollDownPill extends StatefulWidget {
+  const _ScrollDownPill();
+
+  @override
+  State<_ScrollDownPill> createState() => _ScrollDownPillState();
+}
+
+class _ScrollDownPillState extends State<_ScrollDownPill>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _c.value = 0;
+    } else if (!_c.isAnimating) {
+      _c.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ExcludeSemantics(
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, child) => Transform.translate(
+          offset: Offset(0, 3 - 6 * Curves.easeInOut.transform(_c.value)),
+          child: child,
+        ),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpace.md,
+            AppSpace.xs + 2,
+            AppSpace.sm + 2,
+            AppSpace.xs + 2,
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.bgSoft.withValues(alpha: 0.88),
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            border: Border.all(
+              color: AppColors.primary.withValues(alpha: 0.28),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.18),
+                blurRadius: 18,
+                spreadRadius: -6,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'SCROLL DOWN',
+                style: monoStyle(
+                  fontSize: 9.5,
+                  letterSpacing: 1.8,
+                  color: AppColors.textDim,
+                ),
+              ),
+              const SizedBox(width: AppSpace.xs + 2),
+              const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: AppIcon.sm,
+                color: AppColors.primary,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // ScrollReveal — viewport-entry fade-up, fires once
 // ---------------------------------------------------------------------------
 
