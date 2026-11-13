@@ -38,7 +38,14 @@ void main() {
 
     expect(find.textContaining('Please read'), findsOneWidget);
     expect(find.textContaining('Paalala bago'), findsNothing);
+
+    // Settle the toggle's 220ms pill animation before disposal.
+    await tester.pump(const Duration(milliseconds: 300));
+
     // Same handle in both languages.
     expect(find.text('@SylvieOfficeal'), findsOneWidget);
+
+    // Dispose before the 20s timer ends, so no timer/ticker outlives the test.
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 }
