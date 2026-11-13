@@ -159,7 +159,7 @@ class _SignInState extends State<SignIn> {
           onChanged: (_) => _clearErrors(),
           onSubmitted: (_) => _submit(),
           decoration: authDecoration(
-            hint: 'Password',
+            hint: 'Your password',
             label: 'Password',
             icon: Icons.lock_outline_rounded,
             errorText: passErr,

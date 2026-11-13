@@ -44,6 +44,6 @@ void main() {
     expect(find.text('Continue with Google'), findsOneWidget);
     expect(find.text('Sign in'), findsNWidgets(2)); // header + submit
     expect(find.text('Email address'), findsOneWidget);
-    expect(find.text('Password'), findsOneWidget);
+    expect(find.text('Your password'), findsOneWidget);
   });
 }
