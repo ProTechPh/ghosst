@@ -701,6 +701,15 @@ class _HomeShellState extends State<HomeShell> {
     if (_announcementUnread != 0) setState(() => _announcementUnread = 0);
   }
 
+  /// News page (header button): own scaffold + back button, badge cleared on
+  /// open.
+  void _openNews() {
+    _markAnnouncementsSeen();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const AnnouncementsScreen()),
+    );
+  }
+
   void _openWallet() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -769,24 +778,22 @@ class _HomeShellState extends State<HomeShell> {
         active: tab == 2,
         onGoToStore: () => setState(() => tab = 0),
       ),
-      AnnouncementsScreen(embedded: true, active: tab == 3),
       ChatScreen(
         embedded: true,
-        active: tab == 4,
+        active: tab == 3,
         isAdmin: isAdmin,
         isModerator: isModerator,
         onUnreadChanged: (count) {
           if (_chatUnread != count) setState(() => _chatUnread = count);
         },
       ),
-      if (isAdmin) AdminScreen(onAnnouncementSent: _refresh, active: tab == 5),
+      if (isAdmin) AdminScreen(onAnnouncementSent: _refresh, active: tab == 4),
     ];
 
     final destinations = <_NavItem>[
       _NavItem(Icons.storefront_outlined, Icons.storefront, 'Store'),
       _NavItem(Icons.play_circle_outline, Icons.play_circle, 'Earn'),
       _NavItem(Icons.shopping_bag_outlined, Icons.shopping_bag, 'Purchases'),
-      _NavItem(Icons.campaign_outlined, Icons.campaign, 'News'),
       _NavItem(Icons.chat_bubble_outline, Icons.chat_bubble, 'Chat'),
       if (isAdmin)
         _NavItem(
@@ -851,6 +858,15 @@ class _HomeShellState extends State<HomeShell> {
               ),
             ),
             actions: [
+              // News lives in the header now: reachable from any tab, and the
+              // bottom bar is back to five real destinations.
+              Padding(
+                padding: const EdgeInsets.only(right: AppSpace.xs),
+                child: _NewsButton(
+                  unread: _announcementUnread,
+                  onTap: _openNews,
+                ),
+              ),
               Padding(
                 padding: const EdgeInsets.only(right: AppSpace.sm),
                 child: CoinPill(coins: coins, onTap: _openWallet),
@@ -942,8 +958,7 @@ class _HomeShellState extends State<HomeShell> {
             index: safeIndex,
             items: destinations,
             unread: {
-              if (_announcementUnread > 0) 3: _announcementUnread,
-              if (_chatUnread > 0) 4: _chatUnread,
+              if (_chatUnread > 0) 3: _chatUnread,
             },
             onSelected: (i) {
               // Re-tapping the current tab is not a tab switch — it must
@@ -970,6 +985,79 @@ class _NavItem {
 
 /// Floating, backdrop-blurred pill navigation. Active tab widens into a
 /// tinted pill with its label; inactive tabs stay icon-only.
+
+/// Header entry point for News: megaphone with a red unread count, the same
+/// badge language the bottom bar used.
+class _NewsButton extends StatelessWidget {
+  const _NewsButton({required this.unread, required this.onTap});
+
+  final int unread;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Pressable(
+      onTap: onTap,
+      scale: 0.92,
+      semanticLabel: unread > 0 ? 'News, $unread unread' : 'News',
+      child: SizedBox(
+        width: kTouchMin,
+        height: kTouchMin,
+        child: Center(
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.surface.withValues(alpha: 0.9),
+                  borderRadius: BorderRadius.circular(AppRadius.input),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: const ExcludeSemantics(
+                  child: Icon(
+                    Icons.campaign_outlined,
+                    size: AppIcon.md,
+                    color: AppColors.textDim,
+                  ),
+                ),
+              ),
+              if (unread > 0)
+                Positioned(
+                  top: -3,
+                  right: -3,
+                  child: ExcludeSemantics(
+                    child: Container(
+                      constraints: const BoxConstraints(minWidth: 16),
+                      height: 16,
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: AppColors.red,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.bg, width: 1.5),
+                      ),
+                      child: Text(
+                        unread > 99 ? '99+' : '$unread',
+                        style: AppText.caption.copyWith(
+                          fontSize: 9.5,
+                          height: 1,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _GlassNavBar extends StatefulWidget {
   const _GlassNavBar({
