@@ -9,23 +9,20 @@ import 'package:ghosst/services/security.dart';
 import 'package:ghosst/theme.dart';
 
 void main() {
-  testWidgets('LandingScreen fires both callbacks', (tester) async {
+  testWidgets('LandingScreen fires the sign-in callback', (tester) async {
     var signIns = 0;
-    var signUps = 0;
     await tester.pumpWidget(MaterialApp(
       theme: AppTheme.dark,
       home: Scaffold(
           body: LandingScreen(
-              onSignIn: () => signIns++, onSignUp: () => signUps++)),
+              onSignIn: () => signIns++, onGoogleSignedIn: () {})),
     ));
     await tester.pump(const Duration(milliseconds: 1500));
     // Both CTAs are pinned under the fold on small screens — scroll to them.
-    await tester.ensureVisible(find.text('I already have an account'));
-    await tester.tap(find.text('I already have an account'));
+    await tester.ensureVisible(find.text('Sign in with email'));
+    await tester.tap(find.text('Sign in with email'));
     expect(signIns, 1);
-    await tester.ensureVisible(find.text('Create account'));
-    await tester.tap(find.text('Create account'));
-    expect(signUps, 1);
+    expect(find.text('Continue with Google'), findsOneWidget);
   });
 
   testWidgets('TamperDetectedScreen explains the lock without a download URL',

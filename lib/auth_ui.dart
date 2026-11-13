@@ -1,7 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
+import 'api/api_exception.dart';
 import 'arcade.dart';
 import 'premium.dart';
+import 'services/google_auth.dart';
+import 'services/worker_backend.dart';
 import 'theme.dart';
 
 // Shared chrome for the signed-out screens, so sign in and sign up read as two
@@ -10,22 +14,35 @@ import 'theme.dart';
 /// Backdrop + fixed back affordance + a 420px column that centres when the
 /// form is short and scrolls when the keyboard opens.
 class AuthScaffold extends StatelessWidget {
-  const AuthScaffold({super.key, required this.onBack, required this.children});
+  const AuthScaffold({
+    super.key,
+    required this.onBack,
+    required this.children,
+    this.footer,
+  });
 
   final VoidCallback onBack;
   final List<Widget> children;
 
+  /// Pinned under the scroll area — the legal line, so it never floats in the
+  /// middle of a tall screen.
+  final Widget? footer;
+
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        const ArcadeBackdrop(),
-        const Positioned(
-          top: 24,
-          right: -70,
-          child: KeyMark(size: 330, angle: -0.72, opacity: 0.09),
-        ),
-        SafeArea(
+    // Material ancestor: without it every Text merges into the engine's debug
+    // fallback style (yellow underline) and inherits no sensible defaults.
+    return Material(
+      type: MaterialType.transparency,
+      child: Stack(
+        children: [
+          const ArcadeBackdrop(),
+          const Positioned(
+            top: 40,
+            right: -120,
+            child: KeyMark(size: 300, angle: -0.72, opacity: 0.05),
+          ),
+          SafeArea(
           child: Column(
             children: [
               Padding(
@@ -65,6 +82,7 @@ class AuthScaffold extends StatelessWidget {
                           ),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: children,
                           ),
@@ -74,179 +92,30 @@ class AuthScaffold extends StatelessWidget {
                   },
                 ),
               ),
+              if (footer != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpace.xl,
+                    AppSpace.sm,
+                    AppSpace.xl,
+                    AppSpace.xl,
+                  ),
+                  child: footer!,
+                ),
             ],
           ),
         ),
       ],
-    );
-  }
-}
-
-/// Brand lockup, page title and one line of context.
-class AuthHeader extends StatelessWidget {
-  const AuthHeader({
-    super.key,
-    required this.title,
-    required this.subtitle,
-    required this.eyebrow,
-  });
-
-  final String title;
-  final String subtitle;
-  final String eyebrow;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Container(
-              width: 52,
-              height: 52,
-              padding: const EdgeInsets.all(9),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.surface,
-                border: Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.35),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.22),
-                    blurRadius: 30,
-                    spreadRadius: -6,
-                  ),
-                ],
-              ),
-              child: const LogoBadge(size: 34),
-            ),
-            const SizedBox(width: AppSpace.md),
-            Text(
-              'GHOSST',
-              style: AppText.label.copyWith(
-                color: AppColors.textDim,
-                letterSpacing: 3.2,
-              ),
-            ),
-            const Spacer(),
-            Flexible(
-              child: Text(
-                eyebrow,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-                style: monoStyle(
-                  fontSize: 10,
-                  letterSpacing: 1.6,
-                  color: AppColors.primary.withValues(alpha: 0.7),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpace.xl + 6),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: GradientText(
-            title,
-            style: AppText.display.copyWith(
-              fontSize: 42,
-              height: 1,
-              letterSpacing: -1.2,
-            ),
-          ),
-        ),
-        const SizedBox(height: AppSpace.sm + 2),
-        Text(
-          subtitle,
-          style: AppText.body.copyWith(color: AppColors.textDim, height: 1.45),
-        ),
-        const SizedBox(height: AppSpace.lg),
-        Container(
-          width: 54,
-          height: 1,
-          decoration: const BoxDecoration(gradient: kNeonGradient),
-        ),
-      ],
-    );
-  }
-}
-
-/// The fields sit on one framed plate so the form reads as a single object
-/// against the table backdrop.
-class AuthPanel extends StatelessWidget {
-  const AuthPanel({super.key, required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return CardFrame(
-      tier: RarityTier.standard,
-      radius: AppRadius.hero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // A lit top edge, so the plate catches the bloom above it.
-          Container(
-            height: 1,
-            margin: const EdgeInsets.symmetric(horizontal: AppSpace.xl),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Colors.transparent,
-                  AppColors.cyan.withValues(alpha: 0.35),
-                  Colors.transparent,
-                ],
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(AppSpace.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: children,
-            ),
-          ),
-        ],
       ),
     );
   }
 }
 
-/// Uppercase micro-label above an input. Visual only — the field itself
-/// carries the same text as its semantics label (see [authDecoration]).
-class AuthFieldLabel extends StatelessWidget {
-  const AuthFieldLabel(this.text, {super.key});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.sm),
-      child: ExcludeSemantics(
-        child: Text(
-          text.toUpperCase(),
-          style: AppText.caption.copyWith(
-            fontSize: 10.5,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.6,
-            color: AppColors.textDim,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Icon, hint and inline error in one place — the border/error styling is
-/// inherited from the theme, so screens never rebuild OutlineInputBorders.
-/// [label] is the screen-reader name so the separate [AuthFieldLabel] visual
-/// does not duplicate announcements.
+/// Icon, hint and inline error in one place.
+///
+/// Borderless on purpose: the field is a soft filled chip, so the form reads as
+/// one calm column instead of a grid of boxes. Focus and errors still light up.
+/// [label] is the screen-reader name (the placeholder is the visual hint).
 InputDecoration authDecoration({
   required String hint,
   required IconData icon,
@@ -255,13 +124,39 @@ InputDecoration authDecoration({
   Widget? suffixIcon,
   String? label,
 }) {
+  final radius = BorderRadius.circular(AppRadius.hero - 8);
   return InputDecoration(
     hintText: hint,
     labelText: label,
+    filled: true,
+    fillColor: AppColors.surfaceHigh.withValues(alpha: 0.55),
+    // Walang floating label: ang hint/placeholder ang visual label.
+    floatingLabelBehavior: FloatingLabelBehavior.never,
     prefixIcon: ExcludeSemantics(child: Icon(icon, size: AppIcon.md)),
     suffixIcon: suffixIcon,
     errorText: errorText,
     helperText: helperText,
+    contentPadding: const EdgeInsets.symmetric(
+      horizontal: AppSpace.lg,
+      vertical: AppSpace.lg,
+    ),
+    border: OutlineInputBorder(borderRadius: radius, borderSide: BorderSide.none),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: radius,
+      borderSide: BorderSide.none,
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: radius,
+      borderSide: const BorderSide(color: AppColors.primary, width: 1.4),
+    ),
+    errorBorder: OutlineInputBorder(
+      borderRadius: radius,
+      borderSide: const BorderSide(color: AppColors.red, width: 1.2),
+    ),
+    focusedErrorBorder: OutlineInputBorder(
+      borderRadius: radius,
+      borderSide: const BorderSide(color: AppColors.red, width: 1.4),
+    ),
     errorStyle: AppText.caption.copyWith(fontSize: 11.5, color: AppColors.red),
     helperStyle: AppText.caption.copyWith(
       fontSize: 11.5,
@@ -350,7 +245,7 @@ class _AuthErrorBoxState extends State<AuthErrorBox> {
   }
 }
 
-/// Primary form action — a solid block, not the landing page's pill CTA.
+/// Primary form action â€” a solid block, not the landing page's pill CTA.
 class AuthSubmit extends StatelessWidget {
   const AuthSubmit({
     super.key,
@@ -379,20 +274,140 @@ class AuthSubmit extends StatelessWidget {
             )
           : FittedBox(
               fit: BoxFit.scaleDown,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(label),
-                  const SizedBox(width: AppSpace.sm),
-                  const ExcludeSemantics(
-                    child: Icon(
-                      Icons.arrow_forward_rounded,
-                      size: AppIcon.sm,
-                    ),
-                  ),
-                ],
-              ),
+              child: Text(label),
             ),
+    );
+  }
+}
+
+/// "Continue with Google" â€” ang Google ang gumagawa ng bagong account, kaya
+/// wala nang sign-up form.
+///
+/// [primary] = filled hero CTA (landing). `false` = ghost, para manatiling
+/// malinaw na ang email form ang bida sa sign-in screen. May sariling error
+/// line para magamit sa dalawang screen nang walang extra callback.
+class AuthGoogleButton extends StatefulWidget {
+  const AuthGoogleButton({
+    super.key,
+    required this.onSignedIn,
+    this.primary = true,
+  });
+
+  final VoidCallback onSignedIn;
+  final bool primary;
+
+  @override
+  State<AuthGoogleButton> createState() => _AuthGoogleButtonState();
+}
+
+class _AuthGoogleButtonState extends State<AuthGoogleButton> {
+  bool busy = false;
+  String error = '';
+
+  Future<void> _tap() async {
+    if (busy) return;
+    setState(() {
+      busy = true;
+      error = '';
+    });
+    try {
+      final token = await GoogleAuth.idToken();
+      if (token == null || token.isEmpty) throw StateError('no idToken');
+      await Backend.signInWithGoogle(token);
+      // Success: papalitan na ng bagong screen â€” walang setState pagkatapos.
+      widget.onSignedIn();
+    } on GoogleSignInException catch (e) {
+      debugPrint('Google sign-in: ${e.code} ${e.description}');
+      if (!mounted) return;
+      setState(() {
+        busy = false;
+        if (e.code != GoogleSignInExceptionCode.canceled) {
+          error = 'Google sign-in is not available right now.';
+        }
+      });
+    } on ApiException catch (e) {
+      debugPrint('Google sign-in API: ${e.code} ${e.message}');
+      if (!mounted) return;
+      setState(() {
+        busy = false;
+        error = e.userMessage;
+      });
+    } catch (e) {
+      debugPrint('Google sign-in: $e');
+      if (!mounted) return;
+      setState(() {
+        busy = false;
+        error = 'Google sign-in failed. Try again.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filled = widget.primary && !busy;
+    // Filled: dark ink on the neon gradient. Ghost: white on the plate.
+    final ink = filled ? const Color(0xFF04212A) : AppColors.text;
+    final markBg = filled ? Colors.white.withValues(alpha: 0.92) : AppColors.surfaceHigh;
+    final markBorder = filled ? Colors.transparent : AppColors.border;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        NeonButton(
+          expand: true,
+          glow: widget.primary,
+          outline: !widget.primary,
+          onPressed: busy ? null : _tap,
+          child: busy
+              ? SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: filled ? const Color(0xFF04212A) : AppColors.textDim,
+                  ),
+                )
+              : FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Monochrome "G" â€” walang brand asset, tugma sa palette.
+                      Container(
+                        width: 22,
+                        height: 22,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: markBg,
+                          border: Border.all(color: markBorder),
+                        ),
+                        child: Text(
+                          'G',
+                          style: TextStyle(
+                            fontFamily: 'SpaceGrotesk',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            height: 1,
+                            color: filled ? const Color(0xFF04212A) : AppColors.text,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpace.sm + 2),
+                      Text('Continue with Google', style: TextStyle(color: ink)),
+                    ],
+                  ),
+                ),
+        ),
+        if (error.isNotEmpty) ...[
+          const SizedBox(height: AppSpace.sm),
+          Text(
+            error,
+            textAlign: TextAlign.center,
+            style: AppText.caption.copyWith(color: AppColors.red),
+          ),
+        ],
+      ],
     );
   }
 }

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/screens/landing_screen.dart';
 import 'package:ghosst/sign_in.dart';
-import 'package:ghosst/sign_up.dart';
 import 'package:ghosst/theme.dart';
 
 // The signed-out screens are the first thing a new user sees; a RenderFlex
@@ -20,14 +19,14 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.dark,
-        home: LandingScreen(onSignIn: () {}, onSignUp: () {}),
+        home: LandingScreen(onSignIn: () {}, onGoogleSignedIn: () {}),
       ),
     );
     await tester.pump(const Duration(milliseconds: 900));
 
     expect(find.text('Watch ads.'), findsOneWidget);
-    expect(find.text('Create account'), findsOneWidget);
-    expect(find.text('I already have an account'), findsOneWidget);
+    expect(find.text('Continue with Google'), findsOneWidget);
+    expect(find.text('Sign in with email'), findsOneWidget);
   });
 
   testWidgets('sign in fits a 320px phone', (tester) async {
@@ -36,30 +35,15 @@ void main() {
       MaterialApp(
         theme: AppTheme.dark,
         home: Scaffold(
-          body: SignIn(onSignedIn: () {}, onGoToSignUp: () {}),
+          body: SignIn(onSignedIn: () {}),
         ),
       ),
     );
     await tester.pump();
 
+    expect(find.text('Continue with Google'), findsOneWidget);
     expect(find.text('Sign in'), findsNWidgets(2)); // header + submit
-    expect(find.text('EMAIL'), findsOneWidget);
-    expect(find.text('PASSWORD'), findsOneWidget);
-  });
-
-  testWidgets('sign up fits a 320px phone', (tester) async {
-    phone(tester);
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.dark,
-        home: Scaffold(
-          body: SignUp(onSignedUp: () {}, onGoToSignIn: () {}),
-        ),
-      ),
-    );
-    await tester.pump();
-
-    expect(find.text('Create account'), findsNWidgets(2)); // title + submit
-    expect(find.text('NAME (OPTIONAL)'), findsOneWidget);
+    expect(find.text('Email address'), findsOneWidget);
+    expect(find.text('Password'), findsOneWidget);
   });
 }

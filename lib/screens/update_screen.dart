@@ -25,8 +25,14 @@ class UpdateScreen extends StatelessWidget {
   final Future<void> Function() onRetry;
 
   /// Play's own immediate-update flow when Play reported the update; null on
-  /// the direct flavor (the button opens [updateUrl] instead).
-  final Future<void> Function()? onUpdate;
+  /// the direct flavor (the button opens [updateUrl] instead). False = Play
+  /// refused to drive it, so the button must fall back to the listing.
+  final Future<bool> Function()? onUpdate;
+
+  Future<void> _update() async {
+    final handled = await (onUpdate?.call() ?? Future.value(false));
+    if (!handled) await _openStore();
+  }
 
   Future<void> _openStore() async {
     if (updateUrl.isEmpty) return;
@@ -96,7 +102,7 @@ class UpdateScreen extends StatelessWidget {
                 const SizedBox(height: AppSpace.xl),
                 NeonButton(
                   expand: true,
-                  onPressed: () => (onUpdate ?? _openStore)(),
+                  onPressed: _update,
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,

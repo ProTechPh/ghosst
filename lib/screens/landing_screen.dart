@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../arcade.dart';
+import '../auth_ui.dart';
 import '../premium.dart';
 import '../theme.dart';
 
@@ -12,19 +13,23 @@ class LandingScreen extends StatelessWidget {
   const LandingScreen({
     super.key,
     required this.onSignIn,
-    required this.onSignUp,
+    required this.onGoogleSignedIn,
   });
 
   final VoidCallback onSignIn;
-  final VoidCallback onSignUp;
+  final VoidCallback onGoogleSignedIn;
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        const ArcadeBackdrop(),
-        Positioned.fill(
-          child: SafeArea(
+    // Material ancestor: without it every Text merges into the engine's debug
+    // fallback style (yellow underline) and inherits no sensible defaults.
+    return Material(
+      type: MaterialType.transparency,
+      child: Stack(
+        children: [
+          const ArcadeBackdrop(),
+          Positioned.fill(
+            child: SafeArea(
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 540),
@@ -41,7 +46,17 @@ class LandingScreen extends StatelessWidget {
                       child: _BrandRow(),
                     ),
                     Expanded(
-                      child: SingleChildScrollView(
+                      // Dissolve the last sliver of copy into the CTA dock —
+                      // a hard cut of a half-line reads as a bug, not a cue.
+                      child: ShaderMask(
+                        blendMode: BlendMode.dstIn,
+                        shaderCallback: (rect) => const LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Colors.white, Colors.white, Colors.transparent],
+                          stops: [0, 0.955, 1],
+                        ).createShader(rect),
+                        child: SingleChildScrollView(
                         padding: const EdgeInsets.fromLTRB(
                           AppSpace.xl,
                           AppSpace.xl,
@@ -104,30 +119,44 @@ class LandingScreen extends StatelessWidget {
                           ],
                         ),
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpace.xl,
-                        AppSpace.sm,
-                        AppSpace.xl,
-                        AppSpace.xl,
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          NeonButton(
-                            expand: true,
-                            glow: true,
-                            onPressed: onSignUp,
-                            child: const Text('Create account'),
-                          ),
-                          Center(
-                            child: TextButton(
+                    ),
+                    // CTA dock: a scrim so the scrolling copy fades out
+                    // behind it instead of cutting off mid-sentence.
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            AppColors.bg.withValues(alpha: 0),
+                            AppColors.bg.withValues(alpha: 0.94),
+                            AppColors.bg,
+                          ],
+                          stops: const [0, 0.42, 0.75],
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpace.xl,
+                          AppSpace.xxl,
+                          AppSpace.xl,
+                          AppSpace.xl,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            AuthGoogleButton(onSignedIn: onGoogleSignedIn),
+                            const SizedBox(height: AppSpace.sm),
+                            NeonButton(
+                              expand: true,
+                              outline: true,
+                              glow: false,
                               onPressed: onSignIn,
-                              child: const Text('I already have an account'),
+                              child: const Text('Sign in with email'),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -137,6 +166,7 @@ class LandingScreen extends StatelessWidget {
           ),
         ),
       ],
+      ),
     );
   }
 }

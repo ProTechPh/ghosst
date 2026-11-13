@@ -50,10 +50,14 @@ and rollback. `JWT_SECRET` and `CLOUDINARY_API_SECRET` live in `api/config.php`.
   by the screens and the API layer.
 - `lib/screens/*` — UI; `lib/premium.dart` shared visual primitives; `lib/theme.dart`
   palette, fonts and motion tokens.
-- `cf-ghosst/` was removed. The API is the PHP tree at `C:\laragon\www\api\`:
+- `cf-ghosst/` was removed. The API is the PHP tree at `ghosst-web/api/`
+  (`C:\laragon\www\api\` on this machine):
   `index.php` (router + `ROUTES`), `routes/*` (auth, account, products, keys,
   claims, ads/SSV, uploads, downloads), `lib/*` (http, db, auth, idempotency,
   rewards, cloudinary), `config.php`.
+- `ghosst-web/api/migrate_app_users.php` — one-shot: ang `app_users` ay na-merge
+  na sa website `users` (iisang account). Ang app ay `user_id` = `users.id`
+  (int, pero string ang JSON `id` — `json['id'] as String` sa Dart).
 - `C:\laragon\www\database\mobile_app_schema.sql` + `mobile_app_data.sql` — the
   `app_*` MySQL tables and the one-shot D1 → MySQL data copy.
 - `docs/*.html` — Play-required privacy policy / account-deletion pages.
@@ -88,6 +92,19 @@ and rollback. `JWT_SECRET` and `CLOUDINARY_API_SECRET` live in `api/config.php`.
   `POST /v1/claims` requires an `Idempotency-Key` (PK `(user_id, idem_key)`) —
   replaying it returns the stored response. Never write `coins` or `keys` from
   the client.
+- Accounts are shared with the website (`users`): `T_USERS = 'users'`, `coins` /
+  `is_admin` / `display_name` live there beside `balance` (site money) and
+  `role` (site admin). `password` is bcrypt for new accounts; lumang app hashes
+  ay pbkdf2 at sinusuportahan pa ng `verify_password()` sa API at ng
+  `verify_user_password()` sa `ghosst-web/includes/db_config.php`. Ang site ban
+  (`is_banned`) ay umaabot na rin sa app.
+- Bagong account sa app = **Google** (`lib/services/google_auth.dart` →
+  `POST /v1/auth/google`). Walang sign-up form: `google_upsert_user()` sa
+  `api/lib/auth.php` ang gumagawa ng row (random password, username/referral
+  mula sa Google name) at ang `google_claims()` ang nagbe-verify ng ID token
+  (`aud` = `GOOGLE_CLIENT_ID`). Ang email sign-in ay para sa lumang accounts
+  lang. Don't add a password change/reset inside the app — wala ito sa design;
+  ang website ang may email reset.
 - Product images are Cloudinary URLs uploaded with an **unsigned** preset, so the
   app never holds a secret. Deleting a product destroys its images server-side
   (`CLOUDINARY_API_SECRET` in `api/config.php`) — nothing cleans up uploads that
