@@ -751,6 +751,12 @@ class Backend {
     }
   }
 
-  static String _pick(Map<String, dynamic> m, String camel, [String? snake]) =>
-      (m[camel] ?? (snake == null ? null : m[snake]) ?? '') as String;
+  /// Scalars lang ang bumabalik sa JSON dito, pero hindi lahat string:
+  /// `claimed_by` ay int na (users.id) mula noong app_users -> users merge.
+  /// `.toString()` ang tamang coercion — `as String` ay nagta-throw at
+  /// pinapatumba ang buong listahan.
+  static String _pick(Map<String, dynamic> m, String camel, [String? snake]) {
+    final v = m[camel] ?? (snake == null ? null : m[snake]);
+    return v == null ? '' : v.toString();
+  }
 }

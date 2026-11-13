@@ -148,7 +148,17 @@ class ChatService implements ChatClient {
     if (!_ready) return false;
     try {
       final current = FirebaseAuth.instance.currentUser;
-      if (current != null) {
+      // Ang Firebase uid ay dapat tugma sa backend id: after the app_users ->
+      // users merge the old session still carries the old UUID, and every
+      // write is denied by the rules (data.uid != auth.uid) until re-minted.
+      final me = await Backend.currentUser();
+      final expectedUid = me?.id;
+      if (current != null && expectedUid != null && current.uid != expectedUid) {
+        debugPrint(
+          '[ChatService] uid mismatch ${current.uid} -> $expectedUid, re-minting',
+        );
+      }
+      if (current != null && expectedUid != null && current.uid == expectedUid) {
         // Parallelize: both read from the cached /me payload, but if it's
         // not cached yet they share the same single /me call internally.
         // Running them concurrently still saves the microtask overhead.
@@ -396,11 +406,15 @@ class ChatService implements ChatClient {
     _lastSend = now;
 
     try {
-      // Quick check: kung wala pang Firebase user, sign in muna.
-      // Kung meron na (normal case), skip ang buong ensureSignedIn() —
-      // na-validate na ito sa boot time.
+      // User data: laging cached pagkatapos ng boot, zero network.
+      final user = await Backend.currentUser();
+      if (user == null) return 'Not signed in';
+
+      // Ang Firebase uid ay dapat tugma sa backend id. Kung na-mint pa ito
+      // bago ang app_users -> users merge (UUID pa noon), deny lahat ng write
+      // sa rules — self-heal dito sa halip na hayaang sira ang chat.
       final fbUser = FirebaseAuth.instance.currentUser;
-      if (fbUser == null) {
+      if (fbUser == null || fbUser.uid != user.id) {
         if (!await ensureSignedIn()) return 'Chat unavailable';
       }
 
@@ -418,10 +432,6 @@ class ChatService implements ChatClient {
           return 'You are muted in this chat.';
         }
       }
-
-      // User data: laging cached pagkatapos ng boot, zero network.
-      final user = await Backend.currentUser();
-      if (user == null) return 'Not signed in';
 
       // isAdmin ay cached din — pinagsama na para walang extra await.
       final data = <String, Object?>{
