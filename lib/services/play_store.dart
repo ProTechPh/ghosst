@@ -62,14 +62,28 @@ class PlayStore {
     }
   }
 
-  /// Shows Google Play's full-screen (immediate) update flow. Requires a
-  /// preceding [updateVersionCode]/[checkForUpdate] call in the same session.
-  static Future<void> startImmediateUpdate() async {
-    if (kIsWeb || !Distribution.isPlay) return;
+  /// Shows Google Play's full-screen (immediate) update flow.
+  ///
+  /// Play requires [checkForUpdate] in the same session first — calling
+  /// [performImmediateUpdate] without it is refused, which is why the gate's
+  /// button used to do nothing at all.
+  ///
+  /// Returns false only when Play could not show its own UI (not a Play
+  /// install, no update, or refused); the caller then opens the store listing
+  /// instead of leaving the user stuck.
+  static Future<bool> startImmediateUpdate() async {
+    if (kIsWeb || !Distribution.isPlay) return false;
     try {
-      await InAppUpdate.performImmediateUpdate();
+      final info = await InAppUpdate.checkForUpdate();
+      if (info.updateAvailability != UpdateAvailability.updateAvailable) {
+        return false;
+      }
+      final result = await InAppUpdate.performImmediateUpdate();
+      // success / userDeniedUpdate = Play's own screen appeared and the user
+      // answered it. inAppUpdateFailed = Play never showed anything.
+      return result != AppUpdateResult.inAppUpdateFailed;
     } catch (_) {
-      // The gate screen offers a retry.
+      return false;
     }
   }
 }

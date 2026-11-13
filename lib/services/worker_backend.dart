@@ -59,15 +59,10 @@ class Backend {
   static Future<void> signIn(String email, String password) =>
       _startSession('/auth/login', {'email': email, 'password': password});
 
-  static Future<void> signUp(
-    String email,
-    String password, {
-    String name = '',
-  }) => _startSession('/auth/register', {
-    'email': email,
-    'password': password,
-    if (name.isNotEmpty) 'displayName': name,
-  });
+  /// Google ang ID token; ang server ang nagbe-verify at gumagawa ng account
+  /// kung wala pa sa email.
+  static Future<void> signInWithGoogle(String idToken) =>
+      _startSession('/auth/google', {'idToken': idToken});
 
   static Future<void> _startSession(
     String path,

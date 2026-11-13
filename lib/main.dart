@@ -39,7 +39,6 @@ import 'services/push.dart';
 import 'services/read_store.dart';
 import 'services/security.dart';
 import 'sign_in.dart';
-import 'sign_up.dart';
 import 'theme.dart';
 
 Future<void> main() async {
@@ -243,32 +242,43 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
   Future<void> _checkUpdate() async {
     _lastUpdateCheck = DateTime.now();
 
-    // Play Store first, for Play installs: this is the same full-screen
-    // update flow the store shows. Direct/sideloaded builds can't be asked,
-    // so they fall through to the server's minVersionCode gate.
-    if (Distribution.isPlay) {
-      final playVersion = await PlayStore.updateVersionCode();
-      if (playVersion != null) {
-        if (!mounted) return;
-        setState(() => _playUpdateVersion = playVersion);
-        unawaited(PlayStore.startImmediateUpdate());
-        return;
-      }
-    }
-
+    // Own version first: both gates compare against it and the gate screen
+    // prints it. Skipping this (the old early return) is what showed
+    // "Installed 0".
     try {
       final info = await PackageInfo.fromPlatform();
       // On Android buildNumber is the versionCode (pubspec `+N`).
       final installed = int.tryParse(info.buildNumber) ?? 0;
+      if (mounted && installed > 0) {
+        setState(() => _installedVersion = installed);
+      }
+    } catch (_) {
+      // Fail open: treat as unknown, the server gate still applies.
+    }
+
+    // Play Store next, for Play installs: this is the same full-screen update
+    // flow the store shows. Only when Play's version is actually newer — a
+    // sideloaded or QA build of the same code must not be gated. Direct builds
+    // can't be asked at all and fall through to `minVersionCode`.
+    if (Distribution.isPlay) {
+      final playVersion = await PlayStore.updateVersionCode();
+      if (playVersion != null && playVersion > _installedVersion) {
+        if (!mounted) return;
+        setState(() => _playUpdateVersion = playVersion);
+        // Fire-and-forget: Play's full-screen flow must never stall the splash.
+        // False (Play refused, e.g. not installed by Play) leaves the gate up
+        // and its button falls back to the store listing.
+        PlayStore.startImmediateUpdate().ignore();
+      }
+    }
+
+    try {
       final config = await Backend.appConfig().timeout(
         const Duration(seconds: 6),
         onTimeout: () => null,
       );
       if (!mounted) return;
-      setState(() {
-        _installedVersion = installed;
-        if (config != null) _appConfig = config;
-      });
+      if (config != null) setState(() => _appConfig = config);
     } catch (_) {
       // Fail open.
     }
@@ -319,9 +329,7 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
                       ? PlayStore.webUrl
                       : (config?.updateUrl(isPlay: Distribution.isPlay) ?? ''),
                   onUpdate: playUpdate
-                      ? () async {
-                          await PlayStore.startImmediateUpdate();
-                        }
+                      ? PlayStore.startImmediateUpdate
                       : null,
                   onRetry: _checkUpdate,
                 )
@@ -384,33 +392,17 @@ class _RouterState extends State<Router> {
     if (route == 'sign-in') {
       return SignIn(
         onSignedIn: () => go('home'),
-        onGoToSignUp: () => go('sign-up'),
         onBack: () => go('home'),
       );
     }
-    if (route == 'sign-up') {
-      return SignUp(
-        onSignedUp: () => go('home'),
-        onGoToSignIn: () => go('sign-in'),
-        onBack: () => go('home'),
-      );
-    }
-    return Home(
-      onGoToSignIn: () => go('sign-in'),
-      onGoToSignUp: () => go('sign-up'),
-    );
+    return Home(onGoToSignIn: () => go('sign-in'));
   }
 }
 
 class Home extends StatefulWidget {
-  const Home({
-    super.key,
-    required this.onGoToSignIn,
-    required this.onGoToSignUp,
-  });
+  const Home({super.key, required this.onGoToSignIn});
 
   final VoidCallback onGoToSignIn;
-  final VoidCallback onGoToSignUp;
 
   @override
   State<Home> createState() => _HomeState();
@@ -466,10 +458,11 @@ class _HomeState extends State<Home> {
       return const Center(child: CircularProgressIndicator());
     }
     if (!signedIn) {
-      // Landing page for signed-out users.
+      // Landing page for signed-out users. Google sign-in happens dito mismo,
+      // kaya `_load()` ang magdadala sa HomeShell pagkatapos.
       return LandingScreen(
         onSignIn: widget.onGoToSignIn,
-        onSignUp: widget.onGoToSignUp,
+        onGoogleSignedIn: () => unawaited(_load()),
       );
     }
     return HomeShell(onSignOut: _signOut);

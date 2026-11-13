@@ -9,8 +9,8 @@ the Cloudflare Worker used to serve, so the Flutter code did not change — only
 |---|---|
 | Live API | `https://ghossthub.com/api/v1` |
 | API source | `C:\laragon\www\api\` — deployed to `public_html/api/` (not in this repo) |
-| Database | MySQL `khctcfuv_ghosst` on Hostinger, tables `app_*` |
-| Schema + data | `C:\laragon\www\database\mobile_app_schema.sql`, `mobile_app_data.sql` |
+| Database | MySQL `khctcfuv_ghosst` on Hostinger — accounts sa `users`, ang app data sa `app_*` |
+| Schema + data | `ghosst-web/database/` (dump + `app_announcements.sql`), `api/migrate_app_users.php` |
 | Flutter client | `lib/api/` (Dio) + `lib/services/worker_backend.dart` |
 | Images | Cloudinary (unsigned upload preset `ghosst`) |
 
@@ -19,46 +19,92 @@ this file is the app-side setup.
 
 ## 1. Data model (MySQL)
 
-Eleven `app_*` tables live beside the website's own 36 tables and never touch them:
-`app_users` (email, password hash, coins, is_admin, `web_user_id` → website
-`users.id`), `app_sessions` (refresh tokens, only the SHA-256 is stored),
+Ang accounts ay nasa website table na `users` — iisa na ang account ng app at ng
+site (parehong email/password, parehong `id`). Ang `users` ay may dagdag na
+column para sa app: `coins`, `display_name`, `is_admin`, `is_moderator`,
+`chat_muted`, `muted_until`, `deleted_at`, `announcements_seen_at`,
+`chat_seen_at_ms`. Ang `balance` ay pera ng site; ang `coins` ay app rewards —
+huwag paghalo.
+
+Ang natitirang `app_*` tables ay nasa tabi ng 36 site tables at `users.id` (int)
+ang `user_id` nila: `app_sessions` (refresh tokens, SHA-256 lang ang nakatago),
 `app_products`, `app_product_images`, `app_product_durations`,
-`app_product_files` (the MediaFire link for apk/file products), `app_keys`
+`app_product_files` (MediaFire link ng apk/file products), `app_keys`
 (`UNIQUE(product_id, key_value)`), `app_claims` (`ux_app_claims_owned` makes
 app/file products single-purchase), `app_ad_rewards` (SSV dedupe, PK = AdMob
 `transaction_id`), `app_idempotency` (`idem_key`, PK `(user_id, idem_key)`),
 `app_announcements` (manual banner/push text, 7-day `expires_at`).
 
-Apply the schema files in order, in phpMyAdmin or:
+Bagong DB: i-apply ang `database/mobile_app_schema.sql` tapos
+`app_announcements.sql`. Lumang DB na may `app_users` (walang downtime sa app):
 
-```powershell
-mysql -u khctcfuv_ghost_premium -p khctcfuv_ghosst < database\mobile_app_schema.sql
-mysql -u khctcfuv_ghost_premium -p khctcfuv_ghosst < database\mobile_app_data.sql
-mysql -u khctcfuv_ghost_premium -p khctcfuv_ghosst < database\app_announcements.sql
-```
+1. I-upload lang ang `api/migrate_app_users.php`, tapos
+   `php api/migrate_app_users.php --apply` (schema + data, buhay pa ang
+   lumang `app_users`).
+2. I-upload ang buong bagong `api/` (`T_USERS = 'users'`).
+3. `php api/migrate_app_users.php --apply --retire-app-users` (huling coins sync
+   + rename ng `app_users`).
 
-All three are pure additions (`CREATE TABLE IF NOT EXISTS` + `INSERT`). Re-running
-the data file duplicates rows — it is a one-shot migration of the old D1 data.
-Run `app_announcements.sql` **before** uploading the new `api/`: an app that
-calls `GET /v1/announcements` against a missing table logs a 500 on every
-launch.
+Kumuha muna ng dump bago ang unang `--apply` — hindi na maibabalik ang
+UUID → int. Ang lumang `app_users` ay nire-rename (hindi DROP) para may
+rollback copy, at ang mga na-overwrite na site password ay nasa
+`users_password_backup`.
+
+Kung phpMyAdmin lang ang gamit: `database/mobile_app_schema.sql`,
+`mobile_app_data.sql` (one-shot D1 copy — re-running duplicates rows) at
+`app_announcements.sql`. Run `app_announcements.sql` **before** uploading
+`api/`: an app that calls `GET /v1/announcements` against a missing table logs a
+500 on every launch.
 
 ## 2. Admin
 
 There is no team/console UI. An account becomes admin with one statement:
 
 ```sql
-UPDATE app_users SET is_admin = 1 WHERE email = 'you@example.com';
+UPDATE users SET is_admin = 1 WHERE email = 'you@example.com';
 ```
 
 Sign out and back in afterwards — the app caches `isAdmin` for the session.
-The **Admin** tab appears for admins only.
+The **Admin** tab appears for admins only (`users.role` is the site's own admin
+flag; hindi ito ginagamit ng app).
 
 Coins are server-side only. To hand yourself some for testing:
 
 ```sql
-UPDATE app_users SET coins = 100 WHERE email = 'you@example.com';
+UPDATE users SET coins = 100 WHERE email = 'you@example.com';
 ```
+
+## 2b. Google sign-in (app + web)
+
+Ang bagong account sa app ay gawa ng **Google**; ang email+password ay
+sign-in lang para sa lumang accounts (walang reset sa app). Parehong `users`
+row ang hinahanap ng app at web sa email, kaya isa lang ang account.
+
+1. Google Cloud Console → project `578056640322` (ang may web client ng
+   ghossthub.com) → **APIs & Services → Credentials → Create credentials →
+   OAuth client ID → Android**. Dalawa, parehong release SHA-1
+   (`6B:69:BA:D0:66:86:46:36:EA:20:C7:44:03:DF:EF:D9:C4:6C:75:C5`):
+   - package `com.astrixtech.ghosst` (play flavor)
+   - package `com.astrixtech.ghosst.direct` (direct APK)
+
+   Kung mag-sesideload ka ng debug build, idagdag din ang debug SHA-1
+   (`cd android; ./gradlew signingReport`).
+2. Walang kailangang baguhin sa `google-services.json` — ang Web client ID sa
+   `lib/services/google_auth.dart` (`googleServerClientId`) ang
+   `serverClientId`, at iyon din ang `GOOGLE_CLIENT_ID` sa `api/config.php`.
+   Kapag pinalitan, dapat pareho ang dalawa.
+3. Test: Sign out sa app → **Continue with Google** → dapat pumasok sa Home
+   gamit ang email ng Google account. Ang bagong account ay may random
+   password (hindi alam ng user); ang lumang account ay hindi ginalaw ang
+   password, kaya gumagana pa rin ang email sign-in.
+
+Symptom → sanhi:
+
+| Symptom | Sanhi |
+|---|---|
+| `Google sign-in is not available right now` | Kulang ang Android OAuth client para sa package + SHA-1 (release vs debug), o walang Google Play services |
+| `ApiException: Google sign-in failed` | `aud` ng ID token ay hindi tugma sa `GOOGLE_CLIENT_ID` (magkaibang project ang web client ng app at ng API) |
+| Pumasok pero bagong account na 0 coins | Ibang email ang Google account kaysa sa app account — gamitin ang email sign-in |
 
 ## 3. AdMob
 
@@ -198,10 +244,10 @@ The API base URL defaults to production; point it at a local server with
 
 | Symptom | Likely cause |
 |---|---|
-| Every request `500 internal` | DB unreachable or `app_*` tables missing — check `api/config.php` credentials, then the error log |
+| Every request `500 internal` | DB unreachable or a table/column missing — check `api/config.php` credentials, then the error log |
 | Coins never arrive after a real ad | No `SSV blocked` and no credit line in the error log ⇒ callback URL wrong in AdMob |
 | `401` right after opening the app | Refresh token expired/revoked — sign in again |
-| Admin tab missing | `app_users.is_admin = 0` for that account, or the app still holds the cached session (sign out/in) |
+| Admin tab missing | `users.is_admin = 0` for that account, or the app still holds the cached session (sign out/in) |
 | Store shows no products | Create one in Admin, `active = 1` |
 | Buy app → `Download not configured` | No `app_product_files` row for that product — re-save the link in the Admin edit dialog |
 | Download stuck / `Could not resolve` | MediaFire link invalid or page changed — paste a fresh share link |

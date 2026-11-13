@@ -24,4 +24,21 @@ void main() {
     await tester.pump();
     expect(skipped, isTrue);
   });
+
+  testWidgets('notice switches between Tagalog and English', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(home: NoticeScreen(onSkip: () {})),
+    );
+
+    // Tagalog is the default (the app's audience).
+    expect(find.textContaining('Paalala bago'), findsOneWidget);
+
+    await tester.tap(find.text('EN'));
+    await tester.pump();
+
+    expect(find.textContaining('Please read'), findsOneWidget);
+    expect(find.textContaining('Paalala bago'), findsNothing);
+    // Same handle in both languages.
+    expect(find.text('@SylvieOfficeal'), findsOneWidget);
+  });
 }

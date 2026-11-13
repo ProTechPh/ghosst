@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/premium.dart';
 import 'package:ghosst/screens/splash_screen.dart';
 import 'package:ghosst/sign_in.dart';
-import 'package:ghosst/sign_up.dart';
 import 'package:ghosst/theme.dart';
 
 void main() {
@@ -169,7 +168,7 @@ void main() {
       MaterialApp(
         theme: AppTheme.dark,
         home: Scaffold(
-          body: SignIn(onSignedIn: () {}, onGoToSignUp: () {}),
+          body: SignIn(onSignedIn: () {}),
         ),
       ),
     );
@@ -190,7 +189,7 @@ void main() {
       MaterialApp(
         theme: AppTheme.dark,
         home: Scaffold(
-          body: SignIn(onSignedIn: () {}, onGoToSignUp: () {}),
+          body: SignIn(onSignedIn: () {}),
         ),
       ),
     );
@@ -208,32 +207,6 @@ void main() {
     expect(find.text('Password is required'), findsNothing);
   });
 
-  testWidgets('sign-up enforces the password minimum', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.dark,
-        home: Scaffold(
-          body: SignUp(onSignedUp: () {}, onGoToSignIn: () {}),
-        ),
-      ),
-    );
-    await tester.pump(const Duration(milliseconds: 1500));
-
-    await tester.enterText(find.byType(TextField).at(1), 'user@test.com');
-    await tester.enterText(find.byType(TextField).at(2), 'short');
-    await tester.ensureVisible(
-      find.widgetWithText(NeonButton, 'Create account'),
-    );
-    await tester.pump(); // let the scroll offset hit layout
-    await tester.tap(find.widgetWithText(NeonButton, 'Create account'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-
-    expect(find.text('Use at least 8 characters'), findsOneWidget);
-    expect(find.text('Email is required'), findsNothing);
-    expect(find.text('Minimum 8 characters'), findsNothing); // hint swapped out
-  });
-
   testWidgets('sign-in rejects a password below the 8-character minimum', (
     tester,
   ) async {
@@ -241,7 +214,7 @@ void main() {
       MaterialApp(
         theme: AppTheme.dark,
         home: Scaffold(
-          body: SignIn(onSignedIn: () {}, onGoToSignUp: () {}),
+          body: SignIn(onSignedIn: () {}),
         ),
       ),
     );
