@@ -23,6 +23,7 @@ import 'screens/profile_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/store_screen.dart';
 import 'screens/tamper_screen.dart';
+import 'screens/tutorials_screen.dart';
 import 'screens/update_screen.dart';
 import 'screens/wallet_screen.dart';
 import 'services/ad_service.dart';
@@ -778,22 +779,24 @@ class _HomeShellState extends State<HomeShell> {
         active: tab == 2,
         onGoToStore: () => setState(() => tab = 0),
       ),
+      TutorialsScreen(embedded: true, active: tab == 3),
       ChatScreen(
         embedded: true,
-        active: tab == 3,
+        active: tab == 4,
         isAdmin: isAdmin,
         isModerator: isModerator,
         onUnreadChanged: (count) {
           if (_chatUnread != count) setState(() => _chatUnread = count);
         },
       ),
-      if (isAdmin) AdminScreen(onAnnouncementSent: _refresh, active: tab == 4),
+      if (isAdmin) AdminScreen(onAnnouncementSent: _refresh, active: tab == 5),
     ];
 
     final destinations = <_NavItem>[
       _NavItem(Icons.storefront_outlined, Icons.storefront, 'Store'),
       _NavItem(Icons.play_circle_outline, Icons.play_circle, 'Earn'),
       _NavItem(Icons.shopping_bag_outlined, Icons.shopping_bag, 'Purchases'),
+      _NavItem(Icons.menu_book_outlined, Icons.menu_book, 'Tutorials'),
       _NavItem(Icons.chat_bubble_outline, Icons.chat_bubble, 'Chat'),
       if (isAdmin)
         _NavItem(
@@ -958,7 +961,7 @@ class _HomeShellState extends State<HomeShell> {
             index: safeIndex,
             items: destinations,
             unread: {
-              if (_chatUnread > 0) 3: _chatUnread,
+              if (_chatUnread > 0) 4: _chatUnread,
             },
             onSelected: (i) {
               // Re-tapping the current tab is not a tab switch — it must

@@ -64,18 +64,6 @@ class _StoreScreenState extends State<StoreScreen> {
   /// swap feel laggy.
   bool _switchedShelf = false;
 
-  /// "SCROLL DOWN" cue: the first screen looks complete (featured card +
-  /// tutorials), so nothing told a new user there is more below the fold.
-  /// Hides for good on the first real scroll.
-  bool _scrollHint = true;
-
-  bool _onScroll(ScrollNotification n) {
-    if (_scrollHint && n.metrics.pixels > 12) {
-      setState(() => _scrollHint = false);
-    }
-    return false;
-  }
-
   /// Product ids the signed-in user already bought (repeat buys are disabled
   /// for app-store items — they'd spend coins on a link they already own).
   Set<String> owned = {};
@@ -497,8 +485,7 @@ class _StoreScreenState extends State<StoreScreen> {
     return Stack(
       children: [
         const Positioned.fill(child: IgnorePointer(child: TableSurface())),
-        NotificationListener<ScrollNotification>(
-          onNotification: _onScroll,
+        ScrollDownCue(
           child: RefreshIndicator(
             onRefresh: _load,
             child: ListView(
@@ -833,38 +820,6 @@ class _StoreScreenState extends State<StoreScreen> {
               ),
             ],
           ),
-          ),
-        ),
-        // Scroll cue sits just above the floating nav pill. The scrim keeps it
-        // readable over busy art and reads as UI, not part of the card above.
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          child: IgnorePointer(
-            child: AnimatedOpacity(
-              duration: kMotionStandard,
-              opacity: _scrollHint ? 1 : 0,
-              child: Container(
-                padding: const EdgeInsets.only(
-                  top: AppSpace.huge,
-                  bottom: AppSpace.xl,
-                ),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      AppColors.bg.withValues(alpha: 0),
-                      AppColors.bg.withValues(alpha: 0.88),
-                      AppColors.bg,
-                    ],
-                    stops: const [0, 0.55, 1],
-                  ),
-                ),
-                child: const Center(child: _ScrollDownHint()),
-              ),
-            ),
           ),
         ),
       ],
@@ -1393,94 +1348,6 @@ class _StoreScreenState extends State<StoreScreen> {
               if (isOwned)
                 const Positioned(top: 44, right: 12, child: _OwnedSeal()),
               if (soldOut) const Center(child: _SoldOutStamp()),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Small floating "SCROLL DOWN" pill with a bobbing chevron. Purely a hint —
-/// hidden from screen readers (the list is already announced as scrollable).
-class _ScrollDownHint extends StatefulWidget {
-  const _ScrollDownHint();
-
-  @override
-  State<_ScrollDownHint> createState() => _ScrollDownHintState();
-}
-
-class _ScrollDownHintState extends State<_ScrollDownHint>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1400),
-  );
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _c.value = 0;
-    } else if (!_c.isAnimating) {
-      _c.repeat(reverse: true);
-    }
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ExcludeSemantics(
-      child: AnimatedBuilder(
-        animation: _c,
-        builder: (context, child) => Transform.translate(
-          offset: Offset(0, 3 - 6 * Curves.easeInOut.transform(_c.value)),
-          child: child,
-        ),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpace.md,
-            AppSpace.xs + 2,
-            AppSpace.sm + 2,
-            AppSpace.xs + 2,
-          ),
-          decoration: BoxDecoration(
-            color: AppColors.bgSoft.withValues(alpha: 0.88),
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-            border: Border.all(
-              color: AppColors.primary.withValues(alpha: 0.28),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.18),
-                blurRadius: 18,
-                spreadRadius: -6,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'SCROLL DOWN',
-                style: monoStyle(
-                  fontSize: 9.5,
-                  letterSpacing: 1.8,
-                  color: AppColors.textDim,
-                ),
-              ),
-              const SizedBox(width: AppSpace.xs + 2),
-              const Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: AppIcon.sm,
-                color: AppColors.primary,
-              ),
             ],
           ),
         ),
