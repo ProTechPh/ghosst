@@ -48,12 +48,12 @@ dependencies:
   flutter_secure_storage: ^9.2.4
   in_app_update: ^5.0.0
   crypto: ^3.0.7 # SHA-256 check on downloaded files
-  onesignal_flutter: ^5.7.2
   firebase_core: ^5.1.0
   firebase_auth: ^7.0.1
   cloud_firestore: ^7.1.0
   cached_network_image: ^4.0.6
   google_sign_in: ^7.2.0
+  firebase_messaging: ^17.0.1
 
 dev_dependencies:
   flutter_test:

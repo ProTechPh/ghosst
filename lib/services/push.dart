@@ -1,40 +1,51 @@
-import 'package:onesignal_flutter/onesignal_flutter.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
-/// OneSignal broadcast notifications.
+import 'install_id.dart';
+import 'worker_backend.dart';
+
+/// Novu broadcast notifications, delivered as FCM through the API.
 ///
-/// An empty app id (the default, filled only by `--dart-define`) makes this
-/// whole file inert, so builds without credentials behave exactly as before.
+/// The app holds no secret: it only reports its FCM token, keyed by the
+/// anonymous [InstallId], to `POST /v1/push/register`. Everything here fails
+/// softly, so a missing Firebase app or a dead network never blocks the app.
 class Push {
   Push._();
-
-  // Public app id — safe in the repo. `--dart-define` still wins if set.
-  static const appId = String.fromEnvironment(
-    'ONESIGNAL_APP_ID',
-    defaultValue: 'cb151c2b-07e6-4240-88fe-36905ff390a8',
-  );
-
-  static bool get configured => appId.isNotEmpty;
-
-  static Future<void> init() async {
-    if (!configured) return;
-    try {
-      await OneSignal.initialize(appId);
-    } catch (_) {
-      // A push SDK that cannot start must never block the app.
-    }
-  }
 
   /// Set once the splash (and the launch gates behind it) are done. The
   /// permission dialog must never sit over those screens.
   static bool splashDone = false;
 
-  static bool get canAsk => configured && splashDone;
+  static bool get canAsk => splashDone;
+
+  /// Firebase is already up (`ChatService.init()` runs first): ask for the FCM
+  /// token, hand it to the API, and repeat on every rotation.
+  static Future<void> init() async {
+    try {
+      // shortcut: firebase_messaging 17 points at register()/onRegistered
+      // (Firebase Installation ID) instead; Novu's FCM provider still wants a
+      // registration token. Upgrade when Novu accepts FID targets.
+      // ignore: deprecated_member_use
+      final token = await FirebaseMessaging.instance.getToken();
+      await _register(token);
+      // ignore: deprecated_member_use
+      FirebaseMessaging.instance.onTokenRefresh.listen(_register);
+    } catch (_) {
+      // A push SDK that cannot start must never block the app.
+    }
+  }
+
+  static Future<void> _register(String? token) async {
+    if (token == null || token.isEmpty) return;
+    try {
+      await Backend.registerPush(installId: await InstallId.get(), token: token);
+    } catch (_) {}
+  }
 
   /// Askable only after the splash: see [splashDone].
   static Future<void> requestPermission() async {
     if (!canAsk) return;
     try {
-      await OneSignal.Notifications.requestPermission(true);
+      await FirebaseMessaging.instance.requestPermission();
     } catch (_) {}
   }
 }

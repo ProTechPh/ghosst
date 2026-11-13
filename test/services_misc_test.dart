@@ -28,11 +28,6 @@ void main() {
   });
 
   group('Push', () {
-    test('configured reflects the app id', () {
-      expect(Push.configured, Push.appId.isNotEmpty);
-      expect(Push.appId, isNotEmpty);
-    });
-
     test('canAsk requires splash done', () {
       Push.splashDone = false;
       expect(Push.canAsk, isFalse);

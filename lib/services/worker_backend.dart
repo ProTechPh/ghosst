@@ -460,6 +460,10 @@ class Backend {
     required String body,
   }) => _apiBackend.sendAnnouncement(title: title, body: body);
 
+  /// Anonymous per-device token registration; failure is silent on purpose.
+  static Future<void> registerPush({required String installId, required String token}) =>
+      _apiBackend.registerPush(installId: installId, token: token);
+
   /// History list; a failure reads as "nothing to show", never an error screen.
   static Future<List<Announcement>> announcements() async {
     if (await _session.accessToken() == null) return [];
