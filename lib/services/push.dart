@@ -31,18 +31,25 @@ class Push {
   static Future<void> init() async {
     try {
       FirebaseMessaging.onMessage.listen(handleForeground);
+      // ignore: deprecated_member_use
+      FirebaseMessaging.instance.onTokenRefresh.listen(_register);
+    } catch (_) {
+      // A push SDK that cannot start must never block the app.
+    }
+    await register();
+  }
 
+  /// Re-register after sign-in: the endpoint needs a session, so a cold start
+  /// on the signed-out landing page cannot post a token.
+  static Future<void> register() async {
+    try {
       // shortcut: firebase_messaging 17 points at register()/onRegistered
       // (Firebase Installation ID) instead; Novu's FCM provider still wants a
       // registration token. Upgrade when Novu accepts FID targets.
       // ignore: deprecated_member_use
       final token = await FirebaseMessaging.instance.getToken();
       await _register(token);
-      // ignore: deprecated_member_use
-      FirebaseMessaging.instance.onTokenRefresh.listen(_register);
-    } catch (_) {
-      // A push SDK that cannot start must never block the app.
-    }
+    } catch (_) {}
   }
 
   static Future<void> _register(String? token) async {

@@ -520,6 +520,8 @@ class _HomeShellState extends State<HomeShell> {
     // The shell only exists when signed in and past the launch gates; the
     // request itself waits for the splash to finish.
     unawaited(Push.requestPermission());
+    // Signed-in now, so the token registration may go through.
+    unawaited(Push.register());
     unawaited(
       ChatService.started.then((ready) {
         if (ready) unawaited(ChatService().ensureSignedIn());
