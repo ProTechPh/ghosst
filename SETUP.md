@@ -300,8 +300,9 @@ here is optional: with a blank API key, or on any host other than
    integration exists. Env overrides are `GHOSST_NOVU_*`.
 
 The app registers its token at `POST /v1/push/register` on every launch and on
-every rotation; the endpoint is public so signed-out devices still get
-broadcasts, exactly like the old OneSignal device subscription. It always
+every rotation, and again when the shell mounts after sign-in; the endpoint
+requires a session (a public one was flooded with fake install ids). The server
+also stores the account email as the subscriber label in Novu. It always
 answers `{ok:true}` and logs `push register skipped` / `novu failed` instead of
 failing the request.
 

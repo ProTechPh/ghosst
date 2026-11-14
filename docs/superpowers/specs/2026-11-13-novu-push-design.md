@@ -16,8 +16,9 @@ until they update.
   so the shell reloads and the announcement appears as the in-app banner — same
   end result, no duplicate tray entry. `pushed` in the admin response keeps
   meaning "handed to the sender".
-- No account data to Novu. Subscriber id = the existing anonymous `InstallId`
-  (32 hex, per install), same stance as today's anonymous OneSignal device.
+- Subscriber id = the existing anonymous `InstallId` (32 hex, per install). The
+  account email rides along as the dashboard label (owner request 2026-11-14) so
+  the subscriber list is readable; no coins or purchase data.
 - Fail-open: Novu being down/slow never fails the admin action that fired it.
 - One dashboard for all AstrixTech apps.
 
@@ -45,13 +46,17 @@ until they update.
 
 ## Registration (new)
 
-- App, every launch after Firebase is up: `FirebaseMessaging.instance.getToken()`
-  → `POST /v1/push/register {installId, token}`; `onTokenRefresh` re-posts.
-- Route: `['POST', '#^/v1/push/register$#', 'push_register', 'none']`. No auth:
-  push must also reach the signed-out landing page, exactly like OneSignal did.
+- App, every launch after Firebase is up and again at `HomeShell` mount (signed
+  in): `FirebaseMessaging.instance.getToken()` → `POST /v1/push/register
+  {installId, token}`; `onTokenRefresh` re-posts.
+- Route: `['POST', '#^/v1/push/register$#', 'push_register', 'required']`. Auth
+  is mandatory as of 2026-11-14: with `none` the public URL was flooded with
+  random 32-hex ids (2,119 Novu subscribers in 14 h).
 - Handler (`routes/push.php`) validates `installId ^[0-9a-f]{32}$` and a token of
   100–4096 chars, then makes three Novu calls, each with 3 s/5 s timeouts:
-  1. `POST /v1/subscribers` `{subscriberId: installId}` — 409 = exists, fine.
+  1. `POST /v1/subscribers` `{subscriberId: installId, email: <session email>}`
+     — 409 = exists, then a best-effort `PATCH /v2/subscribers/{id}` for the
+     label, since v1 create does not update an existing row.
   2. `PUT /v1/subscribers/{installId}/credentials`
      `{providerId: "fcm", credentials: {deviceTokens: [token]}}`
      (+ `integrationIdentifier` only when `NOVU_FCM_INTEGRATION` is set).
