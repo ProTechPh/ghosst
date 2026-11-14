@@ -27,4 +27,9 @@ void main() {
     );
     expect(Push.foreground.value, before + 1);
   });
+
+  test('register after sign-in never throws', () async {
+    // No Firebase app and no session in a test: must return quietly.
+    await Push.register();
+  });
 }
