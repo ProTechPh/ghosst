@@ -696,7 +696,7 @@ class _ChatScreenState extends State<ChatScreen> {
               fit: BoxFit.cover,
               width: 28,
               height: 28,
-              errorBuilder: (_, __, ___) => _avatarFallback(letter, mine),
+              errorBuilder: (_, _, _) => _avatarFallback(letter, mine),
             )
           : _avatarFallback(letter, mine),
     );
