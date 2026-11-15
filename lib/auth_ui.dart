@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import 'api/api_exception.dart';
@@ -311,9 +311,10 @@ class _AuthGoogleButtonState extends State<AuthGoogleButton> {
       error = '';
     });
     try {
-      final token = await GoogleAuth.idToken();
+      final res = await GoogleAuth.authenticate();
+      final token = res?.idToken;
       if (token == null || token.isEmpty) throw StateError('no idToken');
-      await Backend.signInWithGoogle(token);
+      await Backend.signInWithGoogle(token, photoUrl: res?.photoUrl);
       // Success: papalitan na ng bagong screen â€” walang setState pagkatapos.
       widget.onSignedIn();
     } on GoogleSignInException catch (e) {

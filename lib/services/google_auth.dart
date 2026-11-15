@@ -10,12 +10,18 @@ import 'package:google_sign_in/google_sign_in.dart';
 const googleServerClientId =
     '578056640322-1lkus4sngk496sn29fqmor6ab13nkgfk.apps.googleusercontent.com';
 
+class GoogleAuthResult {
+  const GoogleAuthResult({required this.idToken, this.photoUrl});
+  final String idToken;
+  final String? photoUrl;
+}
+
 class GoogleAuth {
   static bool _initialized = false;
 
   /// Null kapag walang idToken na ibinigay si Google. Nagta-throw ng
   /// [GoogleSignInException] kapag kinansel o hindi available ang Play services.
-  static Future<String?> idToken() async {
+  static Future<GoogleAuthResult?> authenticate() async {
     final signIn = GoogleSignIn.instance;
     if (!_initialized) {
       await signIn.initialize(serverClientId: googleServerClientId);
@@ -23,11 +29,18 @@ class GoogleAuth {
     }
     final account = await signIn.authenticate();
     final token = account.authentication.idToken;
+    final photo = account.photoUrl;
     try {
       // Ang token lang ang kailangan natin; iwanang malinis para makapili
       // muli ng account sa susunod na sign-in.
       await signIn.signOut();
     } catch (_) {}
-    return token;
+    if (token == null) return null;
+    return GoogleAuthResult(idToken: token, photoUrl: photo);
+  }
+
+  static Future<String?> idToken() async {
+    final res = await authenticate();
+    return res?.idToken;
   }
 }

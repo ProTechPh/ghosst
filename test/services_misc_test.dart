@@ -66,10 +66,17 @@ void main() {
     });
 
     test('AppUser holds its fields', () {
-      const u = AppUser(id: 'u1', email: 'a@b.co', name: 'Ana', chatMuted: true);
+      const u = AppUser(
+        id: 'u1',
+        email: 'a@b.co',
+        name: 'Ana',
+        photoUrl: 'https://example.com/p.jpg',
+        chatMuted: true,
+      );
       expect(u.id, 'u1');
       expect(u.chatMuted, isTrue);
       expect(u.createdAt, '');
+      expect(u.photoUrl, 'https://example.com/p.jpg');
     });
   });
 }

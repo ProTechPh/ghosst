@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../services/chat_service.dart';
 import '../services/read_store.dart';
+import '../services/worker_backend.dart';
 import '../theme.dart';
 
 /// World chat room. Identity is the backend UUID (see [ChatService]); there
@@ -56,6 +57,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _booted = false; // true pagkatapos ng unang snapshot (hindi empty state)
   bool _muted = false;
   String? _myUid;
+  String? _myPhotoUrl;
   ChatMessage? _replyTo;
   bool _loadingMore = false;
   bool _hasMore = true;
@@ -143,6 +145,13 @@ class _ChatScreenState extends State<ChatScreen> {
     unawaited(
       ReadStore.chatSeenAtMs().then((v) {
         if (v > _lastSeenMs) _lastSeenMs = v;
+      }).catchError((_) {}),
+    );
+    unawaited(
+      Backend.photoUrl().then((p) {
+        if (mounted && p != null && p.isNotEmpty) {
+          setState(() => _myPhotoUrl = p);
+        }
       }).catchError((_) {}),
     );
 
@@ -589,7 +598,7 @@ class _ChatScreenState extends State<ChatScreen> {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             if (!mine) ...[
-              _avatar(m.name, mine),
+              _avatar(m.name, mine, photoUrl: m.photoUrl),
               const SizedBox(width: AppSpace.sm),
             ],
             ConstrainedBox(
@@ -604,7 +613,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             if (mine) ...[
               const SizedBox(width: AppSpace.sm),
-              _avatar(m.name, mine),
+              _avatar(m.name, mine, photoUrl: m.photoUrl),
             ],
           ],
         ),
@@ -655,12 +664,16 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  Widget _avatar(String name, bool mine) {
+  Widget _avatar(String name, bool mine, {String? photoUrl}) {
+    final photo = (photoUrl != null && photoUrl.isNotEmpty)
+        ? photoUrl
+        : (mine ? _myPhotoUrl : null);
     final letter = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
     return Container(
       width: 28,
       height: 28,
       alignment: Alignment.center,
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         gradient: mine ? kNeonGradient : null,
         color: mine ? null : AppColors.surfaceHigh,
@@ -677,13 +690,25 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ],
       ),
-      child: Text(
-        letter,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          color: mine ? const Color(0xFF04212A) : AppColors.text,
-        ),
+      child: (photo != null && photo.isNotEmpty)
+          ? Image.network(
+              photo,
+              fit: BoxFit.cover,
+              width: 28,
+              height: 28,
+              errorBuilder: (_, __, ___) => _avatarFallback(letter, mine),
+            )
+          : _avatarFallback(letter, mine),
+    );
+  }
+
+  Widget _avatarFallback(String letter, bool mine) {
+    return Text(
+      letter,
+      style: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w800,
+        color: mine ? const Color(0xFF04212A) : AppColors.text,
       ),
     );
   }
