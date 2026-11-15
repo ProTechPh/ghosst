@@ -1439,7 +1439,7 @@ class _StoreScreenState extends State<StoreScreen> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _leaderboard.length,
-              separatorBuilder: (_, __) => Divider(
+              separatorBuilder: (_, _) => Divider(
                 height: 1,
                 color: AppColors.border.withValues(alpha: 0.5),
               ),

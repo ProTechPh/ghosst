@@ -931,7 +931,7 @@ class _HomeShellState extends State<HomeShell> {
                                   fit: BoxFit.cover,
                                   width: double.infinity,
                                   height: double.infinity,
-                                  errorBuilder: (_, __, ___) => Text(
+                                  errorBuilder: (_, _, _) => Text(
                                     display.trim().isEmpty
                                         ? 'G'
                                         : display.trim()[0].toUpperCase(),

@@ -505,7 +505,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     fit: BoxFit.cover,
                     width: 72,
                     height: 72,
-                    errorBuilder: (_, __, ___) => Text(
+                    errorBuilder: (_, _, _) => Text(
                       _initial,
                       style: AppText.headline.copyWith(
                         fontWeight: FontWeight.w800,
