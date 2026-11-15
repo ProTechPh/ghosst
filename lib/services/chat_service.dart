@@ -18,9 +18,10 @@ class ChatMessage {
     required this.text,
     required this.admin,
     required this.tsMillis,
+    this.photoUrl,
     this.replyName,
     this.replyText,
-  this.replyToId,
+    this.replyToId,
   });
 
   final String id;
@@ -29,6 +30,7 @@ class ChatMessage {
   final String text;
   final bool admin;
   final int tsMillis;
+  final String? photoUrl;
 
   /// Snapshot ng ni-re-reply-ang message (null = hindi reply). Ang pangalan
   /// ay maaaring '' (deleted user) — display-time na 'Deleted user'.
@@ -341,6 +343,7 @@ class ChatService implements ChatClient {
               text: data['text'] as String? ?? '',
               admin: data['admin'] as bool? ?? false,
               tsMillis: tsMillis,
+              photoUrl: data['photoUrl'] as String?,
               replyName: data['replyName'] as String?,
               replyText: data['replyText'] as String?,
               replyToId: data['replyToId'] as String?,
@@ -375,6 +378,7 @@ class ChatService implements ChatClient {
               admin: doc.data()['admin'] as bool? ?? false,
               tsMillis:
                   (doc.data()['ts'] as Timestamp).millisecondsSinceEpoch,
+              photoUrl: doc.data()['photoUrl'] as String?,
               replyName: doc.data()['replyName'] as String?,
               replyText: doc.data()['replyText'] as String?,
               replyToId: doc.data()['replyToId'] as String?,
@@ -441,6 +445,9 @@ class ChatService implements ChatClient {
         'admin': await Backend.isAdmin(),
         'ts': FieldValue.serverTimestamp(),
       };
+      if (user.photoUrl != null && user.photoUrl!.isNotEmpty) {
+        data['photoUrl'] = user.photoUrl;
+      }
       if (replyTo != null) {
         // Snapshot ng quote — hindi doc reference, kaya walang jump-to-message.
         data['replyName'] = replyTo.name;

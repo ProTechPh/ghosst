@@ -498,3 +498,26 @@ String shopPriceLabel(String currency, double price, double priceMax) {
   final low = '$currency${money(price)}';
   return priceMax > price ? '$low – $currency${money(priceMax)}' : low;
 }
+
+/// One leaderboard entry (`GET /v1/leaderboard`).
+class LeaderboardEntry {
+  const LeaderboardEntry({
+    required this.rank,
+    required this.id,
+    required this.name,
+    required this.coins,
+  });
+
+  final int rank;
+  final String id;
+  final String name;
+  final int coins;
+
+  factory LeaderboardEntry.fromJson(Map<String, dynamic> json) =>
+      LeaderboardEntry(
+        rank: (json['rank'] as num?)?.toInt() ?? 0,
+        id: (json['id'] ?? '').toString(),
+        name: json['name'] as String? ?? 'Ghosst member',
+        coins: (json['coins'] as num?)?.toInt() ?? 0,
+      );
+}

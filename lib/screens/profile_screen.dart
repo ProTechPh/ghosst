@@ -494,14 +494,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           child: Container(
             alignment: Alignment.center,
+            clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: AppColors.surface,
               borderRadius: BorderRadius.circular(AppRadius.card - 2),
             ),
-            child: Text(
-              _initial,
-              style: AppText.headline.copyWith(fontWeight: FontWeight.w800),
-            ),
+            child: (_user?.photoUrl != null && _user!.photoUrl!.isNotEmpty)
+                ? Image.network(
+                    _user!.photoUrl!,
+                    fit: BoxFit.cover,
+                    width: 72,
+                    height: 72,
+                    errorBuilder: (_, __, ___) => Text(
+                      _initial,
+                      style: AppText.headline.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  )
+                : Text(
+                    _initial,
+                    style: AppText.headline.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
           ),
         ),
         const SizedBox(width: AppSpace.lg),

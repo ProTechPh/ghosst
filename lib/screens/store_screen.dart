@@ -50,6 +50,10 @@ class _StoreScreenState extends State<StoreScreen> {
   List<ShopGame> premium = const [];
   bool _premiumLoading = true;
 
+  /// Top coin holders leaderboard from backend API.
+  List<LeaderboardEntry> _leaderboard = const [];
+  bool _leaderboardLoading = true;
+
   /// Latest tutorials from the website CMS — shown on the home shelf.
   List<Tutorial> _tutorials = const [];
   Map<String, int> stock = {};
@@ -182,6 +186,7 @@ class _StoreScreenState extends State<StoreScreen> {
     // never blocks or fails the store.
     unawaited(_loadPremium());
     unawaited(_loadTutorials());
+    unawaited(_loadLeaderboard());
     if (!silent) {
       setState(() {
         loading = true;
@@ -230,6 +235,20 @@ class _StoreScreenState extends State<StoreScreen> {
     final list = await Backend.tutorials();
     if (!mounted || list.isEmpty) return;
     setState(() => _tutorials = list);
+  }
+
+  /// Top coin holders leaderboard from backend API.
+  Future<void> _loadLeaderboard() async {
+    try {
+      final list = await Backend.leaderboard();
+      if (!mounted) return;
+      setState(() {
+        _leaderboard = list;
+        _leaderboardLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _leaderboardLoading = false);
+    }
   }
 
   void _openTutorials() {
@@ -778,6 +797,9 @@ class _StoreScreenState extends State<StoreScreen> {
                 ),
                 const SizedBox(height: AppSpace.xl),
               ],
+
+              // ---- top coin holders leaderboard ----------------------------
+              if (!isPremium) _leaderboardSection(),
 
               // ---- premium shelf (website games, pay on site) ---------------
               if (isPremium) ..._premiumBody(),
@@ -1352,6 +1374,173 @@ class _StoreScreenState extends State<StoreScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _leaderboardSection() {
+    if (_leaderboard.isEmpty && !_leaderboardLoading) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: AppSpace.lg),
+        ScrollReveal(
+          child: SectionHeader(
+            title: 'Top Coin Holders',
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppColors.gold.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+                border: Border.all(
+                  color: AppColors.gold.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.emoji_events_rounded,
+                    size: 13,
+                    color: AppColors.gold,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'LEADERBOARD',
+                    style: AppText.label.copyWith(
+                      fontSize: 9.5,
+                      letterSpacing: 1.5,
+                      color: AppColors.gold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpace.xs),
+        Text(
+          'Top members with the most earned coins',
+          style: AppText.caption,
+        ),
+        const SizedBox(height: AppSpace.md),
+        if (_leaderboardLoading)
+          const Skeleton(height: 140, radius: AppRadius.card)
+        else
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(AppRadius.card),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _leaderboard.length,
+              separatorBuilder: (_, __) => Divider(
+                height: 1,
+                color: AppColors.border.withValues(alpha: 0.5),
+              ),
+              itemBuilder: (context, i) {
+                final entry = _leaderboard[i];
+                final isTop1 = entry.rank == 1;
+                final isTop2 = entry.rank == 2;
+                final isTop3 = entry.rank == 3;
+
+                final rankColor = isTop1
+                    ? AppColors.gold
+                    : isTop2
+                        ? const Color(0xFFC0C0C0)
+                        : isTop3
+                            ? const Color(0xFFCD7F32)
+                            : AppColors.textDim;
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpace.lg,
+                    vertical: AppSpace.md,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 28,
+                        height: 28,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: (isTop1 || isTop2 || isTop3)
+                              ? rankColor.withValues(alpha: 0.15)
+                              : AppColors.surfaceHigh,
+                          border: Border.all(
+                            color: (isTop1 || isTop2 || isTop3)
+                                ? rankColor.withValues(alpha: 0.5)
+                                : Colors.transparent,
+                          ),
+                        ),
+                        child: isTop1
+                            ? const Icon(
+                                Icons.workspace_premium_rounded,
+                                size: 16,
+                                color: AppColors.gold,
+                              )
+                            : Text(
+                                '#${entry.rank}',
+                                style: AppText.label.copyWith(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: rankColor,
+                                ),
+                              ),
+                      ),
+                      const SizedBox(width: AppSpace.md),
+                      Expanded(
+                        child: Text(
+                          entry.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppText.body.copyWith(
+                            fontWeight: (isTop1 || isTop2 || isTop3)
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            color: AppColors.text,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpace.sm),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.gold.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const CoinMedallion(size: 14),
+                            const SizedBox(width: 5),
+                            Text(
+                              groupDigits(entry.coins),
+                              style: monoStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.gold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+      ],
     );
   }
 }

@@ -490,6 +490,7 @@ class _HomeShellState extends State<HomeShell> {
   bool isModerator = false;
   bool loading = true;
   String display = '';
+  String? photoUrl;
   int _chatUnread = 0;
   int _announcementUnread = 0;
   List<Announcement> _announcements = const [];
@@ -651,14 +652,10 @@ class _HomeShellState extends State<HomeShell> {
           : 'The server did not respond.';
       return coins;
     });
-    final results = await Future.wait<Object>([
+    final results = await Future.wait<Object?>([
       Backend.isAdmin().catchError((_) => false),
       Backend.isModerator().catchError((_) => false),
-      Backend.currentUser()
-          .then(
-            (u) => (u?.name.isNotEmpty ?? false) ? u!.name : (u?.email ?? ''),
-          )
-          .catchError((_) => ''),
+      Backend.currentUser().catchError((_) => null),
     ]);
     balance = await coinsFuture;
     // A failed banner fetch just means no banner; it must not break the shell.
@@ -680,11 +677,17 @@ class _HomeShellState extends State<HomeShell> {
       fresh = null;
     }
     if (!mounted) return;
+    final currentUser = results[2] as AppUser?;
+    final userDisplay = (currentUser?.name.isNotEmpty ?? false)
+        ? currentUser!.name
+        : (currentUser?.email ?? '');
+    final userPhoto = currentUser?.photoUrl;
     setState(() {
       coins = balance;
       isAdmin = results[0] as bool;
       isModerator = results[1] as bool;
-      display = results[2] as String;
+      display = userDisplay;
+      photoUrl = userPhoto;
       announcement = fresh;
       _announcements = allAnnouncements;
       _announcementUnread = unreadAnnouncements;
@@ -897,38 +900,54 @@ class _HomeShellState extends State<HomeShell> {
                     // 48dp hit area, 36dp visual.
                     width: kTouchMin,
                     height: kTouchMin,
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        gradient: kNeonGradient,
-                        borderRadius: BorderRadius.circular(AppRadius.input),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.22),
-                            blurRadius: 16,
-                            spreadRadius: -4,
-                          ),
-                        ],
-                      ),
+                    child: Center(
                       child: Container(
-                        width: 33,
-                        height: 33,
-                        alignment: Alignment.center,
+                        width: 36,
+                        height: 36,
+                        padding: const EdgeInsets.all(1.5),
                         decoration: BoxDecoration(
-                          color: AppColors.bg,
-                          borderRadius: BorderRadius.circular(
-                            AppRadius.input - 2,
-                          ),
+                          gradient: kNeonGradient,
+                          borderRadius: BorderRadius.circular(AppRadius.input),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primary.withValues(alpha: 0.22),
+                              blurRadius: 16,
+                              spreadRadius: -4,
+                            ),
+                          ],
                         ),
-                        child: Text(
-                          display.trim().isEmpty
-                              ? 'G'
-                              : display.trim()[0].toUpperCase(),
-                          style: AppText.subtitle.copyWith(
-                            fontWeight: FontWeight.w800,
+                        child: Container(
+                          alignment: Alignment.center,
+                          clipBehavior: Clip.antiAlias,
+                          decoration: BoxDecoration(
+                            color: AppColors.bg,
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.input - 1.5,
+                            ),
                           ),
+                          child: (photoUrl != null && photoUrl!.isNotEmpty)
+                              ? Image.network(
+                                  photoUrl!,
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  errorBuilder: (_, __, ___) => Text(
+                                    display.trim().isEmpty
+                                        ? 'G'
+                                        : display.trim()[0].toUpperCase(),
+                                    style: AppText.subtitle.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                )
+                              : Text(
+                                  display.trim().isEmpty
+                                      ? 'G'
+                                      : display.trim()[0].toUpperCase(),
+                                  style: AppText.subtitle.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
                         ),
                       ),
                     ),

@@ -11,6 +11,10 @@ import 'api_exception.dart';
 /// One Dio, three interceptors: auth (401 → single-flight refresh) → retry
 /// (429/5xx/network) → log. Everything thrown at call sites is an [ApiException].
 class ApiClient {
+  static const String userAgent =
+      'Mozilla/5.0 (Linux; Android 10; K; Mobile) AppleWebKit/537.36 '
+      '(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36 GhosstApp/1.0';
+
   ApiClient({required SessionStore session, Dio? dio})
       : _session = session,
         _dio = dio ?? Dio() {
@@ -22,7 +26,10 @@ class ApiClient {
       contentType: Headers.jsonContentType,
       responseType: ResponseType.json,
       validateStatus: (status) => status != null && status >= 200 && status < 300,
-      headers: const {'accept': 'application/json'},
+      headers: const {
+        'accept': 'application/json',
+        'user-agent': userAgent,
+      },
     );
 
     _dio.interceptors.add(_AuthInterceptor(
@@ -34,6 +41,10 @@ class ApiClient {
           baseUrl: ApiConfig.baseUrl,
           connectTimeout: ApiConfig.connectTimeout,
           receiveTimeout: ApiConfig.receiveTimeout,
+          headers: const {
+            'accept': 'application/json',
+            'user-agent': userAgent,
+          },
         ),
       ),
       session: _session,

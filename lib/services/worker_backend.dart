@@ -16,6 +16,7 @@ class AppUser {
     required this.id,
     required this.email,
     required this.name,
+    this.photoUrl,
     this.createdAt = '',
     this.chatMuted = false,
   });
@@ -23,6 +24,7 @@ class AppUser {
   final String id;
   final String email;
   final String name;
+  final String? photoUrl;
   final String createdAt;
   final bool chatMuted;
 }
@@ -61,8 +63,19 @@ class Backend {
 
   /// Google ang ID token; ang server ang nagbe-verify at gumagawa ng account
   /// kung wala pa sa email.
-  static Future<void> signInWithGoogle(String idToken) =>
-      _startSession('/auth/google', {'idToken': idToken});
+  static Future<void> signInWithGoogle(String idToken, {String? photoUrl}) async {
+    await _startSession('/auth/google', {'idToken': idToken});
+    if (photoUrl != null && photoUrl.trim().isNotEmpty) {
+      await _session.writePhotoUrl(photoUrl.trim());
+    }
+  }
+
+  static Future<String?> photoUrl() => _session.photoUrl();
+
+  static Future<void> setPhotoUrl(String? url) async {
+    await _session.writePhotoUrl(url);
+    _user = null;
+  }
 
   static Future<void> _startSession(
     String path,
@@ -106,10 +119,12 @@ class Backend {
     _isAdmin = u['isAdmin'] as bool? ?? false;
     _isModerator = u['isModerator'] as bool? ?? false;
     _chatMuted = u['chatMuted'] as bool? ?? false;
+    final photo = await _session.photoUrl();
     return AppUser(
       id: u['id'] as String,
       email: u['email'] as String? ?? '',
       name: u['displayName'] as String? ?? '',
+      photoUrl: photo,
       createdAt: u['createdAt'] as String? ?? '',
       chatMuted: _chatMuted!,
     );
@@ -260,6 +275,21 @@ class Backend {
       return [
         for (final t in list)
           if (t is Map<String, dynamic>) Tutorial.fromJson(t),
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Top coin holders leaderboard (`GET /v1/leaderboard`).
+  static Future<List<LeaderboardEntry>> leaderboard() async {
+    try {
+      final res = await _api.get('/leaderboard');
+      final list = res['leaderboard'];
+      if (list is! List) return const [];
+      return [
+        for (final item in list)
+          if (item is Map<String, dynamic>) LeaderboardEntry.fromJson(item),
       ];
     } catch (_) {
       return const [];
