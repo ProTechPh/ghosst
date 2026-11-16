@@ -313,6 +313,11 @@ dismissible banner for 7 days). Pushes are fire-and-forget: a failed send is
 logged (`novu failed: ...` / `push skipped: host/key`) and never fails the
 admin request.
 
+The same card lists the live announcements with a **Delete** that hides one
+from the banner and the history (`DELETE /v1/admin/announcements/:id`, a soft
+delete to `active = 0` — the row is kept, and a notification already delivered
+cannot be recalled).
+
 With the app in the foreground Android shows no tray notification; the shell
 reloads on the message instead, so the announcement appears as the banner.
 

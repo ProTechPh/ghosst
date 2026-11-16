@@ -15,7 +15,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key, this.onAnnouncementSent, this.active = true});
 
-  /// Lets the shell refresh its banner right after a post.
+  /// Lets the shell refresh its banner right after a post or a take-down.
   final VoidCallback? onAnnouncementSent;
 
   /// True when this tab is the selected one. The muted list reloads on
@@ -54,6 +54,10 @@ class _AdminScreenState extends State<AdminScreen> {
   /// banner for 7 days.
   final announcementTitle = TextEditingController();
   final announcementBody = TextEditingController();
+
+  /// The announcements still live in the app (same list the banner and the
+  /// history read), newest first — ang take-down dito nangyayari.
+  List<Announcement> announcements = const [];
 
   /// The "New product" form stays collapsed behind its toggle button so the
   /// panel doesn't run into one long wall of fields.
@@ -385,6 +389,7 @@ class _AdminScreenState extends State<AdminScreen> {
         Backend.mutedUsers().catchError((_) => <MutedUser>[]),
         Backend.bannedWords().catchError((_) => <BannedWord>[]),
         Backend.moderation().catchError((_) => const Moderation()),
+        Backend.announcements().catchError((_) => <Announcement>[]),
       ]);
       if (!mounted) return;
       final mod = results[4] as Moderation;
@@ -393,6 +398,7 @@ class _AdminScreenState extends State<AdminScreen> {
         keys = results[1] as List<StockEntry>;
         mutedUsers = results[2] as List<MutedUser>;
         bannedWords = results[3] as List<BannedWord>;
+        announcements = results[5] as List<Announcement>;
         blockLinks = mod.blockLinks;
         muteHoursInput.text = '${mod.muteHours}';
         loading = false;
@@ -505,9 +511,68 @@ class _AdminScreenState extends State<AdminScreen> {
         announcementBody.clear();
       });
       widget.onAnnouncementSent?.call();
+      await _reloadAnnouncements();
     } catch (e) {
       if (!mounted) return;
       setState(() => message = 'Announcement failed: $e');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  /// Live announcements only, best-effort — the panel works without it.
+  Future<void> _reloadAnnouncements() async {
+    try {
+      final rows = await Backend.announcements();
+      if (mounted) setState(() => announcements = rows);
+    } catch (_) {}
+  }
+
+  /// Takes an announcement down from the banner and the history. The row is
+  /// kept server-side; a push that already reached a phone stays there.
+  Future<void> _deleteAnnouncement(Announcement a) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete "${a.title}"?'),
+        content: const Text(
+          'It disappears from the banner and the announcement history for '
+          'everyone. A push that already reached a phone stays there.',
+          style: TextStyle(
+            color: AppColors.textDim,
+            fontSize: 13.5,
+            height: 1.45,
+          ),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    setState(() {
+      busy = true;
+      message = '';
+    });
+    try {
+      await Backend.deleteAnnouncement(a.id);
+      await _reloadAnnouncements();
+      if (!mounted) return;
+      setState(() => message = 'Deleted "${a.title}".');
+      // Same shell refresh as a post: the banner may be showing this one.
+      widget.onAnnouncementSent?.call();
+    } catch (e) {
+      if (mounted) setState(() => message = 'Delete failed: $e');
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -2190,6 +2255,54 @@ class _AdminScreenState extends State<AdminScreen> {
                   ],
                 ),
               ),
+              const SizedBox(height: 18),
+              SectionLabel('Live announcements (${announcements.length})'),
+              if (announcements.isEmpty)
+                const Text(
+                  'No live announcements.',
+                  style: TextStyle(color: AppColors.textDim),
+                ),
+              for (final a in announcements)
+                GlowCard(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              a.title,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              a.createdAt.isEmpty
+                                  ? a.body
+                                  : '${a.createdAt} · ${a.body}',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.textDim,
+                                fontSize: 12.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      TextButton(
+                        onPressed: busy ? null : () => _deleteAnnouncement(a),
+                        child: const Text('Delete'),
+                      ),
+                    ],
+                  ),
+                ),
               const SizedBox(height: 18),
             ],
           ),

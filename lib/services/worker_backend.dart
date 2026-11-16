@@ -490,6 +490,9 @@ class Backend {
     required String body,
   }) => _apiBackend.sendAnnouncement(title: title, body: body);
 
+  static Future<void> deleteAnnouncement(String id) =>
+      _apiBackend.deleteAnnouncement(id);
+
   /// Anonymous per-device token registration; failure is silent on purpose.
   /// The endpoint needs a session, so a signed-out launch skips the call.
   static Future<void> registerPush({required String installId, required String token}) async {
