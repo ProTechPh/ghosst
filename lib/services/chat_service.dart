@@ -466,10 +466,27 @@ class ChatService implements ChatClient {
         // Kusang i-si-sync ito kapag stable ang koneksyon.
         debugPrint('[ChatService] add() server ack timed out — write queued in local cache');
       } catch (e) {
+        // Fallback 1: Kung may photoUrl pero hindi pa updated ang Firestore rules
+        // sa Firebase console, tanggalin ang photoUrl at subukan ulit para hindi mag-error ang send.
+        if (data.containsKey('photoUrl')) {
+          data.remove('photoUrl');
+          try {
+            await FirebaseFirestore.instance
+                .collection('world_chat')
+                .add(data)
+                .timeout(const Duration(seconds: 4));
+            return null;
+          } on TimeoutException {
+            debugPrint('[ChatService] retry without photoUrl timed out — write queued');
+            return null;
+          } catch (_) {
+            // Tuloy sa reply fallbacks kung may replyTo
+          }
+        }
+
         if (replyTo != null) {
-          // Fallback 1: Kung hindi pa updated ang Firestore rules sa Firebase console
+          // Fallback 2: Kung hindi pa updated ang Firestore rules sa Firebase console
           // (kulang ng `replyToId` sa hasOnly), tanggalin ang `replyToId` at subukan ulit.
-          // Mananatili pa rin ang reply quote preview (replyName + replyText)!
           if (data.containsKey('replyToId')) {
             data.remove('replyToId');
             try {
@@ -482,7 +499,7 @@ class ChatService implements ChatClient {
               debugPrint('[ChatService] retry without replyToId timed out — write queued');
               return null;
             } catch (_) {
-              // Fallback 2: Tanggalin lahat ng reply fields kung lumang-luma pa ang rules
+              // Fallback 3: Tanggalin lahat ng reply fields kung lumang-luma pa ang rules
               data.remove('replyName');
               data.remove('replyText');
               try {
