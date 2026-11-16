@@ -212,6 +212,11 @@ class ApiBackend {
     return res['pushed'] as bool? ?? false;
   }
 
+  /// Hides an announcement from the banner and the history (soft delete —
+  /// a push that already went out stays on the phone).
+  Future<void> deleteAnnouncement(String id) =>
+      _api.delete('/admin/announcements/$id');
+
   /// Anonymous per-device FCM token registration; the server owns Novu.
   Future<void> registerPush({required String installId, required String token}) async {
     await _api.post('/push/register', data: {'installId': installId, 'token': token});

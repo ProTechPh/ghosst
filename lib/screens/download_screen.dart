@@ -21,7 +21,8 @@ enum _State { idle, running, done, failed }
 ///
 /// Resolves the MediaFire link, streams the file with a live progress bar,
 /// then offers **Install** (APK) / **Open** (other files). No share/URL
-/// export — the raw link never leaves this screen.
+/// export — the raw link never leaves this screen. A secondary button is
+/// always on screen to hand the share page to the browser instead.
 class DownloadScreen extends StatefulWidget {
   const DownloadScreen({
     super.key,
@@ -264,6 +265,20 @@ class _DownloadScreenState extends State<DownloadScreen> {
     setState(() => _state = _State.idle);
   }
 
+  /// Last-resort escape hatch when the in-app transfer fails: open the
+  /// product's share page in the browser so the buyer isn't stuck. Same
+  /// pattern as the installer fallback in `tamper_screen.dart`.
+  Future<void> _openMediaFire() async {
+    final opened = await launchUrl(
+      Uri.parse(widget.url),
+      mode: LaunchMode.externalApplication,
+    ).catchError((_) => false);
+    if (opened || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Could not open the link in a browser.')),
+    );
+  }
+
   Future<void> _openFile() async {
     final f = _file;
     if (f == null) return;
@@ -358,12 +373,32 @@ class _DownloadScreenState extends State<DownloadScreen> {
               if (_state == _State.running) _progressView(p, pct),
               if (_state == _State.done) _doneView(),
               if (_state == _State.failed) _failedView(),
+
+              // ---- browser fallback, available in every state --------------
+              const SizedBox(height: 10),
+              _browserFallback(),
             ],
           ),
         ],
       ),
     );
   }
+
+  /// Escape hatch for a transfer that never starts or dies mid-way: hand the
+  /// product's share page to the browser. Always visible so the buyer has a
+  /// second path before anything fails. Same pattern as the installer
+  /// fallback in `tamper_screen.dart`.
+  Widget _browserFallback() => IslandButton(
+    expand: true,
+    dense: true,
+    outline: true,
+    glow: false,
+    label: MediaFire.needsResolve(widget.url)
+        ? 'Download from MediaFire'
+        : 'Open download link in browser',
+    icon: Icons.open_in_browser_rounded,
+    onPressed: _openMediaFire,
+  );
 
   // ---- states ----------------------------------------------------------
 
