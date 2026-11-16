@@ -377,6 +377,21 @@ class _DownloadScreenState extends State<DownloadScreen> {
               // ---- browser fallback, available in every state --------------
               const SizedBox(height: 10),
               _browserFallback(),
+
+              // ---- why a download still fails (carrier/DNS, not the app) ---
+              if (_state == _State.failed) ...[
+                const SizedBox(height: 14),
+                const Text(
+                  'Still not working? Turn off VPN or Private DNS, then try '
+                  'again — or switch to mobile data.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppColors.textDim,
+                    fontSize: 12.5,
+                    height: 1.5,
+                  ),
+                ),
+              ],
             ],
           ),
         ],
