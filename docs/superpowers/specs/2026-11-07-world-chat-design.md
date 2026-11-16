@@ -108,12 +108,14 @@ service cloud.firestore {
         && request.resource.data.admin == (request.auth.token.admin == true)
         && request.auth.token.muted == false
         && request.resource.data.ts == request.time
+        && (!('photoUrl' in request.resource.data)
+          || (request.resource.data.photoUrl is string && request.resource.data.photoUrl.size() <= 1000))
         && (!('replyName' in request.resource.data)
           || (request.resource.data.replyName is string
             && request.resource.data.replyName.size() <= 40
             && request.resource.data.replyText is string
             && request.resource.data.replyText.size() <= 200))
-        && request.resource.data.keys().hasOnly(['uid', 'name', 'text', 'ts', 'admin', 'replyName', 'replyText']);
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'text', 'ts', 'admin', 'replyName', 'replyText', 'photoUrl']);
       allow update, delete: if false;
     }
   }
