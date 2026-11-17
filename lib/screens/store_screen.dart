@@ -992,24 +992,30 @@ class _StoreScreenState extends State<StoreScreen> {
 
   // ---- product imagery -------------------------------------------------
   Widget _cover(Product p, {int width = 800}) {
-    if (p.imageIds.isNotEmpty) {
-      return Semantics(
-        label: p.name,
-        image: true,
-        child: CachedNetworkImage(
-        imageUrl: Backend.imageUrl(p.imageIds.first, width: width),
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: double.infinity,
-        // Decode at display size — full-res Cloudinary images made scroll
-        // hold 800px+ bitmaps for 200px cards.
-        memCacheWidth: width,
-        memCacheHeight: (width * 0.7).round(),
-        errorWidget: (context, url, e) => _coverFallback(p),
+    if (p.imageIds.isEmpty) return _coverFallback(p);
+    final url = Backend.imageUrl(p.imageIds.first, width: width);
+    // The art is square or 4:3 but the cards are 5:7, so `cover` chopped the
+    // logos and baked-in poster text. Show the whole image `contain`-ed over a
+    // dimmed cover copy: nothing is cropped and the card still fills edge to
+    // edge. Decode at display width so scrolling holds no full-res bitmaps.
+    Widget image(BoxFit fit) => CachedNetworkImage(
+      imageUrl: url,
+      fit: fit,
+      memCacheWidth: width,
+      errorWidget: (context, url, e) => _coverFallback(p),
+    );
+    return Semantics(
+      label: p.name,
+      image: true,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          image(BoxFit.cover),
+          ColoredBox(color: AppColors.bg.withValues(alpha: .45)),
+          image(BoxFit.contain),
+        ],
       ),
-      );
-    }
-    return _coverFallback(p);
+    );
   }
 
   Widget _coverFallback(Product p) {
