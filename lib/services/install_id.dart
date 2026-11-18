@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Stable per-install id sent as SSV `custom_data`.
@@ -17,10 +18,18 @@ class InstallId {
   );
 
   static String? _cached;
+  static Future<String>? _pending;
 
   /// Never throws: keystore trouble falls back to a per-session id, which
   /// still paces this run (the account hash always applies anyway).
-  static Future<String> get() async {
+  ///
+  /// Single-flight: the startup, sign-in, push and ad paths call this at the
+  /// same time. On a first run each one used to generate its own id before
+  /// the first write landed, so one device became several Novu subscribers
+  /// sharing one FCM token — and got the same notification once per copy.
+  static Future<String> get() => _pending ??= _load();
+
+  static Future<String> _load() async {
     final cached = _cached;
     if (cached != null) return cached;
     try {
@@ -32,6 +41,12 @@ class InstallId {
     } catch (_) {
       return _cached = _randomHex();
     }
+  }
+
+  @visibleForTesting
+  static void resetForTest() {
+    _cached = null;
+    _pending = null;
   }
 
   static String _randomHex() {
