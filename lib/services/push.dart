@@ -52,11 +52,21 @@ class Push {
     } catch (_) {}
   }
 
-  static Future<void> _register(String? token) async {
-    if (token == null || token.isEmpty) return;
-    try {
-      await Backend.registerPush(installId: await InstallId.get(), token: token);
-    } catch (_) {}
+  /// Chained, never concurrent: Novu's credentials endpoint adds a second
+  /// channel row when two registrations for one subscriber overlap, and a
+  /// duplicated channel means the same notification delivered twice.
+  static Future<void> _queue = Future<void>.value();
+
+  static Future<void> _register(String? token) {
+    if (token == null || token.isEmpty) return Future<void>.value();
+    return _queue = _queue.then((_) async {
+      try {
+        await Backend.registerPush(
+          installId: await InstallId.get(),
+          token: token,
+        );
+      } catch (_) {}
+    });
   }
 
   /// Askable only after the splash: see [splashDone].
