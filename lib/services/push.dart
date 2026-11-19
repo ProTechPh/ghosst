@@ -1,16 +1,14 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
-import 'install_id.dart';
-import 'worker_backend.dart';
-
-/// Novu broadcast notifications, delivered as FCM through the API.
-///
-/// The app holds no secret: it only reports its FCM token, keyed by the
-/// anonymous [InstallId], to `POST /v1/push/register`. Everything here fails
-/// softly, so a missing Firebase app or a dead network never blocks the app.
+/// Broadcast notifications straight from FCM: the device joins one topic and
+/// the API sends a single topic message. No token, install id or API call —
+/// membership lives in FCM and the SDK persists/retries it itself.
 class Push {
   Push._();
+
+  /// Must match `PUSH_TOPIC` in `ghosst-web/api/config.php`.
+  static const String topic = 'ghosst';
 
   /// Set once the splash (and the launch gates behind it) are done. The
   /// permission dialog must never sit over those screens.
@@ -26,47 +24,22 @@ class Push {
   static void handleForeground(RemoteMessage _) => foreground.value++;
 
   /// Firebase is already up (`ChatService.init()` runs first): listen for
-  /// foreground messages, ask for the FCM token, hand it to the API, and
-  /// repeat on every rotation.
+  /// foreground messages, then join the broadcast topic.
   static Future<void> init() async {
     try {
       FirebaseMessaging.onMessage.listen(handleForeground);
-      // ignore: deprecated_member_use
-      FirebaseMessaging.instance.onTokenRefresh.listen(_register);
     } catch (_) {
       // A push SDK that cannot start must never block the app.
     }
     await register();
   }
 
-  /// Re-register after sign-in: the endpoint needs a session, so a cold start
-  /// on the signed-out landing page cannot post a token.
+  /// Idempotent, so the shell repeats it after sign-in in case [init] ran
+  /// before Firebase was ready.
   static Future<void> register() async {
     try {
-      // shortcut: firebase_messaging 17 points at register()/onRegistered
-      // (Firebase Installation ID) instead; Novu's FCM provider still wants a
-      // registration token. Upgrade when Novu accepts FID targets.
-      // ignore: deprecated_member_use
-      final token = await FirebaseMessaging.instance.getToken();
-      await _register(token);
+      await FirebaseMessaging.instance.subscribeToTopic(topic);
     } catch (_) {}
-  }
-
-  /// Chained, never concurrent: Novu's credentials endpoint adds a second
-  /// channel row when two registrations for one subscriber overlap, and a
-  /// duplicated channel means the same notification delivered twice.
-  static Future<void> _queue = Future<void>.value();
-
-  static Future<void> _register(String? token) {
-    if (token == null || token.isEmpty) return Future<void>.value();
-    return _queue = _queue.then((_) async {
-      try {
-        await Backend.registerPush(
-          installId: await InstallId.get(),
-          token: token,
-        );
-      } catch (_) {}
-    });
   }
 
   /// Askable only after the splash: see [splashDone].

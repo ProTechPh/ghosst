@@ -23,10 +23,10 @@ class InstallId {
   /// Never throws: keystore trouble falls back to a per-session id, which
   /// still paces this run (the account hash always applies anyway).
   ///
-  /// Single-flight: the startup, sign-in, push and ad paths call this at the
-  /// same time. On a first run each one used to generate its own id before
-  /// the first write landed, so one device became several Novu subscribers
-  /// sharing one FCM token — and got the same notification once per copy.
+  /// Single-flight: the startup, sign-in and ad paths call this at the same
+  /// time. On a first run each one used to generate its own id before the
+  /// first write landed, so one phone paced the SSV rewards against several
+  /// ids.
   static Future<String> get() => _pending ??= _load();
 
   static Future<String> _load() async {

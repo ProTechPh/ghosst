@@ -150,18 +150,21 @@ App ID (already in the manifest): `ca-app-pub-7791552060229072~1855578469`.
    after the signature check, before the credit):
    - `ad_unit` must sit under our publisher id `ca-app-pub-7791552060229072/`.
      A callback signed for anyone else's ad unit is their ad, not ours.
-   - 50 paid rewards per account per rolling 24 h, minimum 15 s apart. The
-     30 s cooldown in the app is client-side and dies with an APK patch.
+   - Minimum 15 s between paid rewards. The 30 s cooldown in the app is
+     client-side and dies with an APK patch. There is no daily cap any more
+     (1,000,000 ceiling only) — see `REWARD_MAX_PER_DAY` in
+     `api/lib/rewards.php`; restore a real number there if farming returns.
    - One reward per `transaction_id`; callbacks without one are keyed by their
      signed payload hash, so a replay cannot create a second credit.
    - A single reward is capped at 1000 coins, so a wrong AdMob reward setting
      cannot mint a balance.
    - Pacing is keyed on `sha256(lower(email))`, so deleting and re-registering
-     the same address does not reset the daily cap.
-   - 60 rewards per install per window, keyed on the hashed install id the app
-     sends as SSV `custom_data` (`lib/services/install_id.dart`). Rejections log
-     `SSV blocked: device_cap`. The column is created lazily on the first
-     callback; `database/mobile_app_ad_device.sql` adds it plus the index.
+     the same address does not reset the 15 s gap.
+   - The per-install cap is off with the daily cap above (same 1,000,000
+     ceiling), still keyed on the hashed install id the app sends as SSV
+     `custom_data` (`lib/services/install_id.dart`). The column is created
+     lazily on the first callback; `database/mobile_app_ad_device.sql` adds it
+     plus the index.
    Each rejection writes `SSV blocked: <reason>` — check the error log before
    assuming the callback URL is wrong.
 
@@ -223,10 +226,11 @@ The API base URL defaults to production; point it at a local server with
 - [ ] `JWT_SECRET` in `api/config.php` changed from the placeholder.
 - [ ] `CLOUDINARY_API_SECRET` set, so deleting a product also deletes its
       images.
-- [ ] Push notifications: `NOVU_API_URL` / `NOVU_API_KEY` set in
-      `api/config.php` on the host (blank = push silently off), and
-      `android/app/google-services.json` present with **both** packages
-      (`com.astrixtech.ghosst`, `com.astrixtech.ghosst.direct`). See §8.
+- [ ] Push notifications: `FIREBASE_SA_EMAIL` / `FIREBASE_SA_KEY` set in
+      `api/config.php` on the host (blank = push silently off; same service
+      account as chat), and `android/app/google-services.json` present with
+      **both** packages (`com.astrixtech.ghosst`,
+      `com.astrixtech.ghosst.direct`). See §8.
 - [ ] Each published APK/file product has a working MediaFire link.
 - [ ] Play upload uses the `N` from CI: every push to `main` auto-bumps
       `version: x.y.z+N` in `pubspec.yaml` and publishes `vX.Y.Z+N`. Bump
@@ -254,7 +258,7 @@ The API base URL defaults to production; point it at a local server with
 | APK won't install | `REQUEST_INSTALL_PACKAGES` missing from the manifest (play flavor) or "install unknown apps" disabled for Ghosst |
 | Release: `Missing classes detected while running R8` | Copy the `-dontwarn` lines from `build/app/outputs/mapping/<variant>/missing_rules.txt` into `android/app/proguard-rules.pro` |
 | Release: `Gradle build daemon disappeared` | `org.gradle.jvmargs` too big for the machine — 4G works on 12 GB Windows and 7 GB CI runners |
-| No notification arrives | `google-services.json` missing or its package name does not match the installed flavor; Firebase service-account JSON not in Novu → Integrations → FCM; `ghosst-broadcast` not published; subscriber missing from topic `ghosst` (check Novu → Subscribers); `NOVU_API_KEY` blank or a dev host (skipped on purpose) |
+| No notification arrives | `google-services.json` missing or its package name does not match the installed flavor; the device is not on a build that calls `subscribeToTopic('ghosst')` (older releases used Novu); `FIREBASE_SA_EMAIL` / `FIREBASE_SA_KEY` blank, or that service account lacks the Firebase Cloud Messaging API Admin role; dev host (skipped on purpose). Check the PHP log for `push skipped:` / `push failed:` |
 
 ## 7. Trust boundaries
 
@@ -272,46 +276,44 @@ The API base URL defaults to production; point it at a local server with
 - A modded client can only send requests faster; idempotency + the locked
   transaction make that useless.
 
-## 8. Push notifications (Novu self-hosted + FCM)
+## 8. Push notifications (FCM topic, direct)
 
-The API broadcasts through the Novu instance at `novu.astrixstudio.tech`; the
-app only reports its FCM token, keyed by the anonymous install id. Everything
-here is optional: with a blank API key, or on any host other than
-`ghossthub.com`, `push_send()` logs `push skipped` and the feature is off.
+The API broadcasts straight to FCM (HTTP v1, one `messages:send` topic message);
+there is no Novu hop and no subscriber table. The app joins the topic itself with
+`FirebaseMessaging.subscribeToTopic('ghosst')`, so nothing is posted on launch
+and no FCM token is stored anywhere. Everything here is optional: with a blank
+service account, or on any host other than `ghossthub.com`, `push_send()` logs
+`push skipped` and the feature is off.
 
 **One-time setup (owner):**
 
 1. Firebase project `ghosst-6f23e` → Project settings → Service accounts →
-   Generate new private key. Upload **that** JSON (not `google-services.json`,
-   which is rejected — wrong file) to Novu → Integrations → **FCM (Android)**.
+   Generate new private key. Paste its `private_key` (base64 of the PEM) into
+   `FIREBASE_SA_KEY` and its email into `FIREBASE_SA_EMAIL` in `api/config.php`
+   — the same service account the world chat already uses. No upload to any
+   third party. The account needs the Firebase Cloud Messaging API Admin role
+   (`roles/firebase.messagingAdmin`), which the default
+   `firebase-adminsdk-*` account has.
 2. Firebase: one project holds **both** Android apps,
    `com.astrixtech.ghosst` and `com.astrixtech.ghosst.direct` (the `direct`
    flavor has `applicationIdSuffix = .direct`). Their merged config is checked
    in at `android/app/google-services.json`; the Google Services plugin is in
    `android/settings.gradle.kts` + `android/app/build.gradle.kts`. Both apps
    must stay registered or the build fails for that flavor.
-3. Novu → Workflows → new workflow `ghosst-broadcast` with one **Push** step:
-   subject `{{payload.title}}`, body `{{payload.body}}`. Publish it in the
-   environment the API key belongs to.
-4. Topic `ghosst` is created by the first device registration; no manual step.
-5. In `api/config.php` on Hostinger set `NOVU_API_URL` (the Novu API root),
-   `NOVU_API_KEY` (Novu → API keys, never committed), `NOVU_WORKFLOW_ID` and
-   `NOVU_TOPIC_KEY`; optional `NOVU_FCM_INTEGRATION` when more than one FCM
-   integration exists. Env overrides are `GHOSST_NOVU_*`.
-
-The app registers its token at `POST /v1/push/register` on every launch and on
-every rotation, and again when the shell mounts after sign-in; the endpoint
-requires a session (a public one was flooded with fake install ids). The server
-also stores the account email as the subscriber label in Novu. It always
-answers `{ok:true}` and logs `push register skipped` / `novu failed` instead of
-failing the request.
+3. Nothing to create in the FCM console: `PUSH_TOPIC` (default `ghosst`) is
+   created implicitly by the first subscription. `GHOSST_PUSH_TOPIC` overrides
+   it — if you change it, change `Push.topic` in `lib/services/push.dart` too,
+   or the broadcasts reach nobody.
+4. Push starts working only on a build that calls `subscribeToTopic()`. Devices
+   still on the old Novu build get nothing: there is no bridge, by design.
 
 **What sends a notification:** a new product (`products_create`), a sold-out
 duration pool getting keys again (`keys_add`, silent on top-ups), and the
 Admin tab's announcement card (saved in `app_announcements`, shown as a
 dismissible banner for 7 days). Pushes are fire-and-forget: a failed send is
-logged (`novu failed: ...` / `push skipped: host/key`) and never fails the
-admin request.
+logged (`push failed: ...` / `push skipped: host/config`) and never fails the
+admin request. The FCM token comes from the existing service account via
+`_firebase_access_token()` (`api/lib/firebase.php`), cached per request.
 
 The same card lists the live announcements with a **Delete** that hides one
 from the banner and the history (`DELETE /v1/admin/announcements/:id`, a soft
@@ -320,7 +322,3 @@ cannot be recalled).
 
 With the app in the foreground Android shows no tray notification; the shell
 reloads on the message instead, so the announcement appears as the banner.
-
-Before the first broadcast, confirm `NOVU_API_URL` is the API and not the
-dashboard: `<NOVU_API_URL>/v1/subscribers` with the `ApiKey` header must answer
-JSON (401 without the header is fine), not an HTML page.

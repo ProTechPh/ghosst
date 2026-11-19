@@ -39,8 +39,7 @@ void main() {
     test('concurrent callers all get the same id', () async {
       InstallId.resetForTest();
       // No secure storage in a test, so every call falls back to a random id —
-      // the same first-run race that used to make one phone register several
-      // Novu subscribers with one FCM token.
+      // the same first-run race that used to hand one phone several ids.
       final ids = await Future.wait(List.generate(3, (_) => InstallId.get()));
       expect(ids.toSet(), hasLength(1));
       expect(ids.first, matches(RegExp(r'^[0-9a-f]{32}$')));
