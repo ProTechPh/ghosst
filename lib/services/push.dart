@@ -1,5 +1,6 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 /// Broadcast notifications straight from FCM: the device joins one topic and
 /// the API sends a single topic message. No token, install id or API call —
@@ -17,11 +18,26 @@ class Push {
   static bool get canAsk => splashDone;
 
   /// Bumped for every push that lands while the app is in front. Android does
-  /// not show FCM `notification` messages in that state, so the shell listens
-  /// here and reloads the announcement banner instead of a tray notification.
+  /// not display FCM `notification` messages there, so [handleForeground]
+  /// posts the tray notification itself and the shell listens here to reload
+  /// the announcement banner.
   static final ValueNotifier<int> foreground = ValueNotifier<int>(0);
 
-  static void handleForeground(RemoteMessage _) => foreground.value++;
+  /// MainActivity posts the tray notification for foreground messages; the
+  /// plugin-free channel keeps the app free of a notification dependency.
+  static const MethodChannel _notify =
+      MethodChannel('com.astrixtech.ghosst/notify');
+
+  static void handleForeground(RemoteMessage message) {
+    foreground.value++;
+    final notification = message.notification;
+    final title = notification?.title ?? '';
+    final body = notification?.body ?? '';
+    if (title.isEmpty && body.isEmpty) return;
+    _notify
+        .invokeMethod<void>('show', {'title': title, 'body': body})
+        .catchError((_) {});
+  }
 
   /// Firebase is already up (`ChatService.init()` runs first): listen for
   /// foreground messages, then join the broadcast topic.
