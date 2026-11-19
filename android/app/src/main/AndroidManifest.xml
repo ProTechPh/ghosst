@@ -32,6 +32,21 @@
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-7791552060229072~1855578469"/>
+        <!-- Background FCM notifications are posted by the FCM SDK, not by
+             MainActivity. Without this they land on a generic "Miscellaneous"
+             channel with default importance; MainActivity creates the same
+             channel on startup so both paths share one branded, high-importance
+             channel. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="ghosst_push"/>
+        <!-- FCM falls back to the app icon for the status bar, and an adaptive
+             launcher icon renders blank there (alpha channel only). A
+             monochrome glyph keeps the ticker icon visible while the app is
+             closed; the card still shows the app logo. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -1,7 +1,12 @@
 package com.astrixtech.ghosst
 
 import android.app.DownloadManager
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.graphics.drawable.Icon
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
@@ -56,6 +61,24 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
+        // Foreground FCM messages: Android never shows those (the app is in
+        // front), so Dart hands the title/body here and this posts the tray
+        // notification itself. Same channel as the background FCM ones.
+        ensurePushChannel()
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, NOTIFY_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "show" -> {
+                        showPush(
+                            call.argument<String>("title") ?: "",
+                            call.argument<String>("body") ?: "",
+                        )
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
         // Official-APK download: the system DownloadManager writes straight
         // into public Downloads, so the file outlives this (modified) copy
         // and survives the uninstall step of the recovery flow.
@@ -103,6 +126,61 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    // ------------------------------------------------------------- push
+
+    // The channel has to exist before either FCM (background) or this
+    // activity (foreground) posts, otherwise Android falls back to a generic
+    // "Miscellaneous" channel with default importance. No-op below API 26.
+    private fun ensurePushChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val nm = getSystemService(NotificationManager::class.java) ?: return
+        if (nm.getNotificationChannel(PUSH_CHANNEL_ID) != null) return
+        nm.createNotificationChannel(
+            NotificationChannel(
+                PUSH_CHANNEL_ID,
+                "Announcements",
+                NotificationManager.IMPORTANCE_HIGH,
+            ),
+        )
+    }
+
+    private fun showPush(title: String, body: String) {
+        val nm = getSystemService(NotificationManager::class.java) ?: return
+        ensurePushChannel()
+
+        val open = PendingIntent.getActivity(
+            this,
+            0,
+            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, PUSH_CHANNEL_ID)
+        } else {
+            @Suppress("DEPRECATION")
+            Notification.Builder(this)
+        }
+        val notification = builder
+            // Status bar needs a monochrome glyph (the adaptive launcher icon
+            // renders blank there); the app logo goes on the card itself.
+            .setSmallIcon(R.drawable.ic_notification)
+            .setLargeIcon(Icon.createWithResource(this, applicationInfo.icon))
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(Notification.BigTextStyle().bigText(body))
+            .setAutoCancel(true)
+            .setContentIntent(open)
+            .build()
+
+        try {
+            // Unique id per push, so two announcements stack instead of the
+            // second replacing the first.
+            nm.notify(System.currentTimeMillis().toInt(), notification)
+        } catch (_: SecurityException) {
+            // POST_NOTIFICATIONS revoked: nothing to show, never crash.
+        }
     }
 
     // ------------------------------------------------------- play integrity
@@ -339,6 +417,8 @@ class MainActivity : FlutterActivity() {
         private const val CHANNEL = "com.astrixtech.ghosst/security"
         private const val BUILD_CHANNEL = "com.astrixtech.ghosst/build"
         private const val APK_CHANNEL = "com.astrixtech.ghosst/apk"
+        private const val NOTIFY_CHANNEL = "com.astrixtech.ghosst/notify"
+        private const val PUSH_CHANNEL_ID = "ghosst_push"
         private const val APK_MIME = "application/vnd.android.package-archive"
 
         // Cloud project that owns the Play Integrity API (`ghosst-6f23e`,
