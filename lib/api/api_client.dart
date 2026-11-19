@@ -11,9 +11,10 @@ import 'api_exception.dart';
 /// One Dio, three interceptors: auth (401 → single-flight refresh) → retry
 /// (429/5xx/network) → log. Everything thrown at call sites is an [ApiException].
 class ApiClient {
-  static const String userAgent =
-      'Mozilla/5.0 (Linux; Android 10; K; Mobile) AppleWebKit/537.36 '
-      '(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36 GhosstApp/1.0';
+  // Hindi browser ang app (Dart HttpClient): isang spoofed Chrome UA ang
+  // nagti-trigger ng Cloudflare Browser Integrity Check na nagbibigay ng 403
+  // "Attention Required" sa flagged/mobile-data IPs. Malinaw na app UA = skip.
+  static const String userAgent = 'GhosstApp/1.0 (Android)';
 
   ApiClient({required SessionStore session, Dio? dio})
       : _session = session,
