@@ -521,7 +521,8 @@ class _HomeShellState extends State<HomeShell> {
     // The shell only exists when signed in and past the launch gates; the
     // request itself waits for the splash to finish.
     unawaited(Push.requestPermission());
-    // Signed-in now, so the token registration may go through.
+    // Second try at the FCM topic subscription, in case Push.init() ran before
+    // Firebase (or the network) was ready.
     unawaited(Push.register());
     unawaited(
       ChatService.started.then((ready) {

@@ -493,13 +493,6 @@ class Backend {
   static Future<void> deleteAnnouncement(String id) =>
       _apiBackend.deleteAnnouncement(id);
 
-  /// Anonymous per-device token registration; failure is silent on purpose.
-  /// The endpoint needs a session, so a signed-out launch skips the call.
-  static Future<void> registerPush({required String installId, required String token}) async {
-    if (await _session.accessToken() == null) return;
-    await _apiBackend.registerPush(installId: installId, token: token);
-  }
-
   /// History list; a failure reads as "nothing to show", never an error screen.
   static Future<List<Announcement>> announcements() async {
     if (await _session.accessToken() == null) return [];

@@ -83,8 +83,9 @@ and rollback. `JWT_SECRET` and `CLOUDINARY_API_SECRET` live in `api/config.php`.
   in AdMob is wrong, and the code cannot fix that. The handler also rejects
   foreign ad units and paces rewards by a keyed hash of the account email
   (`api/lib/rewards.php`) *and* of the install id (`custom_data`), so neither
-  a fresh address nor a fresh account on the same phone resets the daily cap; a
-  logged `SSV blocked:` is that guard, not the URL.
+  a fresh address nor a fresh account on the same phone resets the per-request
+  gap; the daily cap is intentionally off (1M ceiling), so a logged
+  `SSV blocked:` is the pace guard, not the URL.
 - Coins/stock are mutated only inside the API. A claim runs in a MySQL
   transaction that locks the user row first (`SELECT coins ... FOR UPDATE`), then
   picks the oldest available key, refunding if stock ran out. Lock the user row
