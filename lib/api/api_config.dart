@@ -3,13 +3,24 @@
 class ApiConfig {
   const ApiConfig._();
 
-  // `mail.` points straight at the origin (Cloudflare DNS-only) so the app
-  // never hits Cloudflare's automatic DDoS L7, which returned 403 to shared
-  // mobile-data IPs on the old `ghossthub.com/api/v1` hostname.
+  // Primary: the origin host (Cloudflare DNS-only) so the app bypasses
+  // Cloudflare's automatic DDoS L7, which returned 403 to shared mobile-data
+  // IPs on the proxied hostname. Some ISP resolvers fail to resolve this
+  // subdomain, so ApiClient falls back to [fallbackBaseUrl] on a transport
+  // failure (DNS/connection) — never on an HTTP status.
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: 'https://mail.ghossthub.com/api/v1',
   );
+
+  // Fallback: the Cloudflare-proxied host, which resolves on every network.
+  // Used only when the primary cannot be reached at the transport level.
+  static const String fallbackBaseUrl = String.fromEnvironment(
+    'API_FALLBACK_URL',
+    defaultValue: 'https://ghossthub.com/api/v1',
+  );
+
+  static List<String> get baseUrls => [baseUrl, fallbackBaseUrl];
 
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 30);

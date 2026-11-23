@@ -10,6 +10,14 @@ import 'api_exception.dart';
 
 /// One Dio, three interceptors: auth (401 → single-flight refresh) → retry
 /// (429/5xx/network) → log. Everything thrown at call sites is an [ApiException].
+///
+/// Two hosts are kept: [ApiConfig.baseUrl] (origin, bypasses Cloudflare's DDoS
+/// L7) is tried first; if it cannot be reached at the transport level (DNS
+/// resolution failure, refused connection, timeout) the request is retried
+/// against [ApiConfig.fallbackBaseUrl] (the Cloudflare-proxied host, which
+/// resolves on every network). An HTTP status from the primary — including a
+/// 403 — is never retried against the fallback, so a mobile-data IP that the
+/// origin serves fine never accidentally lands on Cloudflare's WAF.
 class ApiClient {
   // Hindi browser ang app (Dart HttpClient): isang spoofed Chrome UA ang
   // nagti-trigger ng Cloudflare Browser Integrity Check na nagbibigay ng 403
@@ -17,56 +25,79 @@ class ApiClient {
   static const String userAgent = 'GhosstApp/1.0 (Android)';
 
   ApiClient({required SessionStore session, Dio? dio})
-      : _session = session,
-        _dio = dio ?? Dio() {
-    _dio.options = BaseOptions(
-      baseUrl: ApiConfig.baseUrl,
-      connectTimeout: ApiConfig.connectTimeout,
-      receiveTimeout: ApiConfig.receiveTimeout,
-      sendTimeout: ApiConfig.sendTimeout,
-      contentType: Headers.jsonContentType,
-      responseType: ResponseType.json,
-      validateStatus: (status) => status != null && status >= 200 && status < 300,
-      headers: const {
-        'accept': 'application/json',
-        'user-agent': userAgent,
-      },
-    );
-
-    _dio.interceptors.add(_AuthInterceptor(
-      dio: _dio,
-      // Separate bare client: refreshing through _dio would queue the refresh
-      // error behind the very onError handler that is awaiting it.
-      refreshDio: Dio(
-        BaseOptions(
-          baseUrl: ApiConfig.baseUrl,
-          connectTimeout: ApiConfig.connectTimeout,
-          receiveTimeout: ApiConfig.receiveTimeout,
-          headers: const {
-            'accept': 'application/json',
-            'user-agent': userAgent,
-          },
-        ),
+      : _session = session {
+    _primary = dio ?? _buildDio(ApiConfig.baseUrl);
+    if (dio != null) {
+      _primary.options = BaseOptions(
+        baseUrl: ApiConfig.baseUrl,
+        connectTimeout: ApiConfig.connectTimeout,
+        receiveTimeout: ApiConfig.receiveTimeout,
+        sendTimeout: ApiConfig.sendTimeout,
+        contentType: Headers.jsonContentType,
+        responseType: ResponseType.json,
+        validateStatus: (status) => status != null && status >= 200 && status < 300,
+        headers: const {
+          'accept': 'application/json',
+          'user-agent': userAgent,
+        },
+      );
+    }
+    // refreshDio is a bare client pointed at the primary host; refreshing
+    // through _primary would queue the refresh behind the very onError handler
+    // that is awaiting it.
+    _refreshDio = Dio(
+      BaseOptions(
+        baseUrl: ApiConfig.baseUrl,
+        connectTimeout: ApiConfig.connectTimeout,
+        receiveTimeout: ApiConfig.receiveTimeout,
+        headers: const {
+          'accept': 'application/json',
+          'user-agent': userAgent,
+        },
       ),
+    );
+    _primary.interceptors.add(_AuthInterceptor(
+      dio: _primary,
+      refreshDio: _refreshDio,
       session: _session,
       onSignedOut: () => onSignedOut?.call(),
     ));
-    _dio.interceptors.add(_RetryInterceptor(_dio));
+    _primary.interceptors.add(_RetryInterceptor(_primary));
     if (kDebugMode) {
-      _dio.interceptors.add(LogInterceptor(requestBody: true, responseBody: true));
+      _primary.interceptors.add(LogInterceptor(requestBody: true, responseBody: true));
+    }
+
+    _fallback = (dio != null)
+        ? _primary
+        : _buildDio(ApiConfig.fallbackBaseUrl);
+    if (dio == null) {
+      _fallback.interceptors.add(_AuthInterceptor(
+        dio: _fallback,
+        refreshDio: _refreshDio,
+        session: _session,
+        onSignedOut: () => onSignedOut?.call(),
+      ));
+      _fallback.interceptors.add(_RetryInterceptor(_fallback));
+      if (kDebugMode) {
+        _fallback.interceptors.add(LogInterceptor(requestBody: true, responseBody: true));
+      }
     }
   }
 
-  final Dio _dio;
   final SessionStore _session;
+  late final Dio _primary;
+  late final Dio _fallback;
+  late final Dio _refreshDio;
 
   /// Set once by main.dart: fires when the refresh token is dead and the UI
   /// must return to the sign-in screen.
   void Function()? onSignedOut;
 
+  Dio get raw => _primary;
+
   Future<Map<String, dynamic>> get(String path, {Map<String, dynamic>? query}) =>
-      _run(() async {
-        final res = await _dio.get<dynamic>(path, queryParameters: query);
+      _run((dio) async {
+        final res = await dio.get<dynamic>(path, queryParameters: query);
         return _asMap(res.data);
       });
 
@@ -76,8 +107,8 @@ class ApiClient {
     Map<String, String>? headers,
     Map<String, dynamic>? extra,
   }) =>
-      _run(() async {
-        final res = await _dio.post<dynamic>(
+      _run((dio) async {
+        final res = await dio.post<dynamic>(
           path,
           data: data,
           options: Options(headers: headers, extra: extra),
@@ -85,18 +116,16 @@ class ApiClient {
         return _asMap(res.data);
       });
 
-  Future<Map<String, dynamic>> patch(String path, {Object? data}) => _run(() async {
-        final res = await _dio.patch<dynamic>(path, data: data);
+  Future<Map<String, dynamic>> patch(String path, {Object? data}) =>
+      _run((dio) async {
+        final res = await dio.patch<dynamic>(path, data: data);
         return _asMap(res.data);
       });
 
   Future<void> delete(String path, {Object? data, Map<String, dynamic>? query}) =>
-      _run(() async {
-        await _dio.delete<dynamic>(path, data: data, queryParameters: query);
+      _run((dio) async {
+        await dio.delete<dynamic>(path, data: data, queryParameters: query);
       });
-
-  /// Exposed for call sites that need cancel tokens or upload progress.
-  Dio get raw => _dio;
 
   Future<void> logout() async {
     try {
@@ -108,12 +137,45 @@ class ApiClient {
     }
   }
 
-  Future<T> _run<T>(Future<T> Function() op) async {
+  Future<T> _run<T>(Future<T> Function(Dio dio) op) async {
     try {
-      return await op();
+      return await op(_primary);
     } on DioException catch (e) {
+      if (_isTransportFailure(e)) {
+        try {
+          return await op(_fallback);
+        } on DioException catch (e2) {
+          throw ApiException.fromDio(e2);
+        }
+      }
       throw ApiException.fromDio(e);
     }
+  }
+
+  static bool _isTransportFailure(DioException e) =>
+      e.response == null ||
+      e.type == DioExceptionType.connectionError ||
+      e.type == DioExceptionType.connectionTimeout ||
+      e.type == DioExceptionType.sendTimeout ||
+      e.type == DioExceptionType.receiveTimeout ||
+      e.type == DioExceptionType.unknown;
+
+  static Dio _buildDio(String baseUrl) {
+    final dio = Dio();
+    dio.options = BaseOptions(
+      baseUrl: baseUrl,
+      connectTimeout: ApiConfig.connectTimeout,
+      receiveTimeout: ApiConfig.receiveTimeout,
+      sendTimeout: ApiConfig.sendTimeout,
+      contentType: Headers.jsonContentType,
+      responseType: ResponseType.json,
+      validateStatus: (status) => status != null && status >= 200 && status < 300,
+      headers: const {
+        'accept': 'application/json',
+        'user-agent': userAgent,
+      },
+    );
+    return dio;
   }
 
   static Map<String, dynamic> _asMap(dynamic data) =>
