@@ -40,7 +40,10 @@ class ApiException implements Exception {
 
   /// What the user reads. Short, calm, never a stack trace.
   String get userMessage => switch (kind) {
-        ApiErrorKind.network => 'No internet connection. Try again.',
+        ApiErrorKind.network =>
+          'No internet connection. If this keeps happening, set your '
+          'Private DNS to one.one.one.one (Cloudflare) or install the '
+          'Warp VPN app, then try again.',
         ApiErrorKind.timeout => 'The response is taking too long. Try again.',
         ApiErrorKind.unauthorized => 'Your session has expired. Sign in again.',
         ApiErrorKind.forbidden => switch (code) {

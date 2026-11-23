@@ -57,7 +57,9 @@ class CloudinaryUpload {
       if (m is String && m.isNotEmpty) return m;
     }
     return e.type == DioExceptionType.connectionError
-        ? 'No internet connection.'
+        ? 'No internet connection. If this keeps happening, set your '
+          'Private DNS to one.one.one.one (Cloudflare) or install the '
+          'Warp VPN app, then try again.'
         : 'Upload failed (${e.response?.statusCode ?? 'network'}).';
   }
 }

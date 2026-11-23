@@ -650,7 +650,9 @@ class _HomeShellState extends State<HomeShell> {
       // Keep the last known balance; a blip must not read as "0 coins".
       reason = e is ApiException
           ? e.userMessage
-          : 'The server did not respond.';
+          : 'The server did not respond. If this keeps happening, set your '
+            'Private DNS to one.one.one.one (Cloudflare) or install the '
+            'Warp VPN app.';
       return coins;
     });
     final results = await Future.wait<Object?>([
