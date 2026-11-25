@@ -61,11 +61,11 @@ Kung phpMyAdmin lang ang gamit: `database/mobile_app_schema.sql`,
 ### Social profiles + private chat migration
 
 Patakbuhin ang `ghosst-web/database/mobile_app_social.sql` bago i-upload ang
-bagong API. It adds `users.avatar_url` and creates `app_reports`,
-`app_cleanup_queue`, `app_follows`, `app_reels`, `app_reel_likes`, and
-`app_reel_comments`. Ang `ALTER TABLE users ADD avatar_url` ay isang beses lang;
-kung nandoon na ang column, i-skip lang ang ALTER at patakbuhin ang mga
-`CREATE TABLE IF NOT EXISTS`.
+bagong API. It creates `app_reports`, `app_cleanup_queue`, `app_follows`,
+`app_reels`, `app_reel_likes`, at `app_reel_comments` with `IF NOT EXISTS`, kaya
+safe itong i-rerun. Ang one-time column migrations ay hiwalay:
+`mobile_app_avatar.sql` (`users.avatar_url`) at `mobile_app_feedback.sql`
+(`feedbacks.source` + index). I-skip ang isang file kung nandoon na ang column.
 
 Ang public profile API ay allowlisted: display name, username, Google avatar,
 join date, admin/moderator badge, follower/following/reel counts. Hindi ibinibigay

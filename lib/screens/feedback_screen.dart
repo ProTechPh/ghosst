@@ -1,4 +1,8 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
+
+import '../api/api_exception.dart';
 
 import '../premium.dart';
 import '../services/worker_backend.dart';
@@ -7,7 +11,12 @@ import '../theme.dart';
 class FeedbackScreen extends StatefulWidget {
   const FeedbackScreen({super.key, this.submit, this.loadMine});
 
-  final Future<String> Function(String comment, int rating)? submit;
+  final Future<String> Function(
+    String comment,
+    int rating,
+    String idempotencyKey,
+  )?
+  submit;
   final Future<List<AppFeedback>> Function()? loadMine;
 
   @override
@@ -20,6 +29,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   bool _submitting = false;
   bool _submitted = false;
   String _submitError = '';
+  String? _idempotencyKey;
   List<AppFeedback> _history = const [];
   bool _historyLoading = true;
   bool _historyFailed = false;
@@ -62,8 +72,17 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   bool get _canSubmit =>
       !_submitting && validateAppFeedback(_comment.text, _rating) == null;
 
+  String _newIdempotencyKey() {
+    final random = Random.secure();
+    return List.generate(
+      16,
+      (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+    ).join();
+  }
+
   Future<void> _submit() async {
     if (!_canSubmit) return;
+    final key = _idempotencyKey ??= _newIdempotencyKey();
     setState(() {
       _submitting = true;
       _submitted = false;
@@ -73,15 +92,24 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
       await (widget.submit ?? Backend.submitFeedback)(
         _comment.text.trim(),
         _rating,
+        key,
       );
       if (!mounted) return;
       _comment.clear();
       setState(() {
         _rating = 0;
+        _idempotencyKey = null;
         _submitting = false;
         _submitted = true;
       });
       await _loadHistory();
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _submitError = e.code == 'rate_limited' ? e.message : e.userMessage;
+        });
+      }
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -131,12 +159,23 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                   tooltip: 'Rate $star star${star == 1 ? '' : 's'}',
                   onPressed: _submitting
                       ? null
-                      : () => setState(() => _rating = star),
-                  icon: Icon(
-                    star <= _rating
-                        ? Icons.star_rounded
-                        : Icons.star_outline_rounded,
-                    color: star <= _rating ? AppColors.gold : AppColors.textDim,
+                      : () {
+                          setState(() {
+                            _rating = star;
+                            if (_submitError.isNotEmpty) _idempotencyKey = null;
+                          });
+                        },
+                  icon: Semantics(
+                    selected: star <= _rating,
+                    label: 'Rating $star of 5',
+                    child: Icon(
+                      star <= _rating
+                          ? Icons.star_rounded
+                          : Icons.star_outline_rounded,
+                      color: star <= _rating
+                          ? AppColors.gold
+                          : AppColors.textDim,
+                    ),
                   ),
                 ),
             ],
@@ -148,7 +187,9 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
             maxLines: 8,
             maxLength: 1000,
             enabled: !_submitting,
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) => setState(() {
+              if (_submitError.isNotEmpty) _idempotencyKey = null;
+            }),
             decoration: const InputDecoration(
               labelText: 'Comment',
               hintText: 'At least 10 characters',
@@ -167,16 +208,25 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           ),
           if (_submitError.isNotEmpty) ...[
             const SizedBox(height: AppSpace.md),
-            Text(_submitError, style: const TextStyle(color: AppColors.red)),
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                _submitError,
+                style: const TextStyle(color: AppColors.red),
+              ),
+            ),
             TextButton(onPressed: _submit, child: const Text('Retry')),
           ],
           if (_submitted) ...[
             const SizedBox(height: AppSpace.md),
-            const Text(
-              'Thank you for your feedback.',
-              style: TextStyle(
-                color: AppColors.green,
-                fontWeight: FontWeight.w700,
+            Semantics(
+              liveRegion: true,
+              child: const Text(
+                'Thank you for your feedback.',
+                style: TextStyle(
+                  color: AppColors.green,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ],

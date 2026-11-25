@@ -381,11 +381,13 @@ class Backend {
   static Future<String> submitFeedback({
     required String comment,
     required int rating,
+    required String idempotencyKey,
   }) async {
-    final res = await _api.post('/feedback', data: {
-      'comment': comment.trim(),
-      'rating': rating,
-    });
+    final res = await _api.post(
+      '/feedback',
+      data: {'comment': comment.trim(), 'rating': rating},
+      headers: {'idempotency-key': idempotencyKey},
+    );
     return (res['feedbackId'] ?? '').toString();
   }
 
@@ -393,10 +395,10 @@ class Backend {
     int limit = 20,
     int offset = 0,
   }) async {
-    final res = await _api.get('/feedback/mine', query: {
-      'limit': '$limit',
-      'offset': '$offset',
-    });
+    final res = await _api.get(
+      '/feedback/mine',
+      query: {'limit': '$limit', 'offset': '$offset'},
+    );
     return (res['feedbacks'] as List? ?? const [])
         .whereType<Map<String, dynamic>>()
         .map(AppFeedback.fromJson)
