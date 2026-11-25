@@ -132,6 +132,131 @@ List<PublicUser> publicUsersFromJson(Object? raw) => raw is List
       ]
     : const [];
 
+class Reel {
+  const Reel({
+    required this.id,
+    required this.caption,
+    required this.videoUrl,
+    required this.createdAt,
+    required this.creator,
+    required this.likeCount,
+    required this.commentCount,
+    this.posterUrl,
+    this.durationMs,
+    this.isLiked = false,
+    this.isFollowing = false,
+    this.isMine = false,
+  });
+
+  final String id;
+  final String caption;
+  final String videoUrl;
+  final String createdAt;
+  final String? posterUrl;
+  final int? durationMs;
+  final PublicUser creator;
+  final int likeCount;
+  final int commentCount;
+  final bool isLiked;
+  final bool isFollowing;
+  final bool isMine;
+
+  factory Reel.fromJson(Map<String, dynamic> json) {
+    int count(String key) {
+      final value = int.tryParse((json[key] ?? '').toString()) ?? 0;
+      return value < 0 ? 0 : value;
+    }
+
+    final rawCreator = json['creator'];
+    return Reel(
+      id: (json['id'] ?? '').toString(),
+      caption: json['caption'] as String? ?? '',
+      videoUrl: json['videoUrl'] as String? ?? '',
+      createdAt: json['createdAt'] as String? ?? '',
+      posterUrl: json['posterUrl'] as String?,
+      durationMs: int.tryParse((json['durationMs'] ?? '').toString()),
+      creator: PublicUser.fromJson(
+        rawCreator is Map<String, dynamic> ? rawCreator : const {},
+      ),
+      likeCount: count('likeCount'),
+      commentCount: count('commentCount'),
+      isLiked: json['isLiked'] == true,
+      isFollowing: json['isFollowing'] == true,
+      isMine: json['isMine'] == true,
+    );
+  }
+}
+
+class ReelComment {
+  const ReelComment({
+    required this.id,
+    required this.text,
+    required this.createdAt,
+    required this.user,
+  });
+
+  final String id;
+  final String text;
+  final String createdAt;
+  final PublicUser user;
+
+  factory ReelComment.fromJson(Map<String, dynamic> json) {
+    final rawUser = json['user'];
+    return ReelComment(
+      id: (json['id'] ?? '').toString(),
+      text: json['text'] as String? ?? '',
+      createdAt: json['createdAt'] as String? ?? '',
+      user: PublicUser.fromJson(
+        rawUser is Map<String, dynamic> ? rawUser : const {},
+      ),
+    );
+  }
+}
+
+class ReelFeedPage {
+  const ReelFeedPage({required this.reels, required this.nextOffset});
+
+  final List<Reel> reels;
+  final int nextOffset;
+
+  factory ReelFeedPage.fromJson(Map<String, dynamic> json) => ReelFeedPage(
+    reels: [
+      for (final item in json['reels'] as List? ?? const [])
+        if (item is Map<String, dynamic>) Reel.fromJson(item),
+    ],
+    nextOffset: int.tryParse((json['nextOffset'] ?? '').toString()) ?? 0,
+  );
+}
+
+class ReelUploadTicket {
+  const ReelUploadTicket({
+    required this.reelId,
+    required this.uploadUrl,
+    required this.token,
+    required this.expiresAt,
+    required this.maxBytes,
+  });
+
+  final String reelId;
+  final String uploadUrl;
+  final String token;
+  final DateTime expiresAt;
+  final int maxBytes;
+
+  factory ReelUploadTicket.fromJson(Map<String, dynamic> json) {
+    final reel = json['reel'] as Map<String, dynamic>? ?? const {};
+    final upload = json['upload'] as Map<String, dynamic>? ?? const {};
+    return ReelUploadTicket(
+      reelId: (reel['id'] ?? '').toString(),
+      uploadUrl: upload['url'] as String? ?? '',
+      token: upload['token'] as String? ?? '',
+      expiresAt: DateTime.tryParse(upload['expiresAt'] as String? ?? '') ??
+          DateTime.now().add(const Duration(minutes: 15)),
+      maxBytes: int.tryParse((upload['maxBytes'] ?? '').toString()) ?? 0,
+    );
+  }
+}
+
 class AppFeedback {
   const AppFeedback({
     required this.id,

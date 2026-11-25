@@ -120,4 +120,78 @@ void main() {
     ]);
     expect(users.map((user) => user.id), ['42', '43']);
   });
+
+  test('Reel parses creator, counts, flags, and optional metadata', () {
+    final reel = Reel.fromJson({
+      'id': 'r1',
+      'caption': 'Hello',
+      'videoUrl': 'https://example.com/r1.mp4',
+      'posterUrl': 'https://example.com/r1.jpg',
+      'durationMs': '1200',
+      'createdAt': '2026-01-01T00:00:00.000Z',
+      'creator': {'id': 42, 'displayName': 'Jeric'},
+      'likeCount': '3',
+      'commentCount': 2,
+      'isLiked': true,
+      'isFollowing': false,
+      'isMine': true,
+    });
+    expect(reel.id, 'r1');
+    expect(reel.caption, 'Hello');
+    expect(reel.creator.id, '42');
+    expect(reel.durationMs, 1200);
+    expect(reel.likeCount, 3);
+    expect(reel.commentCount, 2);
+    expect(reel.isLiked, isTrue);
+    expect(reel.isMine, isTrue);
+
+    final missing = Reel.fromJson({
+      'id': 'r2',
+      'creator': {'id': '43'},
+    });
+    expect(missing.posterUrl, isNull);
+    expect(missing.durationMs, isNull);
+    expect(missing.likeCount, 0);
+  });
+
+  test('ReelComment and ReelFeedPage parse safely', () {
+    final comment = ReelComment.fromJson({
+      'id': 'c1',
+      'text': 'Nice',
+      'createdAt': '2026-01-01T00:00:00.000Z',
+      'user': {'id': 42, 'displayName': 'Jeric'},
+    });
+    expect(comment.text, 'Nice');
+    expect(comment.user.id, '42');
+
+    final page = ReelFeedPage.fromJson({
+      'reels': [
+        {
+          'id': 'r1',
+          'creator': {'id': 42},
+        },
+        'bad',
+      ],
+      'nextOffset': '10',
+    });
+    expect(page.reels.map((reel) => reel.id), ['r1']);
+    expect(page.nextOffset, 10);
+  });
+
+  test('ReelUploadTicket parses expiry and limits', () {
+    final ticket = ReelUploadTicket.fromJson({
+      'reel': {'id': 'r1', 'status': 'pending'},
+      'upload': {
+        'url': 'https://video.example/upload.php',
+        'token': 'signed',
+        'expiresAt': '2026-01-01T00:15:00.000Z',
+        'maxBytes': '52428800',
+      },
+    });
+    expect(ticket.reelId, 'r1');
+    expect(ticket.uploadUrl, 'https://video.example/upload.php');
+    expect(ticket.token, 'signed');
+    expect(ticket.maxBytes, 52428800);
+    expect(ticket.expiresAt.year, 2026);
+  });
 }
