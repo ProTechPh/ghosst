@@ -4,8 +4,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../api/api_exception.dart';
-import '../services/reel_upload_service.dart';
-import '../services/worker_backend.dart';
+import '../services/models.dart';
+import '../services/reel_upload_service.dart' show ReelUploadService;
+import '../services/worker_backend.dart' show Backend;
 import '../theme.dart';
 
 typedef ReelUpload = Future<Reel> Function(ReelUploadDraft draft);
@@ -63,6 +64,7 @@ class ReelUploadScreen extends StatefulWidget {
 class _ReelUploadScreenState extends State<ReelUploadScreen> {
   final _caption = TextEditingController();
   ReelUploadDraft? _draft;
+  ReelUploadTicket? _ticket;
   String? _error;
   bool _picking = false;
   bool _uploading = false;
@@ -80,6 +82,7 @@ class _ReelUploadScreenState extends State<ReelUploadScreen> {
       _picking = true;
       _error = null;
       _draft = null;
+      _ticket = null;
       _progress = null;
     });
     try {
@@ -147,8 +150,7 @@ class _ReelUploadScreenState extends State<ReelUploadScreen> {
       _progress = 0;
     });
     try {
-      final caption = _caption.text.trim();
-      final ticket = await prepare(draft.copyWith(caption: caption));
+      final ticket = _ticket ?? await prepare(draft);
       if (ticket == null) {
         throw const ApiException(
           kind: ApiErrorKind.server,
@@ -156,7 +158,8 @@ class _ReelUploadScreenState extends State<ReelUploadScreen> {
           code: 'reels_not_configured',
         );
       }
-      await submit(draft.copyWith(caption: caption), ticket);
+      setState(() => _ticket = ticket);
+      await submit(draft, ticket);
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } on ApiException catch (e) {
@@ -187,7 +190,7 @@ class _ReelUploadScreenState extends State<ReelUploadScreen> {
           TextField(
             controller: _caption,
             maxLength: 300,
-            enabled: !_uploading,
+            enabled: !_uploading && _ticket == null,
             decoration: const InputDecoration(
               labelText: 'Caption',
               hintText: 'Tell viewers about this video',

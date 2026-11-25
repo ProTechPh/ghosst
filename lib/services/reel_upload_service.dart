@@ -22,13 +22,10 @@ class ReelUploadResult {
 }
 
 class ReelUploadService {
-  ReelUploadService({Dio? dio, void Function()? disposeDio})
-    : _dio = dio ?? Dio(),
-      _disposeDio = disposeDio ?? (dio == null ? () => _owned.close() : null);
+  ReelUploadService({Dio? dio}) : _dio = dio ?? Dio(), _ownsDio = dio == null;
 
   final Dio _dio;
-  static final Dio _owned = Dio();
-  final void Function()? _disposeDio;
+  final bool _ownsDio;
   static const int maxBytes = 50 * 1024 * 1024;
 
   static String? validateInput({
@@ -55,7 +52,9 @@ class ReelUploadService {
     return null;
   }
 
-  void close() => _disposeDio?.call();
+  void close() {
+    if (_ownsDio) _dio.close(force: true);
+  }
 
   static Future<String> sha256File(String filePath) async {
     final digest = await sha256.bind(File(filePath).openRead()).first;
@@ -88,6 +87,7 @@ class ReelUploadService {
       data: form,
       options: Options(
         headers: {'authorization': 'Bearer ${ticket.token}'},
+        connectTimeout: const Duration(seconds: 15),
         sendTimeout: const Duration(seconds: 120),
         receiveTimeout: const Duration(seconds: 120),
       ),

@@ -64,9 +64,21 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   bool _hasMoreReels = true;
   final _reelScroll = ScrollController();
 
+  void _onProfileScroll() {
+    if (!_scroll.hasClients ||
+        !_hasMoreReels ||
+        _reelsLoading ||
+        _reelsFailed ||
+        _scroll.position.extentAfter > 240) {
+      return;
+    }
+    unawaited(_loadReels());
+  }
+
   @override
   void initState() {
     super.initState();
+    _scroll.addListener(_onProfileScroll);
     _load();
   }
 
@@ -468,7 +480,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         child: ColoredBox(color: AppColors.surface),
       );
     }
-    if (widget.onOpenReel != null) {
+    if (widget.onOpenReel != null && _reels.isNotEmpty) {
       return GridView.builder(
         controller: _reelScroll,
         shrinkWrap: true,

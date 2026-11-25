@@ -87,6 +87,8 @@ class _ReelCommentsScreenState extends State<ReelCommentsScreen> {
     try {
       if (widget.submit != null) {
         await widget.submit!(text);
+      } else {
+        await Backend.postReelComment(widget.reelId, text);
       }
       if (!mounted) return;
       _input.clear();

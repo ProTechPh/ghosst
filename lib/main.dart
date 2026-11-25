@@ -885,20 +885,20 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   Future<void> _openReelUpload() async {
-    final uploaded = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(
-        builder: (_) => ReelUploadScreen(
-          prepareUpload: (draft) => Backend.startReelUpload(
-            fileName: draft.fileName,
-            sizeBytes: draft.sizeBytes,
-            sha256: draft.sha256,
-            caption: draft.caption,
-            idempotencyKey: draft.idempotencyKey,
-          ),
-          submitUpload: (draft, ticket) async {
-            final player = ReelUploadService();
-            try {
-              final result = await player.upload(
+    final service = ReelUploadService();
+    try {
+      final uploaded = await Navigator.of(context).push<bool>(
+        MaterialPageRoute<bool>(
+          builder: (_) => ReelUploadScreen(
+            prepareUpload: (draft) => Backend.startReelUpload(
+              fileName: draft.fileName,
+              sizeBytes: draft.sizeBytes,
+              sha256: draft.sha256,
+              caption: draft.caption,
+              idempotencyKey: draft.idempotencyKey,
+            ),
+            submitUpload: (draft, ticket) async {
+              final result = await service.upload(
                 filePath: draft.filePath,
                 ticket: ticket,
                 onProgress: (sent, total) {
@@ -910,16 +910,23 @@ class _HomeShellState extends State<HomeShell> {
                 videoUrl: result.videoUrl,
                 sha256: result.sha256,
                 sizeBytes: result.sizeBytes,
+                idempotencyKey: draft.idempotencyKey,
               );
-            } finally {
-              player.close();
-            }
-          },
+            },
+          ),
         ),
-      ),
-    );
-    if (!mounted || uploaded == null) return;
-    setState(() => tab = 5);
+      );
+      if (!mounted || uploaded == null) return;
+      setState(() => tab = 5);
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.userMessage)));
+      }
+    } finally {
+      service.close();
+    }
   }
 
   Future<bool> _changeBlock(String id, bool blocked) async {
@@ -1014,6 +1021,7 @@ class _HomeShellState extends State<HomeShell> {
         active: tab == 5,
         onOpenProfile: _openUserProfile,
         onOpenUpload: _openReelUpload,
+        onDeleteReel: Backend.deleteReel,
       ),
       if (isAdmin) AdminScreen(onAnnouncementSent: _refresh, active: tab == 6),
     ];

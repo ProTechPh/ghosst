@@ -66,6 +66,7 @@ class ReelsScreen extends StatefulWidget {
     this.loadComments,
     this.submitComment,
     this.onOpenUpload,
+    this.onDeleteReel,
     this.initialReelId,
     this.initialCreatorId,
     this.active = true,
@@ -82,6 +83,7 @@ class ReelsScreen extends StatefulWidget {
   loadComments;
   final Future<void> Function(String reelId, String text)? submitComment;
   final VoidCallback? onOpenUpload;
+  final Future<void> Function(String reelId)? onDeleteReel;
   final String? initialReelId;
   final String? initialCreatorId;
   final bool active;
@@ -97,9 +99,10 @@ class _ReelsScreenState extends State<ReelsScreen> {
   List<Reel> _reels = [];
   int _offset = 0;
   int _active = 0;
-  bool _loading = true;
+  bool _loading;
   bool _failed = false;
   bool _unavailable = false;
+  int _requestGeneration = 0;
   final Set<String> _liked = {};
   final Map<String, ReelPlayback> _players = {};
 
@@ -128,16 +131,22 @@ class _ReelsScreenState extends State<ReelsScreen> {
     if (rebuild && mounted) setState(() {});
   }
 
+  _ReelsScreenState() : _loading = true;
+
   @override
   void initState() {
     super.initState();
+    _loading = !widget.active;
     if (widget.active) _load();
   }
 
   @override
   void didUpdateWidget(covariant ReelsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.active && !oldWidget.active && _reels.isEmpty && !_loading) {
+    if (widget.active && !oldWidget.active && _reels.isEmpty) {
+      if (_loading) {
+        _loading = false;
+      }
       _load();
     }
   }
@@ -161,6 +170,8 @@ class _ReelsScreenState extends State<ReelsScreen> {
 
   Future<void> _load({bool reset = false}) async {
     if (_loading && _reels.isNotEmpty) return;
+    final generation = ++_requestGeneration;
+    final requestedFeed = _feed;
     if (reset) _offset = 0;
     setState(() {
       _loading = true;
@@ -170,11 +181,11 @@ class _ReelsScreenState extends State<ReelsScreen> {
     try {
       final ReelFeedPage page;
       if (widget.load != null) {
-        page = await widget.load!(_feed, _offset);
+        page = await widget.load!(requestedFeed, _offset);
       } else {
-        page = await Backend.reels(feed: _feed, offset: _offset);
+        page = await Backend.reels(feed: requestedFeed, offset: _offset);
       }
-      if (!mounted) return;
+      if (!mounted || generation != _requestGeneration) return;
       setState(() {
         if (reset) {
           unawaited(_disposePlayers());
@@ -214,14 +225,14 @@ class _ReelsScreenState extends State<ReelsScreen> {
         _page.jumpToPage(_active);
       });
     } on ApiException catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _requestGeneration) return;
       setState(() {
         _loading = false;
         _unavailable = e.code == 'reels_not_configured';
         _failed = !_unavailable;
       });
     } catch (_) {
-      if (mounted) {
+      if (mounted && generation == _requestGeneration) {
         setState(() {
           _loading = false;
           _failed = true;
@@ -233,6 +244,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
   Future<void> _changeFeed(String feed) async {
     if (feed == _feed) return;
     setState(() {
+      _requestGeneration++;
       _feed = feed;
       _reels = [];
       _liked.clear();
@@ -369,6 +381,52 @@ class _ReelsScreenState extends State<ReelsScreen> {
     }
   }
 
+  Future<void> _deleteReel(Reel reel) async {
+    final delete = widget.onDeleteReel;
+    if (delete == null) return;
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete reel?'),
+        content: const Text(
+          'This removes the reel and its video. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (approved != true || !mounted) return;
+    try {
+      await delete(reel.id);
+      if (!mounted) return;
+      setState(
+        () => _reels = _reels.where((item) => item.id != reel.id).toList(),
+      );
+      await _pausePlayer(reel.id);
+      if (_reels.isEmpty) {
+        setState(() => _active = 0);
+        await _load(reset: true);
+      } else if (_active >= _reels.length) {
+        setState(() => _active = _reels.length - 1);
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete reel. Try again.')),
+        );
+      }
+    }
+  }
+
   void _openComments(Reel reel) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -431,19 +489,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
     return _loading && _reels.isEmpty
         ? const Center(child: CircularProgressIndicator())
         : _unavailable
-        ? Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Reels unavailable'),
-                if (widget.onOpenUpload != null)
-                  TextButton(
-                    onPressed: widget.onOpenUpload,
-                    child: const Text('Upload'),
-                  ),
-              ],
-            ),
-          )
+        ? const Center(child: Text('Reels unavailable'))
         : _failed && _reels.isEmpty
         ? Center(
             child: Column(
@@ -473,11 +519,12 @@ class _ReelsScreenState extends State<ReelsScreen> {
             itemBuilder: (_, i) => _ReelPage(
               key: ValueKey(_reels[i].id),
               reel: _reels[i],
-              active: i == _active,
+              active: widget.active && i == _active,
               liked: _liked.contains(_reels[i].id),
               playback: _player(_reels[i].id, _reels[i].videoUrl),
               onLike: () => unawaited(_toggleLike(_reels[i])),
               onComments: () => _openComments(_reels[i]),
+              onDelete: () => unawaited(_deleteReel(_reels[i])),
               onProfile: widget.onOpenProfile,
               onReport: () => unawaited(_report(_reels[i].id)),
             ),
@@ -494,6 +541,7 @@ class _ReelPage extends StatefulWidget {
     required this.playback,
     required this.onLike,
     required this.onComments,
+    required this.onDelete,
     this.onProfile,
     required this.onReport,
   });
@@ -504,6 +552,7 @@ class _ReelPage extends StatefulWidget {
   final ReelPlayback playback;
   final VoidCallback onLike;
   final VoidCallback onComments;
+  final VoidCallback onDelete;
   final ValueChanged<String>? onProfile;
   final VoidCallback onReport;
 
@@ -629,6 +678,15 @@ class _ReelPageState extends State<_ReelPage> {
                       color: Colors.white,
                     ),
                   ),
+                  if (widget.reel.isMine)
+                    IconButton(
+                      key: ValueKey('reel-delete-${widget.reel.id}'),
+                      onPressed: widget.onDelete,
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.white,
+                      ),
+                    ),
                   IconButton(
                     key: ValueKey('reel-report-${widget.reel.id}'),
                     onPressed: widget.onReport,

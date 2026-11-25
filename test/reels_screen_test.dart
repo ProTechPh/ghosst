@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/api/api_exception.dart';
@@ -63,6 +65,8 @@ Future<void> _pump(
   ValueChanged<String>? onOpenProfile,
   ReportContent? onReport,
   VoidCallback? onOpenUpload,
+  Future<void> Function(String)? onDeleteReel,
+  bool active = true,
 }) async {
   final key = UniqueKey();
   await tester.pumpWidget(
@@ -78,6 +82,8 @@ Future<void> _pump(
           onOpenProfile: onOpenProfile,
           onReport: onReport,
           onOpenUpload: onOpenUpload,
+          onDeleteReel: onDeleteReel,
+          active: active,
           loadComments: (_, __) async => [],
           submitComment: (_, __) async {},
         ),
@@ -88,6 +94,134 @@ Future<void> _pump(
 }
 
 void main() {
+  testWidgets('inactive tab loads on first activation and pauses offscreen', (
+    tester,
+  ) async {
+    final player = _FakePlayback();
+    final key = GlobalKey();
+    var calls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(
+          body: ReelsScreen(
+            key: key,
+            active: false,
+            load: (_, _) async {
+              calls++;
+              return ReelFeedPage(reels: [_reel('r1', 'One')], nextOffset: 1);
+            },
+            playbackFactory: (_) => player,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(calls, 0);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(
+          body: ReelsScreen(
+            key: key,
+            active: true,
+            load: (_, _) async {
+              calls++;
+              return ReelFeedPage(reels: [_reel('r1', 'One')], nextOffset: 1);
+            },
+            playbackFactory: (_) => player,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(calls, 1);
+    expect(player.playing, isTrue);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(
+          body: ReelsScreen(
+            key: key,
+            active: false,
+            load: (_, _) async => const ReelFeedPage(reels: [], nextOffset: 0),
+            playbackFactory: (_) => player,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(player.playing, isFalse);
+  });
+
+  testWidgets('stale feed responses cannot replace the selected feed', (
+    tester,
+  ) async {
+    final first = Completer<ReelFeedPage>();
+    final second = Completer<ReelFeedPage>();
+    var calls = 0;
+    await _pump(
+      tester,
+      load: (feed, _) {
+        calls++;
+        return feed == 'for-you' ? first.future : second.future;
+      },
+      playbackFactory: (_) => _FakePlayback(),
+    );
+    await tester.tap(find.text('Following'));
+    await tester.pump();
+    second.complete(
+      ReelFeedPage(reels: [_reel('following', 'Followed')], nextOffset: 1),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Caption following'), findsOneWidget);
+    first.complete(
+      ReelFeedPage(reels: [_reel('stale', 'Stale')], nextOffset: 1),
+    );
+    await tester.pumpAndSettle();
+    expect(calls, 2);
+    expect(find.text('Caption following'), findsOneWidget);
+    expect(find.text('Caption stale'), findsNothing);
+  });
+
+  testWidgets('owner can delete a reel and its player is disposed', (
+    tester,
+  ) async {
+    final player = _FakePlayback();
+    final owned = Reel(
+      id: 'mine',
+      caption: 'Mine',
+      videoUrl: 'https://example.com/mine.mp4',
+      createdAt: '',
+      creator: _reel('mine', 'Me').creator,
+      likeCount: 0,
+      commentCount: 0,
+      isMine: true,
+    );
+    String? deleted;
+    await _pump(
+      tester,
+      load: (_, _) async {
+        if (deleted != null) {
+          return const ReelFeedPage(reels: [], nextOffset: 0);
+        }
+        return ReelFeedPage(reels: [owned], nextOffset: 1);
+      },
+      playbackFactory: (_) => player,
+      onDeleteReel: (id) async => deleted = id,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('reel-delete-mine')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(deleted, 'mine');
+    expect(player.disposed, isTrue);
+    expect(find.text('No reels yet'), findsOneWidget);
+  });
+
   testWidgets('segments, active playback, mute, pause, and page changes', (
     tester,
   ) async {

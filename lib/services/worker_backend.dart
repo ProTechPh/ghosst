@@ -461,18 +461,19 @@ class Backend {
     return ReelUploadTicket.fromJson(res);
   }
 
-  static Future<Reel> completeReelUpload({
+  static Future<void> completeReelUpload({
     required String reelId,
     required String videoUrl,
     required String sha256,
     required int sizeBytes,
+    required String idempotencyKey,
   }) async {
     await _api.post(
       '/reels/$reelId/complete',
       data: {'videoUrl': videoUrl, 'sha256': sha256, 'sizeBytes': sizeBytes},
+      headers: {'idempotency-key': idempotencyKey},
     );
-    final res = await _api.get('/reels/$reelId');
-    return Reel.fromJson(res['reel'] as Map<String, dynamic>);
+    await _api.get('/reels/$reelId');
   }
 
   static Future<void> deleteReel(String id) => _api.delete('/reels/$id');
