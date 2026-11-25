@@ -118,6 +118,7 @@
     <ul>
       <li><strong>Account Information:</strong> When you create an account, we store your email address, user identifier, account creation date, username, optional profile display name, and optional Google-hosted avatar URL through our hosting provider. Public profiles show only your display name, username, avatar, join date, role badge, and social counts; they never show your email, coin balance, or purchases.</li>
       <li><strong>Private App Feedback:</strong> Ratings and comments submitted through the app are stored in MySQL, visible only to the Ghosst team, and never published as website reviews.</li>
+      <li><strong>Public Social & Reel Content:</strong> Your public profile, uploaded MP4 reels and captions, comments, likes, follow relationships, and abuse reports are processed in MySQL. Uploaded videos are hosted publicly on z.com; anyone with the media URL can view them. Reels may include content you choose to share, so do not upload private or sensitive material.</li>
       <li><strong>Virtual Currency & In-App Activity:</strong> Virtual coins earned via rewarded ads, transaction/claim records, and redeemed product keys.</li>
       <li><strong>Advertising Data:</strong> Google and participating mediation partners may process advertising identifiers, IP address, device information, consent choices, ad interactions, and approximate location derived from IP.</li>
     </ul>
@@ -136,6 +137,9 @@
       </li>
       <li>
         <strong>Unity Ads:</strong> May serve ads through Google AdMob mediation and process device and advertising data under the <a href="https://unity.com/legal/privacy-policy" target="_blank" rel="noopener">Unity Privacy Policy</a>.
+      </li>
+      <li>
+        <strong>z.com:</strong> Hosts public MP4 reel videos. z.com receives uploaded video files and may process network/request metadata needed to deliver them. Do not upload confidential material to Reels.
       </li>
       <li>
         <strong>Firebase Cloud Messaging (Google):</strong> Used only to deliver device notifications — new products, restocked items, and app announcements. The app joins an anonymous notification topic handled entirely by Firebase Cloud Messaging; we do not store a push token, your email, coin balance, or purchase data for notifications. Delivery happens under the <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">Firebase Privacy Policy</a>.
@@ -160,6 +164,7 @@
       <li>Provide, operate, and maintain the Ghosst app services.</li>
       <li>Credit coins earned through rewarded advertising (using Server-Side Verification).</li>
       <li>Facilitate the delivery of software keys and files.</li>
+      <li>Provide public profiles, private messaging, follows, and user-generated Reels; moderate reports and abusive content.</li>
       <li>Prevent fraud, botting, and abuse of the rewards system.</li>
     </ul>
 
@@ -168,10 +173,13 @@
       We take reasonable administrative, technical, and physical security measures to protect your personal information. We do not sell, rent, or lease your personal information to third parties.
     </p>
     <p>
-      Account data is kept while your account is active. You can permanently delete your account in the app through <strong>Profile → Delete account</strong>. This deletes your account, profile, coin balance, private conversations (for both participants), block records you own, private app feedback, reward history, and purchase records; claimed inventory records are disassociated from your user ID. World chat messages are retained with your name blanked. Firebase and media cleanup are best-effort if the third-party service is unavailable. You may also use our <a href="delete-account.html">web deletion request page</a>.
+      Account data is kept while your account is active. You can permanently delete your account in the app through <strong>Profile → Delete account</strong>. This deletes your account, profile, coin balance, private conversations (for both participants), block records you own, private app feedback, follows, reel likes and comments, authored reports, reports targeting your profile, reward history, and purchase records; your uploaded reels are removed from the database and their z.com files are deleted best-effort. Claimed inventory records are disassociated from your user ID. Comments or reports you submitted about other users' content may remain with your author identifier removed. World chat messages are retained with your name blanked. Firebase and media cleanup are best-effort if the third-party service is unavailable. You may also use our <a href="delete-account.html">web deletion request page</a>.
     </p>
 
-    <h2>6. Children's Privacy</h2>
+    <h2>Google Play Data Safety declaration</h2>
+<p>Before publishing a build with social features, declare: <strong>Account ID</strong> (app functionality, account management, fraud prevention), <strong>User-generated content</strong> (public profiles, Reels, comments, and reports; app functionality and moderation), and <strong>App activity</strong> (likes and follows; app functionality). Private feedback is collected but is not shared with third parties; private messages are handled by Firebase. Public Reel videos are hosted by z.com and are accessible by URL.</p>
+
+<h2>6. Children's Privacy</h2>
     <p>
       Our application is not targeted towards children under the age of 13. We do not knowingly collect personal identifiable information from children under 13.
     </p>

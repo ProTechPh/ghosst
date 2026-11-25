@@ -266,6 +266,37 @@ void main() {
     expect(players.first.playing, isFalse);
   });
 
+  testWidgets('initial reel from a later page is prepended and selected', (
+    tester,
+  ) async {
+    final players = <_FakePlayback>[];
+    final selected = _reel('selected', 'Creator');
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(
+          body: ReelsScreen(
+            embedded: false,
+            initialReelId: selected.id,
+            playbackFactory: (_) {
+              final player = _FakePlayback();
+              players.add(player);
+              return player;
+            },
+            load: (_, _) async => ReelFeedPage(
+              reels: [_reel('r1', 'Other'), selected],
+              nextOffset: 2,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Caption selected'), findsOneWidget);
+    expect(find.text('Caption r1'), findsNothing);
+    expect(players.last.playing, isTrue);
+  });
+
   testWidgets('playback is disposed with the feed', (tester) async {
     final player = _FakePlayback();
     await _pump(

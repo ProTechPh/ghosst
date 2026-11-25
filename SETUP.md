@@ -68,12 +68,34 @@ safe itong i-rerun. Ang one-time column migrations ay hiwalay:
 (`feedbacks.source` + index). I-skip ang isang file kung nandoon na ang column.
 Para sa existing follow data, patakbuhin din ang `mobile_app_follow_cleanup.sql`
 (isang beses) para tanggalin ang dangling edges at magdagdag ng Following index.
+Patakbuhin din ang `mobile_app_reels.sql` (isang beses) para sa
+`app_idempotency.request_hash` bago i-upload ang Reel upload API.
 
 Ang public profile API ay allowlisted: display name, username, Google avatar,
 join date, admin/moderator badge, follower/following/reel counts. Hindi ibinibigay
 ang email, coins, balance, purchases, o ban reason. I-upload din ang authoritative
 `firestore.rules` at i-set up ang `api/cleanup_social.php` cron gaya ng nasa
 `ghosst-web/api/README.md`.
+
+### Reels hosting, deploy order, at rollback
+
+1. SQL: `mobile_app_social.sql`, one-time columns, follow cleanup, at
+   `mobile_app_reels.sql`.
+2. Upload ang bagong main API. Set `GHOSST_REEL_UPLOAD_SECRET`,
+   `GHOSST_REEL_UPLOAD_URL`, at `GHOSST_REEL_PUBLIC_BASE_URL` sa Hostinger env o
+   `api/config.php`; blank ang defaults at magpakita ng “Reels unavailable”.
+3. Deploy ang `ghosst-web/reels/` PHP folder sa HTTPS z.com root. Copy
+   `config.example.php` → `config.php`, gamitin ang parehong upload secret, at
+   gawing writable ang `media/`. Kailangan ng PHP 8, `hash`, `fileinfo`, at curl.
+4. Publish ang `firestore.rules` kung hindi pa live (para sa chat/social cleanup).
+5. Upload ang website admin page at i-test ang Reels & Reports link gamit ang
+   website admin o app `is_admin`/`is_moderator` account.
+6. I-build/upload ang app. Test muna ang play at direct flavors; v1 ay MP4 only,
+   50 MB cap, at limang upload kada rolling 24 hours.
+
+Rollback: i-hide ang Reels tab (o i-disable ang Reel endpoints/config) at
+mag-rollback ng app/API. Huwag burahin ang `app_reel*` tables o z.com media
+files; panatilihin ang uploads para hindi mawala ang existing reels.
 
 ## 2. Admin
 
