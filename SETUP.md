@@ -21,7 +21,7 @@ this file is the app-side setup.
 
 Ang accounts ay nasa website table na `users` — iisa na ang account ng app at ng
 site (parehong email/password, parehong `id`). Ang `users` ay may dagdag na
-column para sa app: `coins`, `display_name`, `is_admin`, `is_moderator`,
+column para sa app: `coins`, `display_name`, `avatar_url`, `is_admin`, `is_moderator`,
 `chat_muted`, `muted_until`, `deleted_at`, `announcements_seen_at`,
 `chat_seen_at_ms`. Ang `balance` ay pera ng site; ang `coins` ay app rewards —
 huwag paghalo.
@@ -33,7 +33,9 @@ ang `user_id` nila: `app_sessions` (refresh tokens, SHA-256 lang ang nakatago),
 (`UNIQUE(product_id, key_value)`), `app_claims` (`ux_app_claims_owned` makes
 app/file products single-purchase), `app_ad_rewards` (SSV dedupe, PK = AdMob
 `transaction_id`), `app_idempotency` (`idem_key`, PK `(user_id, idem_key)`),
-`app_announcements` (manual banner/push text, 7-day `expires_at`).
+`app_announcements` (manual banner/push text, 7-day `expires_at`),
+`app_reports` (abuse reports), `app_cleanup_queue` (durable Firestore deletion),
+`app_follows`, `app_reels`, `app_reel_likes`, at `app_reel_comments`.
 
 Bagong DB: i-apply ang `database/mobile_app_schema.sql` tapos
 `app_announcements.sql`. Lumang DB na may `app_users` (walang downtime sa app):
@@ -55,6 +57,21 @@ Kung phpMyAdmin lang ang gamit: `database/mobile_app_schema.sql`,
 `app_announcements.sql`. Run `app_announcements.sql` **before** uploading
 `api/`: an app that calls `GET /v1/announcements` against a missing table logs a
 500 on every launch.
+
+### Social profiles + private chat migration
+
+Patakbuhin ang `ghosst-web/database/mobile_app_social.sql` bago i-upload ang
+bagong API. It adds `users.avatar_url` and creates `app_reports`,
+`app_cleanup_queue`, `app_follows`, `app_reels`, `app_reel_likes`, and
+`app_reel_comments`. Ang `ALTER TABLE users ADD avatar_url` ay isang beses lang;
+kung nandoon na ang column, i-skip lang ang ALTER at patakbuhin ang mga
+`CREATE TABLE IF NOT EXISTS`.
+
+Ang public profile API ay allowlisted: display name, username, Google avatar,
+join date, admin/moderator badge, follower/following/reel counts. Hindi ibinibigay
+ang email, coins, balance, purchases, o ban reason. I-upload din ang authoritative
+`firestore.rules` at i-set up ang `api/cleanup_social.php` cron gaya ng nasa
+`ghosst-web/api/README.md`.
 
 ## 2. Admin
 
