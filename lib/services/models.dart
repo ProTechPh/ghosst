@@ -110,6 +110,28 @@ class PublicUser {
   }
 }
 
+class FollowState {
+  const FollowState({required this.isFollowing, required this.followerCount});
+
+  final bool isFollowing;
+  final int followerCount;
+
+  factory FollowState.fromJson(Map<String, dynamic> json) {
+    final count = int.tryParse((json['followerCount'] ?? '').toString()) ?? 0;
+    return FollowState(
+      isFollowing: json['isFollowing'] == true,
+      followerCount: count < 0 ? 0 : count,
+    );
+  }
+}
+
+List<PublicUser> publicUsersFromJson(Object? raw) => raw is List
+    ? [
+        for (final item in raw)
+          if (item is Map<String, dynamic>) PublicUser.fromJson(item),
+      ]
+    : const [];
+
 class AppFeedback {
   const AppFeedback({
     required this.id,

@@ -369,6 +369,40 @@ class Backend {
     return PublicUser.fromJson(res['user'] as Map<String, dynamic>);
   }
 
+  static Future<FollowState> followUser(String id) async {
+    final res = await _api.post('/users/$id/follow');
+    return FollowState.fromJson(res);
+  }
+
+  static Future<FollowState> unfollowUser(String id) async {
+    final res = await _api.deleteMap('/users/$id/follow');
+    return FollowState.fromJson(res);
+  }
+
+  static Future<List<PublicUser>> followers(
+    String id, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final res = await _api.get('/users/$id/followers', query: {
+      'limit': '$limit',
+      'offset': '$offset',
+    });
+    return publicUsersFromJson(res['users']);
+  }
+
+  static Future<List<PublicUser>> following(
+    String id, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final res = await _api.get('/users/$id/following', query: {
+      'limit': '$limit',
+      'offset': '$offset',
+    });
+    return publicUsersFromJson(res['users']);
+  }
+
   static Future<List<ChatUserSummary>> chatUsers(List<String> ids) async {
     if (ids.isEmpty) return const [];
     final res = await _api.post('/users/summaries', data: {'ids': ids});

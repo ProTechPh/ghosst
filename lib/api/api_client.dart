@@ -127,6 +127,20 @@ class ApiClient {
         await dio.delete<dynamic>(path, data: data, queryParameters: query);
       });
 
+  Future<Map<String, dynamic>> deleteMap(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? query,
+  }) =>
+      _run((dio) async {
+        final res = await dio.delete<dynamic>(
+          path,
+          data: data,
+          queryParameters: query,
+        );
+        return _asMap(res.data);
+      });
+
   Future<void> logout() async {
     try {
       await post('/auth/logout', data: {'refreshToken': await _session.refreshToken()});

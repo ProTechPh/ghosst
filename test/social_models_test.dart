@@ -94,4 +94,30 @@ void main() {
     expect(validateAppFeedback('Valid feedback', 6), isNotNull);
     expect(validateAppFeedback('<script>bad</script>', 5), isNotNull);
   });
+
+  test('FollowState parses flags and counts safely', () {
+    final complete = FollowState.fromJson({
+      'isFollowing': true,
+      'followerCount': '12',
+    });
+    expect(complete.isFollowing, isTrue);
+    expect(complete.followerCount, 12);
+
+    final missing = FollowState.fromJson({
+      'isFollowing': 'yes',
+      'followerCount': 'oops',
+    });
+    expect(missing.isFollowing, isFalse);
+    expect(missing.followerCount, 0);
+  });
+
+  test('publicUsersFromJson skips malformed entries', () {
+    final users = publicUsersFromJson([
+      {'id': 42, 'displayName': 'Jeric'},
+      'bad',
+      null,
+      {'id': '43', 'displayName': 'Peer'},
+    ]);
+    expect(users.map((user) => user.id), ['42', '43']);
+  });
 }
