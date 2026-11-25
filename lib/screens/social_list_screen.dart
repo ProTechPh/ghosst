@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
@@ -18,7 +20,7 @@ class SocialListScreen extends StatefulWidget {
   final String userId;
   final SocialListDirection direction;
   final Future<List<PublicUser>> Function(int offset)? load;
-  final ValueChanged<String>? onOpenProfile;
+  final Future<void> Function(String id)? onOpenProfile;
 
   @override
   State<SocialListScreen> createState() => _SocialListScreenState();
@@ -89,6 +91,22 @@ class _SocialListScreenState extends State<SocialListScreen> {
     }
   }
 
+  Future<void> _refresh() async {
+    setState(() {
+      _ids.clear();
+      _users = [];
+      _offset = 0;
+      _hasMore = true;
+      _failed = false;
+    });
+    await _load();
+  }
+
+  Future<void> _openProfile(String id) async {
+    await widget.onOpenProfile?.call(id);
+    if (mounted) await _refresh();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -112,9 +130,24 @@ class _SocialListScreenState extends State<SocialListScreen> {
           : ListView.builder(
               controller: _scroll,
               padding: const EdgeInsets.all(AppSpace.lg),
-              itemCount: _users.length + (_hasMore && _loading ? 1 : 0),
+              itemCount:
+                  _users.length + (_failed || (_hasMore && _loading) ? 1 : 0),
               itemBuilder: (_, i) {
                 if (i >= _users.length) {
+                  if (_failed) {
+                    return Padding(
+                      padding: const EdgeInsets.all(AppSpace.lg),
+                      child: Column(
+                        children: [
+                          const Text('Could not load more'),
+                          TextButton(
+                            onPressed: _load,
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
                   return const Padding(
                     padding: EdgeInsets.all(AppSpace.lg),
                     child: Center(child: CircularProgressIndicator()),
@@ -126,7 +159,7 @@ class _SocialListScreenState extends State<SocialListScreen> {
                   child: GlowCard(
                     onTap: widget.onOpenProfile == null
                         ? null
-                        : () => widget.onOpenProfile!(user.id),
+                        : () => unawaited(_openProfile(user.id)),
                     child: Row(
                       children: [
                         _avatar(user),

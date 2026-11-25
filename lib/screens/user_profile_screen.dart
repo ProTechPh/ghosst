@@ -154,27 +154,30 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     }
   }
 
-  Future<void> _toggleFollow() async {
+  Future<void> _toggleFollow() => _setFollowing(!_following);
+
+  Future<void> _setFollowing(bool next) async {
     if (_followBusy || _user == null || _user!.isSelf) return;
-    final next = !_following;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     final previous = _following;
     final previousCount = _followerCount;
     setState(() {
       _followBusy = true;
       _following = next;
-      _followerCount = (previousCount + (next ? 1 : -1)).clamp(0, 1 << 31);
+      _followerCount = (previousCount + (next ? 1 : -1))
+          .clamp(0, 1 << 31)
+          .toInt();
     });
     try {
       final state = next
           ? await widget.onFollow?.call(widget.userId)
           : await widget.onUnfollow?.call(widget.userId);
+      if (state == null) throw StateError('Follow action unavailable');
       if (!mounted) return;
       setState(() {
         _followBusy = false;
-        if (state != null) {
-          _following = state.isFollowing;
-          _followerCount = state.followerCount;
-        }
+        _following = state.isFollowing;
+        _followerCount = state.followerCount;
       });
     } catch (_) {
       if (!mounted) return;
@@ -188,7 +191,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           content: Text(
             'Could not ${next ? 'follow' : 'unfollow'}. Try again.',
           ),
-          action: SnackBarAction(label: 'Retry', onPressed: _toggleFollow),
+          action: SnackBarAction(
+            label: 'Retry',
+            onPressed: () => unawaited(_setFollowing(next)),
+          ),
         ),
       );
     }
@@ -369,12 +375,17 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     if (widget.onFollow != null ||
                         widget.onUnfollow != null) ...[
                       const SizedBox(width: AppSpace.sm),
-                      FilledButton(
-                        onPressed: _followBusy ? null : _toggleFollow,
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size(0, 48),
+                      Semantics(
+                        label: _following
+                            ? 'Unfollow ${_displayName(user)}'
+                            : 'Follow ${_displayName(user)}',
+                        child: FilledButton(
+                          onPressed: _followBusy ? null : _toggleFollow,
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                          ),
+                          child: Text(_following ? 'Following' : 'Follow'),
                         ),
-                        child: Text(_following ? 'Following' : 'Follow'),
                       ),
                     ],
                   ],

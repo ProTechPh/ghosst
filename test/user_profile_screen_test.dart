@@ -156,6 +156,38 @@ void main() {
     expect(find.text('Retry'), findsOneWidget);
   });
 
+  testWidgets('a new follow attempt dismisses stale Retry actions', (
+    tester,
+  ) async {
+    final calls = <String>[];
+    var follows = 0;
+    await _pump(
+      tester,
+      loader: (_) async => _user(),
+      onFollow: (_) async {
+        calls.add('follow');
+        follows++;
+        if (follows == 1) throw Exception('offline');
+        return const FollowState(isFollowing: true, followerCount: 13);
+      },
+      onUnfollow: (_) async {
+        calls.add('unfollow');
+        return const FollowState(isFollowing: false, followerCount: 12);
+      },
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Follow'));
+    await tester.pumpAndSettle();
+    expect(find.text('Retry'), findsOneWidget);
+    await tester.tap(find.text('Follow'));
+    await tester.pumpAndSettle();
+
+    expect(calls, ['follow', 'follow']);
+    expect(find.text('Retry'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Following'), findsOneWidget);
+  });
+
   testWidgets('self profile hides Follow', (tester) async {
     await _pump(
       tester,

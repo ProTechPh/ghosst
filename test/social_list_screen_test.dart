@@ -17,7 +17,7 @@ PublicUser _user(String id, String name) => PublicUser(
 Future<void> _pump(
   WidgetTester tester, {
   required Future<List<PublicUser>> Function(int offset) load,
-  ValueChanged<String>? onOpenProfile,
+  Future<void> Function(String id)? onOpenProfile,
   SocialListDirection direction = SocialListDirection.followers,
 }) async {
   await tester.pumpWidget(
@@ -45,7 +45,7 @@ void main() {
     await _pump(
       tester,
       load: (_) async => [_user('43', 'Peer')],
-      onOpenProfile: (id) => opened = id,
+      onOpenProfile: (id) async => opened = id,
     );
     await tester.pumpAndSettle();
 
@@ -80,6 +80,49 @@ void main() {
     await tester.drag(find.byType(ListView), const Offset(0, 2000));
     await tester.pumpAndSettle();
     expect(find.text('User 0'), findsOneWidget);
+  });
+
+  testWidgets('later page failure shows Retry and preserves loaded rows', (
+    tester,
+  ) async {
+    var failSecond = true;
+    await _pump(
+      tester,
+      load: (offset) async {
+        if (offset == 0) {
+          return List.generate(20, (i) => _user('$i', 'User $i'));
+        }
+        if (failSecond) throw Exception('offline');
+        return [_user('20', 'User 20')];
+      },
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -2000));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not load more'), findsOneWidget);
+    expect(find.text('User 19'), findsOneWidget);
+    failSecond = false;
+    final retry = tester.widget<TextButton>(
+      find.ancestor(of: find.text('Retry'), matching: find.byType(TextButton)).first,
+    );
+    retry.onPressed!();
+    await tester.pumpAndSettle();
+    expect(find.text('User 20'), findsOneWidget);
+  });
+
+  testWidgets('refreshes after returning from a profile', (tester) async {
+    var removed = false;
+    await _pump(
+      tester,
+      load: (_) async => removed ? [] : [_user('43', 'Peer')],
+      onOpenProfile: (_) async => removed = true,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Peer'));
+    await tester.pumpAndSettle();
+    expect(find.text('No followers yet'), findsOneWidget);
   });
 
   testWidgets('empty and error states support Retry', (tester) async {

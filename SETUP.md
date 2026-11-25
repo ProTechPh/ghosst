@@ -66,6 +66,8 @@ bagong API. It creates `app_reports`, `app_cleanup_queue`, `app_follows`,
 safe itong i-rerun. Ang one-time column migrations ay hiwalay:
 `mobile_app_avatar.sql` (`users.avatar_url`) at `mobile_app_feedback.sql`
 (`feedbacks.source` + index). I-skip ang isang file kung nandoon na ang column.
+Para sa existing follow data, patakbuhin din ang `mobile_app_follow_cleanup.sql`
+(isang beses) para tanggalin ang dangling edges at magdagdag ng Following index.
 
 Ang public profile API ay allowlisted: display name, username, Google avatar,
 join date, admin/moderator badge, follower/following/reel counts. Hindi ibinibigay
