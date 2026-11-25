@@ -120,6 +120,7 @@ class DirectMessage {
 }
 
 abstract class DirectChatClient {
+  Future<String?> currentUid();
   Stream<List<DirectThread>> threads();
   Stream<List<DirectMessage>> messages(String threadId);
   Future<String?> send(String threadId, String text);
@@ -156,6 +157,12 @@ class DirectChatService implements DirectChatClient {
     final parts = threadId.split('__');
     if (parts.length != 2 || parts.contains(uid) == false) return false;
     return directThreadId(parts[0], parts[1]) == threadId;
+  }
+
+  @override
+  Future<String?> currentUid() async {
+    if (!await ChatService.started) return null;
+    return FirebaseAuth.instance.currentUser?.uid;
   }
 
   @override

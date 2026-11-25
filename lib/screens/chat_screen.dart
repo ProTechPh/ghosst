@@ -6,6 +6,8 @@ import '../services/chat_service.dart';
 import '../services/read_store.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
+import 'direct_chat_screen.dart';
+import 'inbox_screen.dart';
 
 /// World chat room. Identity is the backend UUID (see [ChatService]); there
 /// is no Firebase login UI. Fail-open: when Firebase is not configured or
@@ -19,6 +21,7 @@ class ChatScreen extends StatefulWidget {
     this.isAdmin = false,
     this.isModerator = false,
     this.onUnreadChanged,
+    this.onOpenInbox,
   });
 
   /// True when shown as a shell tab (the shell supplies the bar).
@@ -38,6 +41,8 @@ class ChatScreen extends StatefulWidget {
 
   /// Tab badge: messages from other users newer than the last seen marker.
   final ValueChanged<int>? onUnreadChanged;
+
+  final VoidCallback? onOpenInbox;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -470,6 +475,27 @@ class _ChatScreenState extends State<ChatScreen> {
     return (label: 'LIVE', icon: Icons.bolt, color: AppColors.green);
   }
 
+  void _openInbox() {
+    final callback = widget.onOpenInbox;
+    if (callback != null) {
+      callback();
+      return;
+    }
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => InboxScreen(
+        onOpenThread: (thread, peer) => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => DirectChatScreen(
+              peerId: peer.id,
+              peerName: peer.name,
+              peerAvatarUrl: peer.avatarUrl,
+            ),
+          ),
+        ),
+      ),
+    ));
+  }
+
   /// Status bar sa taas ng chat: online count sa kaliwa, link state sa kanan.
   Widget _connectionBar() {
     final status = _connectionStatus;
@@ -482,6 +508,11 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       child: Row(
         children: [
+          IconButton(
+            tooltip: 'Inbox',
+            onPressed: _openInbox,
+            icon: const Icon(Icons.inbox_outlined),
+          ),
           if (_booted)
             Semantics(
               label: '$_onlineCount online',

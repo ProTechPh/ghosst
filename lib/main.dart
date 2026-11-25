@@ -15,7 +15,9 @@ import 'screens/adblock_screen.dart';
 import 'screens/admin_screen.dart';
 import 'screens/announcements_screen.dart';
 import 'screens/chat_screen.dart';
+import 'screens/direct_chat_screen.dart';
 import 'screens/earn_screen.dart';
+import 'screens/inbox_screen.dart';
 import 'screens/landing_screen.dart';
 import 'screens/my_keys_screen.dart';
 import 'screens/notice_screen.dart';
@@ -33,6 +35,7 @@ import 'services/chat_service.dart';
 import 'services/worker_backend.dart';
 import 'services/consent_service.dart';
 import 'services/distribution.dart';
+import 'services/direct_chat_service.dart';
 import 'services/notice_store.dart';
 import 'services/play_integrity.dart';
 import 'services/play_store.dart';
@@ -422,6 +425,7 @@ class _HomeState extends State<Home> {
     // A dead refresh token drops the UI back to the landing page.
     Backend.onSignedOut = () {
       unawaited(ChatService().signOut());
+      unawaited(DirectChatService().signOut());
       if (mounted) setState(() => signedIn = false);
     };
     _load();
@@ -453,6 +457,7 @@ class _HomeState extends State<Home> {
       await Backend.signOut();
     } catch (_) {}
     await ChatService().signOut();
+    await DirectChatService().signOut();
     if (mounted) setState(() => signedIn = false);
   }
 
@@ -743,6 +748,23 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
+  void _openInbox() {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => InboxScreen(
+        onOpenThread: (thread, peer) {
+          Navigator.of(context).pop();
+          Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => DirectChatScreen(
+              peerId: peer.id,
+              peerName: peer.name,
+              peerAvatarUrl: peer.avatarUrl,
+            ),
+          ));
+        },
+      ),
+    ));
+  }
+
   void _openProfile() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -807,6 +829,7 @@ class _HomeShellState extends State<HomeShell> {
         onUnreadChanged: (count) {
           if (_chatUnread != count) setState(() => _chatUnread = count);
         },
+        onOpenInbox: _openInbox,
       ),
       if (isAdmin) AdminScreen(onAnnouncementSent: _refresh, active: tab == 5),
     ];

@@ -117,17 +117,37 @@ Future<void> _pump(
   ChatClient client, {
   bool active = true,
   bool isAdmin = false,
+  VoidCallback? onOpenInbox,
 }) async {
   await tester.pumpWidget(MaterialApp(
     theme: AppTheme.dark,
     home: Scaffold(
-      body: ChatScreen(client: client, active: active, isAdmin: isAdmin),
+      body: ChatScreen(
+        client: client,
+        active: active,
+        isAdmin: isAdmin,
+        onOpenInbox: onOpenInbox,
+      ),
     ),
   ));
   await tester.pump();
 }
 
 void main() {
+  testWidgets('shows an Inbox button and opens it', (tester) async {
+    var opened = false;
+    await _pump(
+      tester,
+      _FakeClient(),
+      onOpenInbox: () => opened = true,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Inbox'), findsOneWidget);
+    await tester.tap(find.byTooltip('Inbox'));
+    expect(opened, isTrue);
+  });
+
   testWidgets('shows the fallback when Firebase is not ready', (tester) async {
     await _pump(tester, _FakeClient(ready: false));
 

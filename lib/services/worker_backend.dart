@@ -305,6 +305,11 @@ class Backend {
         .toList();
   }
 
+  static Future<ChatUserSummary> chatUser(String id) async {
+    final res = await _api.get('/users/$id');
+    return ChatUserSummary.fromJson(res['user'] as Map<String, dynamic>);
+  }
+
   static Future<void> reportContent({
     required String targetType,
     required String targetId,
