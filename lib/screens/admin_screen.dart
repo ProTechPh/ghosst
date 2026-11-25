@@ -175,7 +175,7 @@ class _AdminScreenState extends State<AdminScreen> {
                           const Duration(milliseconds: 400),
                           () async {
                             try {
-                              final rows = await Backend.searchUsers(q);
+                              final rows = await Backend.searchAdminUsers(q);
                               if (ctx.mounted) {
                                 setD(() {
                                   searchResults = rows;

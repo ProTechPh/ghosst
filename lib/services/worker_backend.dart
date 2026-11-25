@@ -296,6 +296,33 @@ class Backend {
     }
   }
 
+  /// Safe user search for starting a private conversation.
+  static Future<List<ChatUserSummary>> searchUsers(String query) async {
+    final res = await _api.get('/users/search', query: {'q': query});
+    return (res['users'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(ChatUserSummary.fromJson)
+        .toList();
+  }
+
+  static Future<void> reportContent({
+    required String targetType,
+    required String targetId,
+    required String reason,
+    String details = '',
+    String? snapshot,
+  }) =>
+      _api.post(
+        '/reports',
+        data: {
+          'targetType': targetType,
+          'targetId': targetId,
+          'reason': reason,
+          'details': details,
+          'snapshot': ?snapshot,
+        },
+      );
+
   /// Server-owned read markers. Null when signed out or the call fails.
   static Future<({String announcementsSeenAt, int chatSeenAtMs})?> reads() async {
     try {
@@ -709,7 +736,7 @@ class Backend {
     await _api.delete('/admin/moderators/$userId');
   }
 
-  static Future<List<Map<String, dynamic>>> searchUsers(String query) async {
+  static Future<List<Map<String, dynamic>>> searchAdminUsers(String query) async {
     final res = await _api.get('/admin/users', query: {'search': query});
     final rows = (res['users'] as List?) ?? const [];
     return rows.map((e) => (e as Map).cast<String, dynamic>()).toList();

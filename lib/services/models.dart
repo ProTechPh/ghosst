@@ -19,6 +19,34 @@ ProductType productTypeOf(String? raw) => switch (raw) {
   _ => ProductType.key,
 };
 
+/// Safe identity returned by user search and embedded in social responses.
+class ChatUserSummary {
+  const ChatUserSummary({required this.id, required this.name, this.avatarUrl});
+
+  final String id;
+  final String name;
+  final String? avatarUrl;
+
+  String get initial {
+    final value = name.trim();
+    return value.isEmpty ? 'G' : String.fromCharCode(value.runes.first);
+  }
+
+  factory ChatUserSummary.fromJson(Map<String, dynamic> json) {
+    final id = (json['id'] ?? '').toString();
+    final username = json['username'] as String? ?? '';
+    final displayName = (json['displayName'] as String? ?? '').trim();
+    final avatar = (json['avatarUrl'] as String? ?? '').trim();
+    return ChatUserSummary(
+      id: id,
+      name: displayName.isNotEmpty
+          ? displayName
+          : (username.isNotEmpty ? username : 'Member #$id'),
+      avatarUrl: avatar.isEmpty ? null : avatar,
+    );
+  }
+}
+
 class Product {
   Product({
     required this.id,
