@@ -346,8 +346,16 @@ void main() {
         Reel(
           id: 'r1',
           caption: '',
-          videoUrl: 'https://example.com/r1.mp4',
           posterUrl: 'https://example.com/r1.jpg',
+          images: const [
+            ReelImage(
+              position: 1,
+              url: 'https://example.com/r1.jpg',
+              sha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+              sizeBytes: 1,
+              mimeType: 'image/jpeg',
+            ),
+          ],
           createdAt: '',
           creator: _user(),
           likeCount: 0,
@@ -356,7 +364,16 @@ void main() {
         Reel(
           id: 'r2',
           caption: '',
-          videoUrl: 'https://example.com/r2.mp4',
+          posterUrl: 'https://example.com/r2.jpg',
+          images: const [
+            ReelImage(
+              position: 1,
+              url: 'https://example.com/r2.jpg',
+              sha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+              sizeBytes: 1,
+              mimeType: 'image/jpeg',
+            ),
+          ],
           createdAt: '',
           creator: _user(),
           likeCount: 0,

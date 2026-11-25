@@ -121,13 +121,27 @@ void main() {
     expect(users.map((user) => user.id), ['42', '43']);
   });
 
-  test('Reel parses creator, counts, flags, and optional metadata', () {
+  test('Reel parses ordered images, poster, creator, counts, and flags', () {
     final reel = Reel.fromJson({
       'id': 'r1',
       'caption': 'Hello',
-      'videoUrl': 'https://example.com/r1.mp4',
-      'posterUrl': 'https://example.com/r1.jpg',
-      'durationMs': '1200',
+      'posterUrl': 'https://example.com/r1-1.jpg',
+      'images': [
+        {
+          'position': 2,
+          'url': 'https://example.com/r1-2.jpg',
+          'sha256': 'b' * 64,
+          'sizeBytes': 20,
+          'mimeType': 'image/png',
+        },
+        {
+          'position': 1,
+          'url': 'https://example.com/r1-1.jpg',
+          'sha256': 'a' * 64,
+          'sizeBytes': 10,
+          'mimeType': 'image/jpeg',
+        },
+      ],
       'createdAt': '2026-01-01T00:00:00.000Z',
       'creator': {'id': 42, 'displayName': 'Jeric'},
       'likeCount': '3',
@@ -139,7 +153,9 @@ void main() {
     expect(reel.id, 'r1');
     expect(reel.caption, 'Hello');
     expect(reel.creator.id, '42');
-    expect(reel.durationMs, 1200);
+    expect(reel.images.map((i) => i.position), [1, 2]);
+    expect(reel.images.first.url, 'https://example.com/r1-1.jpg');
+    expect(reel.posterUrl, 'https://example.com/r1-1.jpg');
     expect(reel.likeCount, 3);
     expect(reel.commentCount, 2);
     expect(reel.isLiked, isTrue);
@@ -149,8 +165,8 @@ void main() {
       'id': 'r2',
       'creator': {'id': '43'},
     });
+    expect(missing.images, isEmpty);
     expect(missing.posterUrl, isNull);
-    expect(missing.durationMs, isNull);
     expect(missing.likeCount, 0);
   });
 
@@ -169,6 +185,9 @@ void main() {
         {
           'id': 'r1',
           'creator': {'id': 42},
+          'images': [
+            {'position': 1, 'url': 'https://example.com/r1-1.jpg'},
+          ],
         },
         'bad',
       ],
@@ -178,20 +197,25 @@ void main() {
     expect(page.nextOffset, 10);
   });
 
-  test('ReelUploadTicket parses expiry and limits', () {
+  test('ReelUploadTicket parses per-image tickets', () {
     final ticket = ReelUploadTicket.fromJson({
       'reel': {'id': 'r1', 'status': 'pending'},
-      'upload': {
-        'url': 'https://video.example/upload.php',
-        'token': 'signed',
-        'expiresAt': '2026-01-01T00:15:00.000Z',
-        'maxBytes': '52428800',
-      },
+      'uploads': [
+        {
+          'position': 1,
+          'url': 'https://z.example/upload.php',
+          'token': 't1',
+          'expiresAt': '2026-01-01T00:15:00.000Z',
+          'maxBytes': '10485760',
+          'sha256': '${'a' * 64}',
+          'storageKey': 'r1-1.jpg',
+        },
+      ],
     });
     expect(ticket.reelId, 'r1');
-    expect(ticket.uploadUrl, 'https://video.example/upload.php');
-    expect(ticket.token, 'signed');
-    expect(ticket.maxBytes, 52428800);
+    expect(ticket.uploads.single.position, 1);
+    expect(ticket.uploads.single.uploadUrl, 'https://z.example/upload.php');
+    expect(ticket.uploads.single.maxBytes, 10485760);
     expect(ticket.expiresAt.year, 2026);
   });
 }

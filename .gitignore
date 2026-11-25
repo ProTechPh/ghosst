@@ -67,3 +67,5 @@ api/error_log
 graphify-out/
 .opencode/
 ghosst-web/
+
+/.superpowers/

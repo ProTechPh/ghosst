@@ -41,7 +41,16 @@ class _FakePlayback implements ReelPlayback {
 Reel _reel(String id, String name) => Reel(
   id: id,
   caption: 'Caption $id',
-  videoUrl: 'https://example.com/$id.mp4',
+  posterUrl: 'https://example.com/$id-1.jpg',
+  images: [
+    ReelImage(
+      position: 1,
+      url: 'https://example.com/$id-1.jpg',
+      sha256: 'a' * 64,
+      sizeBytes: 1,
+      mimeType: 'image/jpeg',
+    ),
+  ],
   createdAt: '',
   creator: PublicUser(
     id: name,
@@ -193,7 +202,16 @@ void main() {
     final owned = Reel(
       id: 'mine',
       caption: 'Mine',
-      videoUrl: 'https://example.com/mine.mp4',
+      posterUrl: 'https://example.com/mine-1.jpg',
+      images: [
+        ReelImage(
+          position: 1,
+          url: 'https://example.com/mine-1.jpg',
+          sha256: 'a' * 64,
+          sizeBytes: 1,
+          mimeType: 'image/jpeg',
+        ),
+      ],
       createdAt: '',
       creator: _reel('mine', 'Me').creator,
       likeCount: 0,

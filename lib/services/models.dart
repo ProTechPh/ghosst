@@ -132,17 +132,54 @@ List<PublicUser> publicUsersFromJson(Object? raw) => raw is List
       ]
     : const [];
 
+class ReelImage {
+  const ReelImage({
+    required this.position,
+    required this.url,
+    required this.sha256,
+    required this.sizeBytes,
+    required this.mimeType,
+    this.width,
+    this.height,
+  });
+
+  final int position;
+  final String url;
+  final String sha256;
+  final int sizeBytes;
+  final String mimeType;
+  final int? width;
+  final int? height;
+
+  factory ReelImage.fromJson(Map<String, dynamic> json) {
+    int parseInt(Object? value) => int.tryParse((value ?? '').toString()) ?? 0;
+    int? parseNullableInt(Object? value) {
+      final parsed = int.tryParse((value ?? '').toString());
+      return parsed == null || parsed <= 0 ? null : parsed;
+    }
+
+    return ReelImage(
+      position: parseInt(json['position']),
+      url: json['url'] as String? ?? '',
+      sha256: (json['sha256'] as String? ?? '').toLowerCase(),
+      sizeBytes: parseInt(json['sizeBytes']),
+      mimeType: json['mimeType'] as String? ?? '',
+      width: parseNullableInt(json['width']),
+      height: parseNullableInt(json['height']),
+    );
+  }
+}
+
 class Reel {
   const Reel({
     required this.id,
     required this.caption,
-    required this.videoUrl,
     required this.createdAt,
     required this.creator,
     required this.likeCount,
     required this.commentCount,
     this.posterUrl,
-    this.durationMs,
+    this.images = const [],
     this.isLiked = false,
     this.isFollowing = false,
     this.isMine = false,
@@ -150,10 +187,9 @@ class Reel {
 
   final String id;
   final String caption;
-  final String videoUrl;
   final String createdAt;
   final String? posterUrl;
-  final int? durationMs;
+  final List<ReelImage> images;
   final PublicUser creator;
   final int likeCount;
   final int commentCount;
@@ -168,13 +204,19 @@ class Reel {
     }
 
     final rawCreator = json['creator'];
+    final images = [
+      for (final item in json['images'] as List? ?? const [])
+        if (item is Map<String, dynamic>) ReelImage.fromJson(item),
+    ]..sort((a, b) => a.position.compareTo(b.position));
+    final poster = (json['posterUrl'] as String? ?? '').trim();
     return Reel(
       id: (json['id'] ?? '').toString(),
       caption: json['caption'] as String? ?? '',
-      videoUrl: json['videoUrl'] as String? ?? '',
       createdAt: json['createdAt'] as String? ?? '',
-      posterUrl: json['posterUrl'] as String?,
-      durationMs: int.tryParse((json['durationMs'] ?? '').toString()),
+      posterUrl: poster.isNotEmpty
+          ? poster
+          : (images.isNotEmpty ? images.first.url : null),
+      images: images,
       creator: PublicUser.fromJson(
         rawCreator is Map<String, dynamic> ? rawCreator : const {},
       ),
@@ -228,35 +270,77 @@ class ReelFeedPage {
   );
 }
 
+class ReelUploadImage {
+  const ReelUploadImage({
+    required this.fileName,
+    required this.sizeBytes,
+    required this.sha256,
+    required this.mimeType,
+  });
+
+  final String fileName;
+  final int sizeBytes;
+  final String sha256;
+  final String mimeType;
+}
+
+class ReelImageUploadTicket {
+  const ReelImageUploadTicket({
+    required this.position,
+    required this.uploadUrl,
+    required this.token,
+    required this.sha256,
+    required this.storageKey,
+    required this.maxBytes,
+  });
+
+  final int position;
+  final String uploadUrl;
+  final String token;
+  final String sha256;
+  final String storageKey;
+  final int maxBytes;
+
+  factory ReelImageUploadTicket.fromJson(Map<String, dynamic> json) =>
+      ReelImageUploadTicket(
+        position: int.tryParse((json['position'] ?? '').toString()) ?? 0,
+        uploadUrl: json['url'] as String? ?? '',
+        token: json['token'] as String? ?? '',
+        sha256: (json['sha256'] as String? ?? '').toLowerCase(),
+        storageKey: json['storageKey'] as String? ?? '',
+        maxBytes: int.tryParse((json['maxBytes'] ?? '').toString()) ?? 0,
+      );
+}
+
 class ReelUploadTicket {
   const ReelUploadTicket({
     required this.reelId,
-    required this.uploadUrl,
-    required this.token,
     required this.expiresAt,
-    required this.maxBytes,
-    this.sha256 = '',
+    required this.uploads,
   });
 
   final String reelId;
-  final String uploadUrl;
-  final String token;
   final DateTime expiresAt;
-  final int maxBytes;
-  final String sha256;
+  final List<ReelImageUploadTicket> uploads;
 
   factory ReelUploadTicket.fromJson(Map<String, dynamic> json) {
     final reel = json['reel'] as Map<String, dynamic>? ?? const {};
-    final upload = json['upload'] as Map<String, dynamic>? ?? const {};
+    final uploads = [
+      for (final item in json['uploads'] as List? ?? const [])
+        if (item is Map<String, dynamic>) ReelImageUploadTicket.fromJson(item),
+    ]..sort((a, b) => a.position.compareTo(b.position));
+    DateTime? expiresAt;
+    for (final item in json['uploads'] as List? ?? const []) {
+      if (item is Map<String, dynamic>) {
+        expiresAt = DateTime.tryParse(item['expiresAt'] as String? ?? '');
+        if (expiresAt != null) break;
+      }
+    }
+    expiresAt ??= DateTime.tryParse(json['expiresAt'] as String? ?? '');
     return ReelUploadTicket(
       reelId: (reel['id'] ?? '').toString(),
-      uploadUrl: upload['url'] as String? ?? '',
-      token: upload['token'] as String? ?? '',
-      expiresAt:
-          DateTime.tryParse(upload['expiresAt'] as String? ?? '') ??
-          DateTime.now().add(const Duration(minutes: 15)),
-      maxBytes: int.tryParse((upload['maxBytes'] ?? '').toString()) ?? 0,
-      sha256: upload['sha256'] as String? ?? '',
+      expiresAt: expiresAt ?? DateTime.now().add(const Duration(minutes: 15)),
+      uploads: uploads,
     );
   }
 }
