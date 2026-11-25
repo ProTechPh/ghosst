@@ -441,37 +441,27 @@ class Backend {
   }
 
   static Future<ReelUploadTicket> startReelUpload({
-    required String fileName,
-    required int sizeBytes,
-    required String sha256,
-    String caption = '',
-    String? idempotencyKey,
+    required String caption,
+    required List<Map<String, dynamic>> images,
+    required String idempotencyKey,
   }) async {
     final res = await _api.post(
       '/reels/uploads',
-      data: {
-        'fileName': fileName,
-        'sizeBytes': sizeBytes,
-        'sha256': sha256,
-        'mimeType': 'video/mp4',
-        'caption': caption,
-      },
-      headers: {'idempotency-key': idempotencyKey ?? newIdempotencyKey()},
+      data: {'caption': caption, 'images': images},
+      headers: {'idempotency-key': '$idempotencyKey-init'},
     );
     return ReelUploadTicket.fromJson(res);
   }
 
   static Future<void> completeReelUpload({
     required String reelId,
-    required String videoUrl,
-    required String sha256,
-    required int sizeBytes,
+    required List<Map<String, dynamic>> images,
     required String idempotencyKey,
   }) async {
     await _api.post(
       '/reels/$reelId/complete',
-      data: {'videoUrl': videoUrl, 'sha256': sha256, 'sizeBytes': sizeBytes},
-      headers: {'idempotency-key': idempotencyKey},
+      data: {'images': images},
+      headers: {'idempotency-key': '$idempotencyKey-complete'},
     );
     await _api.get('/reels/$reelId');
   }

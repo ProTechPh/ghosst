@@ -5,20 +5,92 @@ import 'package:dio/dio.dart';
 
 import 'models.dart';
 
-class ReelUploadResult {
-  const ReelUploadResult({
-    required this.videoUrl,
-    required this.sha256,
+class ReelDraftImage {
+  const ReelDraftImage({
+    required this.path,
+    required this.fileName,
     required this.sizeBytes,
-    this.durationMs,
-    this.posterUrl,
+    required this.sha256,
+    required this.mimeType,
   });
 
-  final String videoUrl;
+  final String path;
+  final String fileName;
+  final int sizeBytes;
+  final String sha256;
+  final String mimeType;
+
+  ReelDraftImage copyWith({
+    String? path,
+    String? fileName,
+    int? sizeBytes,
+    String? sha256,
+    String? mimeType,
+  }) => ReelDraftImage(
+    path: path ?? this.path,
+    fileName: fileName ?? this.fileName,
+    sizeBytes: sizeBytes ?? this.sizeBytes,
+    sha256: sha256 ?? this.sha256,
+    mimeType: mimeType ?? this.mimeType,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'fileName': fileName,
+    'sizeBytes': sizeBytes,
+    'sha256': sha256,
+    'mimeType': mimeType,
+  };
+}
+
+class ReelUploadDraft {
+  const ReelUploadDraft({
+    required this.caption,
+    required this.images,
+    required this.idempotencyBase,
+    this.onProgress,
+  });
+
+  final String caption;
+  final List<ReelDraftImage> images;
+  final String idempotencyBase;
+  final void Function(int done, int total)? onProgress;
+
+  ReelUploadDraft copyWith({
+    String? caption,
+    List<ReelDraftImage>? images,
+    String? idempotencyBase,
+    void Function(int done, int total)? onProgress,
+  }) => ReelUploadDraft(
+    caption: caption ?? this.caption,
+    images: images ?? this.images,
+    idempotencyBase: idempotencyBase ?? this.idempotencyBase,
+    onProgress: onProgress ?? this.onProgress,
+  );
+}
+
+class ReelImageUploadResult {
+  const ReelImageUploadResult({
+    required this.position,
+    required this.imageUrl,
+    required this.sha256,
+    required this.sizeBytes,
+    this.width,
+    this.height,
+  });
+
+  final int position;
+  final String imageUrl;
   final String sha256;
   final int sizeBytes;
-  final int? durationMs;
-  final String? posterUrl;
+  final int? width;
+  final int? height;
+
+  Map<String, dynamic> toJson() => {
+    'position': position,
+    'imageUrl': imageUrl,
+    'sha256': sha256,
+    'sizeBytes': sizeBytes,
+  };
 }
 
 class ReelUploadService {
@@ -26,28 +98,55 @@ class ReelUploadService {
 
   final Dio _dio;
   final bool _ownsDio;
-  static const int maxBytes = 50 * 1024 * 1024;
+  static const int maxImages = 5;
+  static const int maxBytesPerImage = 10 * 1024 * 1024;
+  static const int maxTotalBytes = 50 * 1024 * 1024;
+  static const Set<String> allowedMimeTypes = {
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+  };
 
-  static String? validateInput({
-    required String filePath,
-    required int sizeBytes,
-    required String sha256,
-    required ReelUploadTicket ticket,
+  static String? validateImages(
+    List<ReelDraftImage> images, {
+    int totalMaxBytes = maxTotalBytes,
   }) {
-    if (!filePath.toLowerCase().endsWith('.mp4')) {
-      return 'Only MP4 videos are allowed.';
+    if (images.isEmpty || images.length > maxImages) {
+      return 'Upload 1 to 5 images.';
     }
-    if (sizeBytes < 1 || sizeBytes > maxBytes || sizeBytes > ticket.maxBytes) {
-      return 'Video must be between 1 byte and 50 MB.';
+    var total = 0;
+    for (final image in images) {
+      final ext = image.fileName.toLowerCase().split('.').last;
+      final mimeOk =
+          allowedMimeTypes.contains(image.mimeType.toLowerCase()) &&
+          ['jpg', 'jpeg', 'png', 'webp'].contains(ext);
+      if (!mimeOk) return 'Only JPG, PNG, or WebP images are allowed.';
+      if (image.sizeBytes < 1 || image.sizeBytes > maxBytesPerImage) {
+        return 'Each image must be 10 MB or less.';
+      }
+      if (!RegExp(r'^[a-fA-F0-9]{64}$').hasMatch(image.sha256)) {
+        return 'Invalid image hash.';
+      }
+      total += image.sizeBytes;
     }
-    if (!RegExp(r'^[a-fA-F0-9]{64}$').hasMatch(sha256)) {
-      return 'Invalid SHA-256.';
-    }
+    if (total > totalMaxBytes) return 'Total image size must be 50 MB or less.';
+    return null;
+  }
+
+  static String? validateTicket(
+    List<ReelDraftImage> images,
+    ReelUploadTicket ticket,
+  ) {
     if (ticket.expiresAt.isBefore(DateTime.now())) {
       return 'Upload ticket expired.';
     }
-    if (ticket.uploadUrl.isEmpty || ticket.token.isEmpty) {
-      return 'Upload is not configured.';
+    if (ticket.uploads.length != images.length) {
+      return 'Upload ticket does not match selected images.';
+    }
+    for (final upload in ticket.uploads) {
+      if (upload.uploadUrl.isEmpty || upload.token.isEmpty) {
+        return 'Upload is not configured.';
+      }
     }
     return null;
   }
@@ -61,45 +160,51 @@ class ReelUploadService {
     return digest.toString();
   }
 
-  Future<ReelUploadResult> upload({
-    required String filePath,
+  Future<List<ReelImageUploadResult>> uploadImages({
+    required List<ReelDraftImage> images,
     required ReelUploadTicket ticket,
-    void Function(int sent, int total)? onProgress,
+    void Function(int done, int total)? onImageProgress,
   }) async {
-    final file = File(filePath);
-    final size = await file.length();
-    final invalid = validateInput(
-      filePath: filePath,
-      sizeBytes: size,
-      sha256: ticket.sha256,
-      ticket: ticket,
-    );
-    if (invalid != null) throw ArgumentError(invalid);
+    final invalidImages = validateImages(images);
+    if (invalidImages != null) throw ArgumentError(invalidImages);
+    final invalidTicket = validateTicket(images, ticket);
+    if (invalidTicket != null) throw ArgumentError(invalidTicket);
 
-    final form = FormData.fromMap({
-      'video': await MultipartFile.fromFile(
-        filePath,
-        filename: filePath.split(RegExp(r'[/\\]')).last,
-      ),
-    });
-    final response = await _dio.post<Map<String, dynamic>>(
-      ticket.uploadUrl,
-      data: form,
-      options: Options(
-        headers: {'authorization': 'Bearer ${ticket.token}'},
-        connectTimeout: const Duration(seconds: 15),
-        sendTimeout: const Duration(seconds: 120),
-        receiveTimeout: const Duration(seconds: 120),
-      ),
-      onSendProgress: onProgress,
-    );
-    final data = response.data ?? const {};
-    return ReelUploadResult(
-      videoUrl: data['videoUrl'] as String? ?? '',
-      sha256: data['sha256'] as String? ?? '',
-      sizeBytes: (data['sizeBytes'] as num?)?.toInt() ?? size,
-      durationMs: (data['durationMs'] as num?)?.toInt(),
-      posterUrl: data['posterUrl'] as String?,
-    );
+    final sortedTickets = [...ticket.uploads]
+      ..sort((a, b) => a.position.compareTo(b.position));
+    final results = <ReelImageUploadResult>[];
+    for (var i = 0; i < images.length; i++) {
+      final image = images[i];
+      final upload = sortedTickets[i];
+      final form = FormData.fromMap({
+        'image': await MultipartFile.fromFile(
+          image.path,
+          filename: image.fileName,
+        ),
+      });
+      final response = await _dio.post<Map<String, dynamic>>(
+        upload.uploadUrl,
+        data: form,
+        options: Options(
+          headers: {'authorization': 'Bearer ${upload.token}'},
+          connectTimeout: const Duration(seconds: 15),
+          sendTimeout: const Duration(seconds: 120),
+          receiveTimeout: const Duration(seconds: 120),
+        ),
+      );
+      final data = response.data ?? const {};
+      results.add(
+        ReelImageUploadResult(
+          position: upload.position,
+          imageUrl: data['imageUrl'] as String? ?? '',
+          sha256: (data['sha256'] as String? ?? image.sha256).toLowerCase(),
+          sizeBytes: (data['sizeBytes'] as num?)?.toInt() ?? image.sizeBytes,
+          width: (data['width'] as num?)?.toInt(),
+          height: (data['height'] as num?)?.toInt(),
+        ),
+      );
+      onImageProgress?.call(i + 1, images.length);
+    }
+    return results;
   }
 }

@@ -9,8 +9,8 @@ import 'package:ghosst/services/reel_upload_service.dart';
 import 'package:ghosst/theme.dart';
 
 class _FakePicker extends FilePicker {
-  _FakePicker(this.file);
-  final PlatformFile file;
+  _FakePicker(this.files);
+  final List<PlatformFile> files;
 
   @override
   Future<FilePickerResult?> pickFiles({
@@ -26,107 +26,118 @@ class _FakePicker extends FilePicker {
     bool withReadStream = false,
     bool lockParentWindow = false,
     bool readSequential = false,
-  }) async => FilePickerResult([file]);
+  }) async => FilePickerResult(files);
 }
 
 ReelUploadTicket _ticket({
   DateTime? expiresAt,
-  int maxBytes = 52428800,
-  required String sha256,
+  List<ReelImageUploadTicket>? uploads,
 }) => ReelUploadTicket(
   reelId: '11111111-1111-4111-8111-111111111111',
-  uploadUrl: 'https://video.example/upload.php',
-  token: 'signed',
   expiresAt: expiresAt ?? DateTime.now().add(const Duration(minutes: 15)),
-  maxBytes: maxBytes,
-  sha256: sha256,
+  uploads:
+      uploads ??
+      [
+        ReelImageUploadTicket(
+          position: 1,
+          uploadUrl: 'https://video.example/upload.php',
+          token: 'signed',
+          sha256: 'a' * 64,
+          storageKey: 'r1-1.jpg',
+          maxBytes: 10485760,
+        ),
+      ],
 );
 
 void main() {
-  test('upload guard rejects empty and oversized files before network', () {
-    expect(
-      ReelUploadService.validateInput(
-        filePath: 'video.mp4',
-        sizeBytes: 0,
-        sha256: 'a' * 64,
-        ticket: _ticket(sha256: 'a' * 64),
-      ),
-      isNotNull,
-    );
-    expect(
-      ReelUploadService.validateInput(
-        filePath: 'video.mp4',
-        sizeBytes: 52428801,
-        sha256: 'a' * 64,
-        ticket: _ticket(sha256: 'a' * 64),
-      ),
-      isNotNull,
-    );
-  });
-
-  test('upload guard rejects non-MP4, malformed hash, and expired tickets', () {
-    expect(
-      ReelUploadService.validateInput(
-        filePath: 'video.mov',
+  test('upload guard rejects bad image count/type/size/hash', () {
+    final valid = [
+      ReelDraftImage(
+        path: 'a.jpg',
+        fileName: 'a.jpg',
         sizeBytes: 10,
         sha256: 'a' * 64,
-        ticket: _ticket(sha256: 'a' * 64),
+        mimeType: 'image/jpeg',
       ),
-      isNotNull,
-    );
+    ];
+    expect(ReelUploadService.validateImages(valid, totalMaxBytes: 52428800), isNull);
+    expect(ReelUploadService.validateImages(const [], totalMaxBytes: 52428800), isNotNull);
     expect(
-      ReelUploadService.validateInput(
-        filePath: 'video.mp4',
-        sizeBytes: 10,
-        sha256: 'bad',
-        ticket: _ticket(sha256: 'a' * 64),
-      ),
-      isNotNull,
-    );
-    expect(
-      ReelUploadService.validateInput(
-        filePath: 'video.mp4',
-        sizeBytes: 10,
-        sha256: 'a' * 64,
-        ticket: _ticket(
-          sha256: 'a' * 64,
-          expiresAt: DateTime.now().subtract(const Duration(seconds: 1)),
+      ReelUploadService.validateImages(
+        List.generate(
+          6,
+          (i) => ReelDraftImage(
+            path: '$i.jpg',
+            fileName: '$i.jpg',
+            sizeBytes: 10,
+            sha256: 'a' * 64,
+            mimeType: 'image/jpeg',
+          ),
         ),
+        totalMaxBytes: 52428800,
+      ),
+      isNotNull,
+    );
+    expect(
+      ReelUploadService.validateImages(
+        [valid.single.copyWith(fileName: 'a.gif', mimeType: 'image/gif', path: 'a.gif')],
+        totalMaxBytes: 52428800,
+      ),
+      isNotNull,
+    );
+    expect(
+      ReelUploadService.validateImages(
+        [valid.single.copyWith(sizeBytes: 10485761)],
+        totalMaxBytes: 52428800,
+      ),
+      isNotNull,
+    );
+    expect(
+      ReelUploadService.validateImages(
+        [valid.single.copyWith(sha256: 'bad')],
+        totalMaxBytes: 52428800,
       ),
       isNotNull,
     );
   });
 
-  test('upload guard accepts a valid MP4 ticket', () {
-    expect(
-      ReelUploadService.validateInput(
-        filePath: 'video.mp4',
+  test('upload guard rejects ticket mismatch and expired ticket before network', () {
+    final draft = [
+      ReelDraftImage(
+        path: 'a.jpg',
+        fileName: 'a.jpg',
         sizeBytes: 10,
         sha256: 'a' * 64,
-        ticket: _ticket(sha256: 'a' * 64),
+        mimeType: 'image/jpeg',
       ),
-      isNull,
+    ];
+    expect(
+      ReelUploadService.validateTicket(draft, _ticket(uploads: const [])),
+      isNotNull,
+    );
+    expect(
+      ReelUploadService.validateTicket(
+        draft,
+        _ticket(expiresAt: DateTime.now().subtract(const Duration(seconds: 1))),
+      ),
+      isNotNull,
     );
   });
 
-  test('ReelUploadDraft keeps a stable key across caption changes', () {
+  test('ReelUploadDraft keeps stable base key across caption change', () {
     final draft = ReelUploadDraft(
-      filePath: 'video.mp4',
-      fileName: 'video.mp4',
       caption: 'First',
-      sizeBytes: 10,
-      sha256: 'a' * 64,
-      idempotencyKey: 'stable-key',
+      images: const [],
+      idempotencyBase: 'stable-key',
     );
     final changed = draft.copyWith(caption: 'Second');
-    expect(changed.idempotencyKey, draft.idempotencyKey);
-    expect(changed.filePath, draft.filePath);
+    expect(changed.idempotencyBase, draft.idempotencyBase);
   });
 
   test('SHA-256 helper hashes file bytes', () async {
     final dir = await Directory.systemTemp.createTemp('ghosst-reel-test-');
     try {
-      final file = File('${dir.path}/clip.mp4');
+      final file = File('${dir.path}/clip.jpg');
       await file.writeAsBytes([1, 2, 3]);
       expect(
         await ReelUploadService.sha256File(file.path),
@@ -137,39 +148,29 @@ void main() {
     }
   });
 
-  testWidgets('upload rejects non-MP4 and oversized files before the API', (
-    tester,
-  ) async {
-    for (final file in [
-      PlatformFile(name: 'clip.mov', size: 3),
-      PlatformFile(name: 'clip.mp4', size: ReelUploadService.maxBytes + 1),
+  testWidgets('upload rejects bad/too many images before the API', (tester) async {
+    for (final files in [
+      [PlatformFile(name: 'clip.gif', size: 3, path: 'clip.gif')],
+      List.generate(6, (i) => PlatformFile(name: '$i.jpg', size: 3, path: '$i.jpg')),
     ]) {
       var called = false;
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.dark,
           home: ReelUploadScreen(
-            picker: _FakePicker(file),
+            picker: _FakePicker(files),
             prepareUpload: (_) async {
               called = true;
-              return _ticket(sha256: 'a' * 64);
+              return _ticket();
             },
-            submitUpload: (_, _) async {},
+            submitUpload: (_, __) async {},
           ),
         ),
       );
-      await tester.tap(find.text('Choose MP4 from gallery'));
+      await tester.tap(find.textContaining('Choose'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(called, isFalse);
-      expect(
-        tester
-            .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Post reel'),
-            )
-            .onPressed,
-        isNull,
-      );
     }
   });
 }

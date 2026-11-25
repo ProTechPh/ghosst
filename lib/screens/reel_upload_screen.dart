@@ -1,45 +1,10 @@
-import 'dart:async';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../api/api_exception.dart';
 import '../services/models.dart';
-import '../services/reel_upload_service.dart' show ReelUploadService;
-import '../services/worker_backend.dart' show Backend;
+import '../services/reel_upload_service.dart';
 import '../theme.dart';
-
-typedef ReelUpload = Future<Reel> Function(ReelUploadDraft draft);
-
-class ReelUploadDraft {
-  const ReelUploadDraft({
-    required this.filePath,
-    required this.fileName,
-    required this.caption,
-    required this.sizeBytes,
-    required this.sha256,
-    required this.idempotencyKey,
-    this.onProgress,
-  });
-
-  ReelUploadDraft copyWith({required String caption}) => ReelUploadDraft(
-    filePath: filePath,
-    fileName: fileName,
-    caption: caption,
-    sizeBytes: sizeBytes,
-    sha256: sha256,
-    idempotencyKey: idempotencyKey,
-    onProgress: onProgress,
-  );
-
-  final String filePath;
-  final String fileName;
-  final String caption;
-  final int sizeBytes;
-  final String sha256;
-  final String idempotencyKey;
-  final void Function(int sent, int total)? onProgress;
-}
 
 class ReelUploadScreen extends StatefulWidget {
   const ReelUploadScreen({
@@ -47,15 +12,15 @@ class ReelUploadScreen extends StatefulWidget {
     this.prepareUpload,
     this.submitUpload,
     this.picker,
-    this.cacheFile,
   });
 
-  final Future<ReelUploadTicket?> Function(ReelUploadDraft draft)?
-  prepareUpload;
-  final Future<void> Function(ReelUploadDraft draft, ReelUploadTicket ticket)?
+  final Future<ReelUploadTicket> Function(ReelUploadDraft draft)? prepareUpload;
+  final Future<void> Function(
+    ReelUploadDraft draft,
+    ReelUploadTicket ticket,
+  )?
   submitUpload;
   final FilePicker? picker;
-  final Future<String?> Function(PlatformFile file)? cacheFile;
 
   @override
   State<ReelUploadScreen> createState() => _ReelUploadScreenState();
@@ -63,12 +28,11 @@ class ReelUploadScreen extends StatefulWidget {
 
 class _ReelUploadScreenState extends State<ReelUploadScreen> {
   final _caption = TextEditingController();
-  ReelUploadDraft? _draft;
-  ReelUploadTicket? _ticket;
+  List<ReelDraftImage> _images = const [];
   String? _error;
   bool _picking = false;
   bool _uploading = false;
-  double? _progress;
+  int _done = 0;
 
   @override
   void dispose() {
@@ -81,106 +45,130 @@ class _ReelUploadScreenState extends State<ReelUploadScreen> {
     setState(() {
       _picking = true;
       _error = null;
-      _draft = null;
-      _ticket = null;
-      _progress = null;
     });
     try {
       final result = await (widget.picker ?? FilePicker.platform).pickFiles(
-        type: FileType.video,
+        type: FileType.image,
+        allowMultiple: true,
       );
-      final file = result?.files.singleOrNull;
-      if (!mounted || file == null) return;
-      final size = file.size;
-      if (size < 1 || size > ReelUploadService.maxBytes) {
-        setState(() => _error = 'Video must be between 1 byte and 50 MB.');
+      final files = result?.files ?? const <PlatformFile>[];
+      if (!mounted || files.isEmpty) {
+        if (mounted) setState(() => _picking = false);
         return;
       }
-      if (!file.name.toLowerCase().endsWith('.mp4')) {
-        setState(() => _error = 'Only MP4 videos are allowed.');
+      if (files.length > ReelUploadService.maxImages) {
+        setState(() {
+          _picking = false;
+          _error = 'Upload 1 to 5 images.';
+          _images = const [];
+        });
         return;
       }
-      final path = file.path?.isNotEmpty == true
-          ? file.path!
-          : await (widget.cacheFile?.call(file) ?? Future.value(null));
-      if (!mounted) return;
-      if (path == null || path.isEmpty) {
-        setState(() => _error = 'This file has no readable local path.');
+      final images = <ReelDraftImage>[];
+      for (final file in files) {
+        final path = file.path;
+        if (path == null || path.isEmpty) {
+          setState(() {
+            _picking = false;
+            _error = 'This file has no readable local path.';
+            _images = const [];
+          });
+          return;
+        }
+        final name = file.name;
+        final ext = name.toLowerCase().split('.').last;
+        final mime = switch (ext) {
+          'jpg' || 'jpeg' => 'image/jpeg',
+          'png' => 'image/png',
+          'webp' => 'image/webp',
+          _ => '',
+        };
+        final draft = ReelDraftImage(
+          path: path,
+          fileName: name,
+          sizeBytes: file.size,
+          sha256: '0' * 64,
+          mimeType: mime,
+        );
+        images.add(draft);
+      }
+      final preHashError = ReelUploadService.validateImages(
+        images
+            .map(
+              (i) => i.copyWith(
+                sha256: 'a' * 64,
+              ), // shape validation before hashing
+            )
+            .toList(),
+      );
+      if (preHashError != null) {
+        setState(() {
+          _picking = false;
+          _error = preHashError;
+          _images = const [];
+        });
         return;
       }
-      setState(() => _picking = false);
-      final digest = await ReelUploadService.sha256File(path);
+      final hashed = <ReelDraftImage>[];
+      for (final image in images) {
+        final sha = await ReelUploadService.sha256File(image.path);
+        hashed.add(image.copyWith(sha256: sha));
+      }
+      final error = ReelUploadService.validateImages(hashed);
       if (!mounted) return;
       setState(() {
-        _draft = ReelUploadDraft(
-          filePath: path,
-          fileName: file.name,
-          caption: _caption.text.trim(),
-          sizeBytes: size,
-          sha256: digest,
-          idempotencyKey: Backend.newIdempotencyKey(),
-          onProgress: (sent, total) {
-            if (mounted && total > 0) setState(() => _progress = sent / total);
-          },
-        );
         _picking = false;
+        _images = error == null ? hashed : const [];
+        _error = error;
       });
     } catch (_) {
       if (mounted) {
         setState(() {
           _picking = false;
-          _error = 'Could not read that video. Try another file.';
+          _error = 'Could not read those images. Try again.';
+          _images = const [];
         });
       }
     }
   }
 
   Future<void> _submit() async {
-    final draft = _draft;
-    if (draft == null || _uploading) return;
+    if (_uploading || _images.isEmpty) return;
     final prepare = widget.prepareUpload;
     final submit = widget.submitUpload;
     if (prepare == null || submit == null) {
       setState(() => _error = 'Reels uploads are unavailable.');
       return;
     }
+    final draft = ReelUploadDraft(
+      caption: _caption.text.trim(),
+      images: _images,
+      idempotencyBase: 'reel-${DateTime.now().microsecondsSinceEpoch}',
+      onProgress: (done, total) {
+        if (mounted) setState(() => _done = done);
+      },
+    );
     setState(() {
       _uploading = true;
       _error = null;
-      _progress = 0;
+      _done = 0;
     });
     try {
-      final ticket = _ticket ?? await prepare(draft);
-      if (ticket == null) {
-        throw const ApiException(
-          kind: ApiErrorKind.server,
-          message: 'Upload unavailable',
-          code: 'reels_not_configured',
-        );
-      }
-      setState(() => _ticket = ticket);
+      final ticket = await prepare(draft);
       await submit(draft, ticket);
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.userMessage);
     } catch (_) {
-      if (mounted) {
-        setState(() => _error = 'Upload failed. Your video is ready to retry.');
-      }
+      if (mounted) setState(() => _error = 'Upload failed. Try again.');
     } finally {
-      if (mounted) {
-        setState(() {
-          _uploading = false;
-          _progress = null;
-        });
-      }
+      if (mounted) setState(() => _uploading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final draft = _draft;
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(title: const Text('Upload reel')),
@@ -190,25 +178,28 @@ class _ReelUploadScreenState extends State<ReelUploadScreen> {
           TextField(
             controller: _caption,
             maxLength: 300,
-            enabled: !_uploading && _ticket == null,
+            enabled: !_uploading,
             decoration: const InputDecoration(
               labelText: 'Caption',
-              hintText: 'Tell viewers about this video',
+              hintText: 'Tell viewers about this post',
             ),
           ),
           const SizedBox(height: AppSpace.md),
           OutlinedButton.icon(
             onPressed: _picking || _uploading ? null : _pick,
-            icon: const Icon(Icons.video_library_outlined),
+            icon: const Icon(Icons.photo_library_outlined),
             label: Text(
-              draft == null ? 'Choose MP4 from gallery' : draft.fileName,
+              _images.isEmpty
+                  ? 'Choose 1-5 images'
+                  : '${_images.length} image(s) selected',
             ),
           ),
           if (_picking) const LinearProgressIndicator(),
-          if (_progress != null) ...[
-            const SizedBox(height: AppSpace.md),
-            LinearProgressIndicator(value: _progress),
-          ],
+          if (_uploading)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpace.md),
+              child: Text('Uploading $_done/${_images.length}...'),
+            ),
           if (_error != null) ...[
             const SizedBox(height: AppSpace.md),
             Text(
@@ -218,14 +209,9 @@ class _ReelUploadScreenState extends State<ReelUploadScreen> {
           ],
           const SizedBox(height: AppSpace.lg),
           FilledButton(
-            onPressed: draft == null || _uploading ? null : _submit,
+            onPressed: _images.isEmpty || _uploading ? null : _submit,
             child: Text(_uploading ? 'Uploading…' : 'Post reel'),
           ),
-          if (_uploading)
-            TextButton(
-              onPressed: null,
-              child: const Text('Keep the app open while uploading.'),
-            ),
         ],
       ),
     );
