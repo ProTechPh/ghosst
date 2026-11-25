@@ -390,90 +390,99 @@ class _ReelsScreenState extends State<ReelsScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: widget.embedded
-          ? AppBar(
-              backgroundColor: Colors.black,
-              title: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _segment('For You', 'for-you'),
-                  if (widget.onOpenUpload != null)
-                    IconButton(
-                      tooltip: 'Upload reel',
-                      onPressed: widget.onOpenUpload,
-                      icon: const Icon(Icons.add_box_outlined),
-                    ),
-                  const SizedBox(width: AppSpace.sm),
-                  _segment('Following', 'following'),
-                ],
-              ),
-            )
+          ? AppBar(backgroundColor: Colors.black, title: const Text('Reels'))
           : null,
-      body: _loading && _reels.isEmpty
-          ? const Center(child: CircularProgressIndicator())
-          : _unavailable
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Reels unavailable'),
-                  if (widget.onOpenUpload != null)
-                    TextButton(
-                      onPressed: widget.onOpenUpload,
-                      child: const Text('Upload'),
-                    ),
-                ],
-              ),
-            )
-          : _failed && _reels.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Could not load reels'),
-                  TextButton(
-                    onPressed: () => _load(reset: true),
-                    child: const Text('Retry'),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm),
+            child: Row(
+              children: [
+                Expanded(
+                  child: SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'for-you', label: Text('For You')),
+                      ButtonSegment(
+                        value: 'following',
+                        label: Text('Following'),
+                      ),
+                    ],
+                    selected: {_feed},
+                    onSelectionChanged: (selection) =>
+                        unawaited(_changeFeed(selection.single)),
                   ),
-                ],
-              ),
-            )
-          : _reels.isEmpty
-          ? const Center(child: Text('No reels yet'))
-          : PageView.builder(
-              controller: _page,
-              scrollDirection: Axis.vertical,
-              itemCount: _reels.length,
-              onPageChanged: (i) {
-                if (i == _active) return;
-                setState(() => _active = i);
-                _releaseInactivePlayers();
-                if (i >= _reels.length - 2 && !_loading) _load();
-              },
-              itemBuilder: (_, i) => _ReelPage(
-                key: ValueKey(_reels[i].id),
-                reel: _reels[i],
-                active: i == _active,
-                liked: _liked.contains(_reels[i].id),
-                playback: _player(_reels[i].id, _reels[i].videoUrl),
-                onLike: () => unawaited(_toggleLike(_reels[i])),
-                onComments: () => _openComments(_reels[i]),
-                onProfile: widget.onOpenProfile,
-                onReport: () => unawaited(_report(_reels[i].id)),
-              ),
+                ),
+                if (widget.onOpenUpload != null)
+                  IconButton(
+                    tooltip: 'Upload reel',
+                    onPressed: widget.onOpenUpload,
+                    icon: const Icon(Icons.add_box_outlined),
+                  ),
+              ],
             ),
+          ),
+          Expanded(child: _feedBody()),
+        ],
+      ),
     );
   }
 
-  Widget _segment(String label, String value) => GestureDetector(
-    onTap: () => unawaited(_changeFeed(value)),
-    child: Text(
-      label,
-      style: TextStyle(
-        color: _feed == value ? Colors.white : AppColors.textDim,
-        fontWeight: _feed == value ? FontWeight.w800 : FontWeight.w500,
-      ),
-    ),
-  );
+  Widget _feedBody() {
+    return _loading && _reels.isEmpty
+        ? const Center(child: CircularProgressIndicator())
+        : _unavailable
+        ? Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Reels unavailable'),
+                if (widget.onOpenUpload != null)
+                  TextButton(
+                    onPressed: widget.onOpenUpload,
+                    child: const Text('Upload'),
+                  ),
+              ],
+            ),
+          )
+        : _failed && _reels.isEmpty
+        ? Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Could not load reels'),
+                TextButton(
+                  onPressed: () => _load(reset: true),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          )
+        : _reels.isEmpty
+        ? const Center(child: Text('No reels yet'))
+        : PageView.builder(
+            controller: _page,
+            scrollDirection: Axis.vertical,
+            itemCount: _reels.length,
+            onPageChanged: (i) {
+              setState(() => _active = i);
+              _releaseInactivePlayers();
+              if (i >= _reels.length - 2 && !_loading) {
+                _load();
+              }
+            },
+            itemBuilder: (_, i) => _ReelPage(
+              key: ValueKey(_reels[i].id),
+              reel: _reels[i],
+              active: i == _active,
+              liked: _liked.contains(_reels[i].id),
+              playback: _player(_reels[i].id, _reels[i].videoUrl),
+              onLike: () => unawaited(_toggleLike(_reels[i])),
+              onComments: () => _openComments(_reels[i]),
+              onProfile: widget.onOpenProfile,
+              onReport: () => unawaited(_report(_reels[i].id)),
+            ),
+          );
+  }
 }
 
 class _ReelPage extends StatefulWidget {
