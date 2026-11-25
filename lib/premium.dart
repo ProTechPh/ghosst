@@ -624,22 +624,26 @@ class _IslandButtonState extends State<IslandButton> {
       ),
     );
 
-    final Widget wrapped = GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: _enabled ? (_) => setState(() => _down = true) : null,
-      onTapUp: _enabled ? (_) => setState(() => _down = false) : null,
-      onTapCancel: _enabled ? () => setState(() => _down = false) : null,
-      onTap: _enabled
-          ? () {
-              HapticFeedback.selectionClick().ignore();
-              widget.onPressed!();
-            }
-          : null,
-      child: AnimatedScale(
-        scale: pressed ? 0.97 : 1,
-        duration: kMotionFast,
-        curve: kPremiumCurve,
-        child: Opacity(opacity: _enabled ? 1 : 0.45, child: button),
+    final Widget wrapped = Semantics(
+      button: true,
+      enabled: _enabled,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: _enabled ? (_) => setState(() => _down = true) : null,
+        onTapUp: _enabled ? (_) => setState(() => _down = false) : null,
+        onTapCancel: _enabled ? () => setState(() => _down = false) : null,
+        onTap: _enabled
+            ? () {
+                HapticFeedback.selectionClick().ignore();
+                widget.onPressed!();
+              }
+            : null,
+        child: AnimatedScale(
+          scale: pressed ? 0.97 : 1,
+          duration: kMotionFast,
+          curve: kPremiumCurve,
+          child: Opacity(opacity: _enabled ? 1 : 0.45, child: button),
+        ),
       ),
     );
 
@@ -839,7 +843,9 @@ class StatCell extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              ExcludeSemantics(child: Icon(icon, size: AppIcon.sm, color: tone)),
+              ExcludeSemantics(
+                child: Icon(icon, size: AppIcon.sm, color: tone),
+              ),
               const SizedBox(width: AppSpace.xs + 2),
             ],
             Flexible(

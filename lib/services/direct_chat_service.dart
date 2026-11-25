@@ -354,14 +354,16 @@ class DirectChatService implements DirectChatClient {
   @override
   Future<void> block(String uid) async {
     final myId = await _uid();
-    if (myId == null || uid.isEmpty || uid == myId) return;
+    if (myId == null) throw StateError('Chat session unavailable');
+    if (uid.isEmpty || uid == myId) return;
     await _blockDoc(uid).set({'createdAt': FieldValue.serverTimestamp()});
   }
 
   @override
   Future<void> unblock(String uid) async {
     final myId = await _uid();
-    if (myId == null || uid.isEmpty || uid == myId) return;
+    if (myId == null) throw StateError('Chat session unavailable');
+    if (uid.isEmpty || uid == myId) return;
     await _blockDoc(uid).delete();
   }
 

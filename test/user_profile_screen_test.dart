@@ -29,10 +29,10 @@ Future<void> _pump(
   WidgetTester tester, {
   required Future<PublicUser> Function(String id) loader,
   Future<bool> Function(String id)? loadBlocked,
-  VoidCallback? onMessage,
+  ValueChanged<PublicUser>? onMessage,
   VoidCallback? onReport,
-  VoidCallback? onBlock,
-  VoidCallback? onUnblock,
+  Future<bool> Function()? onBlock,
+  Future<bool> Function()? onUnblock,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -42,7 +42,7 @@ Future<void> _pump(
           userId: '42',
           loader: loader,
           loadBlocked: loadBlocked ?? ((_) async => false),
-          onMessage: onMessage ?? () {},
+          onMessage: onMessage ?? (_) {},
           onReport: onReport ?? () {},
           onBlock: onBlock,
           onUnblock: onUnblock,
@@ -93,7 +93,7 @@ void main() {
     await _pump(
       tester,
       loader: (_) async => _user(),
-      onMessage: () => messaged = true,
+      onMessage: (user) => messaged = true,
       onReport: () => reported = true,
     );
     await tester.pumpAndSettle();
@@ -114,7 +114,7 @@ void main() {
     await _pump(
       tester,
       loader: (_) async => _user(),
-      onBlock: () => blocked = true,
+      onBlock: () async => blocked = true,
     );
     await tester.pumpAndSettle();
 
@@ -133,7 +133,7 @@ void main() {
       tester,
       loader: (_) async => _user(),
       loadBlocked: (_) async => true,
-      onUnblock: () => unblocked = true,
+      onUnblock: () async => unblocked = true,
     );
     await tester.pumpAndSettle();
 
@@ -141,6 +141,62 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Unblock user'));
     expect(unblocked, isTrue);
+  });
+
+  testWidgets('profile renders while block state is still loading', (
+    tester,
+  ) async {
+    final blocked = Completer<bool>();
+    await _pump(
+      tester,
+      loader: (_) async => _user(),
+      loadBlocked: (_) => blocked.future,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Jeric'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets('failed block does not change the visible state', (tester) async {
+    await _pump(
+      tester,
+      loader: (_) async => _user(),
+      onBlock: () async => false,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Block user'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Block'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not block user. Try again.'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    expect(find.text('Block user'), findsOneWidget);
+  });
+
+  testWidgets('Retry passes the recovered profile to Message', (tester) async {
+    var fail = true;
+    PublicUser? messaged;
+    await _pump(
+      tester,
+      loader: (_) async {
+        if (fail) throw Exception('offline');
+        return _user();
+      },
+      onMessage: (user) => messaged = user,
+    );
+    await tester.pumpAndSettle();
+    fail = false;
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Message'));
+
+    expect(messaged?.displayName, 'Jeric');
   });
 
   testWidgets('loader failure shows Retry and can recover', (tester) async {

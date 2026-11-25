@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../api/api_exception.dart';
 import '../premium.dart';
 import '../services/direct_chat_service.dart';
 import '../services/worker_backend.dart';
@@ -25,10 +26,10 @@ class UserProfileScreen extends StatefulWidget {
   final String? initialName;
   final Future<PublicUser> Function(String id)? loader;
   final Future<bool> Function(String id)? loadBlocked;
-  final VoidCallback onMessage;
+  final ValueChanged<PublicUser> onMessage;
   final VoidCallback onReport;
-  final VoidCallback? onBlock;
-  final VoidCallback? onUnblock;
+  final Future<bool> Function()? onBlock;
+  final Future<bool> Function()? onUnblock;
 
   @override
   State<UserProfileScreen> createState() => _UserProfileScreenState();
@@ -38,7 +39,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   PublicUser? _user;
   bool _loading = true;
   bool _failed = false;
+  bool _notFound = false;
   bool _blocked = false;
+  bool _blocking = false;
 
   @override
   void initState() {
@@ -50,21 +53,24 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     setState(() {
       _loading = true;
       _failed = false;
+      _notFound = false;
     });
     try {
-      final results = await Future.wait([
-        (widget.loader ?? Backend.publicUser)(widget.userId),
-        if (widget.loadBlocked != null)
-          widget.loadBlocked!(widget.userId)
-        else
-          DirectChatService().isBlocked(widget.userId),
-      ]);
+      final user = await (widget.loader ?? Backend.publicUser)(widget.userId);
       if (!mounted) return;
       setState(() {
-        _user = results[0] as PublicUser;
-        _blocked = results[1] as bool;
+        _user = user;
         _loading = false;
       });
+      unawaited(_loadBlocked());
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _notFound = e.kind == ApiErrorKind.notFound;
+          _failed = !_notFound;
+        });
+      }
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -72,6 +78,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           _failed = true;
         });
       }
+    }
+  }
+
+  Future<void> _loadBlocked() async {
+    try {
+      final blocked =
+          await (widget.loadBlocked ?? DirectChatService().isBlocked)(
+            widget.userId,
+          );
+      if (mounted) setState(() => _blocked = blocked);
+    } catch (_) {
+      // Block state is independent from the public profile.
     }
   }
 
@@ -97,13 +115,31 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       ),
     );
     if (approved != true || !mounted) return;
-    widget.onBlock?.call();
-    setState(() => _blocked = true);
+    setState(() => _blocking = true);
+    final ok = await widget.onBlock?.call() ?? false;
+    if (!mounted) return;
+    setState(() => _blocking = false);
+    if (ok) {
+      setState(() => _blocked = true);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not block user. Try again.')),
+      );
+    }
   }
 
-  void _unblock() {
-    widget.onUnblock?.call();
-    setState(() => _blocked = false);
+  Future<void> _unblock() async {
+    setState(() => _blocking = true);
+    final ok = await widget.onUnblock?.call() ?? false;
+    if (!mounted) return;
+    setState(() => _blocking = false);
+    if (ok) {
+      setState(() => _blocked = false);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not unblock user. Try again.')),
+      );
+    }
   }
 
   @override
@@ -126,6 +162,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               if (widget.onBlock != null || widget.onUnblock != null)
                 PopupMenuItem(
                   value: _blocked ? 'unblock' : 'block',
+                  enabled: !_blocking,
                   child: Text(_blocked ? 'Unblock user' : 'Block user'),
                 ),
             ],
@@ -134,6 +171,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
+          : _notFound
+          ? const EmptyState(
+              icon: Icons.person_off_outlined,
+              title: 'Profile unavailable',
+              message: 'This account is no longer available.',
+            )
           : _failed
           ? EmptyState(
               icon: Icons.cloud_off_outlined,
@@ -242,7 +285,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 IslandButton(
                   label: _blocked ? 'Blocked' : 'Message',
                   icon: Icons.chat_bubble_outline_rounded,
-                  onPressed: _blocked ? null : widget.onMessage,
+                  onPressed: _blocked || _blocking
+                      ? null
+                      : () => widget.onMessage(_user!),
                 ),
               ],
               const SizedBox(height: AppSpace.xl),

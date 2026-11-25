@@ -494,6 +494,7 @@ class _HomeShellState extends State<HomeShell> {
   String? photoUrl;
   int _chatUnread = 0;
   int _announcementUnread = 0;
+  final Set<String> _openingProfiles = {};
   List<Announcement> _announcements = const [];
   Announcement? announcement;
 
@@ -779,38 +780,32 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   Future<void> _openUserProfile(String id) async {
-    final me = await Backend.currentUser();
-    if (!mounted) return;
-    if (me?.id == id) {
-      _openProfile();
-      return;
-    }
-    PublicUser? profile;
+    if (!_openingProfiles.add(id)) return;
     try {
-      profile = await Backend.publicUser(id);
-    } catch (_) {
-      // The screen owns the retry/error state.
-    }
-    if (!mounted) return;
-    final name = profile?.displayName ?? 'Member #$id';
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => UserProfileScreen(
-          userId: id,
-          initialName: name,
-          loader: (_) async => profile ?? Backend.publicUser(id),
-          loadBlocked: DirectChatService().isBlocked,
-          onMessage: () => _openDirectChat(
-            peerId: id,
-            peerName: name,
-            peerAvatarUrl: profile?.avatarUrl,
+      if (Backend.cachedUser?.id == id) {
+        _openProfile();
+        return;
+      }
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => UserProfileScreen(
+            userId: id,
+            loader: Backend.publicUser,
+            loadBlocked: DirectChatService().isBlocked,
+            onMessage: (user) => _openDirectChat(
+              peerId: user.id,
+              peerName: user.displayName,
+              peerAvatarUrl: user.avatarUrl,
+            ),
+            onReport: () => unawaited(_reportUser(id)),
+            onBlock: () => _changeBlock(id, true),
+            onUnblock: () => _changeBlock(id, false),
           ),
-          onReport: () => unawaited(_reportUser(id)),
-          onBlock: () => unawaited(_changeBlock(id, true)),
-          onUnblock: () => unawaited(_changeBlock(id, false)),
         ),
-      ),
-    );
+      );
+    } finally {
+      _openingProfiles.remove(id);
+    }
   }
 
   Future<void> _reportUser(String id) async {
@@ -834,7 +829,7 @@ class _HomeShellState extends State<HomeShell> {
     }
   }
 
-  Future<void> _changeBlock(String id, bool blocked) async {
+  Future<bool> _changeBlock(String id, bool blocked) async {
     try {
       final service = DirectChatService();
       if (blocked) {
@@ -842,6 +837,7 @@ class _HomeShellState extends State<HomeShell> {
       } else {
         await service.unblock(id);
       }
+      return true;
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -850,6 +846,7 @@ class _HomeShellState extends State<HomeShell> {
           ),
         );
       }
+      return false;
     }
   }
 

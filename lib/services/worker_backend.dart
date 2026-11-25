@@ -50,6 +50,8 @@ class Backend {
 
   // ---- session ----
 
+  static AppUser? get cachedUser => _user;
+
   static const _sessionCacheTtl = Duration(minutes: 5);
 
   static Future<AppUser?> currentUser() async {
@@ -110,7 +112,8 @@ class Backend {
   }) async {
     await _startSession('/auth/google', {
       'idToken': idToken,
-      if (photoUrl != null && photoUrl.trim().isNotEmpty) 'photoUrl': photoUrl.trim(),
+      if (photoUrl != null && photoUrl.trim().isNotEmpty)
+        'photoUrl': photoUrl.trim(),
     });
     if (photoUrl != null && photoUrl.trim().isNotEmpty) {
       await _session.writePhotoUrl(photoUrl.trim());
