@@ -118,29 +118,51 @@ Future<void> _pump(
   bool active = true,
   bool isAdmin = false,
   VoidCallback? onOpenInbox,
+  ValueChanged<String>? onOpenProfile,
 }) async {
-  await tester.pumpWidget(MaterialApp(
-    theme: AppTheme.dark,
-    home: Scaffold(
-      body: ChatScreen(
-        client: client,
-        active: active,
-        isAdmin: isAdmin,
-        onOpenInbox: onOpenInbox,
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: AppTheme.dark,
+      home: Scaffold(
+        body: ChatScreen(
+          client: client,
+          active: active,
+          isAdmin: isAdmin,
+          onOpenInbox: onOpenInbox,
+          onOpenProfile: onOpenProfile,
+        ),
       ),
     ),
-  ));
+  );
   await tester.pump();
 }
 
 void main() {
+  testWidgets('peer avatar opens a profile and own avatar does not', (
+    tester,
+  ) async {
+    String? opened;
+    final client = _FakeClient();
+    await _pump(tester, client, onOpenProfile: (id) => opened = id);
+    client._controller.add(
+      ChatFeed(
+        messages: [
+          _msg(uid: 'uid-2', name: 'Peer', text: 'Peer message'),
+          _msg(uid: 'uid-1', name: 'Me', text: 'My message'),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('avatar-uid-2')));
+    expect(opened, 'uid-2');
+    await tester.tap(find.byKey(const ValueKey('avatar-uid-1')));
+    expect(opened, 'uid-2');
+  });
+
   testWidgets('shows an Inbox button and opens it', (tester) async {
     var opened = false;
-    await _pump(
-      tester,
-      _FakeClient(),
-      onOpenInbox: () => opened = true,
-    );
+    await _pump(tester, _FakeClient(), onOpenInbox: () => opened = true);
     await tester.pumpAndSettle();
 
     expect(find.byTooltip('Inbox'), findsOneWidget);
@@ -163,8 +185,9 @@ void main() {
     expect(client.subscribes, 0);
   });
 
-  testWidgets('a dead message stream falls back instead of hanging',
-      (tester) async {
+  testWidgets('a dead message stream falls back instead of hanging', (
+    tester,
+  ) async {
     final client = _FakeClient();
     await _pump(tester, client);
     await tester.pumpAndSettle();
@@ -175,16 +198,21 @@ void main() {
     expect(find.text('Chat unavailable'), findsOneWidget);
   });
 
-  testWidgets('renders messages, the ADMIN chip, and Deleted user',
-      (tester) async {
+  testWidgets('renders messages, the ADMIN chip, and Deleted user', (
+    tester,
+  ) async {
     final client = _FakeClient();
     await _pump(tester, client);
     await tester.pumpAndSettle();
 
-    client._controller.add(ChatFeed(messages: [
-      _msg(uid: 'uid-2', text: 'Bagong stock mamaya', admin: true),
-      _msg(uid: 'uid-2', name: '', text: 'Salamat boss'),
-    ]));
+    client._controller.add(
+      ChatFeed(
+        messages: [
+          _msg(uid: 'uid-2', text: 'Bagong stock mamaya', admin: true),
+          _msg(uid: 'uid-2', name: '', text: 'Salamat boss'),
+        ],
+      ),
+    );
     // Stream delivery is a microtask; the first pump renders the pre-event
     // frame, so let the setState it schedules land too.
     await tester.pumpAndSettle();
@@ -195,8 +223,9 @@ void main() {
     expect(find.text('Deleted user'), findsOneWidget);
   });
 
-  testWidgets('cache-only snapshots stay CONNECTING; never shows CACHED',
-      (tester) async {
+  testWidgets('cache-only snapshots stay CONNECTING; never shows CACHED', (
+    tester,
+  ) async {
     final client = _FakeClient();
     await _pump(tester, client);
     await tester.pump();
@@ -245,57 +274,72 @@ void main() {
     await _pump(tester, client);
     await tester.pumpAndSettle();
 
-    client._controller.add(ChatFeed(messages: [
-      _msg(uid: 'uid-1', text: 'mine'),
-      _msg(uid: 'uid-2', text: 'hello'),
-      _msg(uid: 'uid-3', name: 'Ana', text: 'yo'),
-    ]));
+    client._controller.add(
+      ChatFeed(
+        messages: [
+          _msg(uid: 'uid-1', text: 'mine'),
+          _msg(uid: 'uid-2', text: 'hello'),
+          _msg(uid: 'uid-3', name: 'Ana', text: 'yo'),
+        ],
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('3 ONLINE'), findsOneWidget);
   });
 
-  testWidgets('counts messages that arrived while the tab was closed',
-      (tester) async {
+  testWidgets('counts messages that arrived while the tab was closed', (
+    tester,
+  ) async {
     final client = _FakeClient();
     final counts = <int>[];
-    await tester.pumpWidget(MaterialApp(
-      theme: AppTheme.dark,
-      home: Scaffold(
-        body: ChatScreen(
-          client: client,
-          active: true,
-          onUnreadChanged: counts.add,
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(
+          body: ChatScreen(
+            client: client,
+            active: true,
+            onUnreadChanged: counts.add,
+          ),
         ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
     // Seen while the tab is open.
-    client._controller.add(ChatFeed(messages: [
-      _msg(uid: 'uid-2', text: 'seen', tsMillis: 1000),
-    ]));
+    client._controller.add(
+      ChatFeed(
+        messages: [_msg(uid: 'uid-2', text: 'seen', tsMillis: 1000)],
+      ),
+    );
     await tester.pumpAndSettle();
     expect(counts.last, 0);
 
     // Leave the tab; new messages from others must count, mine must not.
-    await tester.pumpWidget(MaterialApp(
-      theme: AppTheme.dark,
-      home: Scaffold(
-        body: ChatScreen(
-          client: client,
-          active: false,
-          onUnreadChanged: counts.add,
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(
+          body: ChatScreen(
+            client: client,
+            active: false,
+            onUnreadChanged: counts.add,
+          ),
         ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
-    client._controller.add(ChatFeed(messages: [
-      _msg(uid: 'uid-2', text: 'one', tsMillis: 4000),
-      _msg(uid: 'uid-3', name: 'Ana', text: 'two', tsMillis: 3000),
-      _msg(uid: 'uid-1', text: 'mine', tsMillis: 2000),
-    ]));
+    client._controller.add(
+      ChatFeed(
+        messages: [
+          _msg(uid: 'uid-2', text: 'one', tsMillis: 4000),
+          _msg(uid: 'uid-3', name: 'Ana', text: 'two', tsMillis: 3000),
+          _msg(uid: 'uid-1', text: 'mine', tsMillis: 2000),
+        ],
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(counts.last, 2);
@@ -317,8 +361,9 @@ void main() {
     expect(client.sent, ['  hello  ']);
   });
 
-  testWidgets('a failed send surfaces the reason in a SnackBar',
-      (tester) async {
+  testWidgets('a failed send surfaces the reason in a SnackBar', (
+    tester,
+  ) async {
     final client = _FakeClient()..sendError = 'Could not send — try again.';
     await _pump(tester, client);
     await tester.pumpAndSettle();
@@ -336,22 +381,29 @@ void main() {
     await tester.pumpAndSettle();
     expect(client.subscribes, 0);
 
-    await tester.pumpWidget(MaterialApp(
-      theme: AppTheme.dark,
-      home: Scaffold(body: ChatScreen(client: client)),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(body: ChatScreen(client: client)),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(client.subscribes, 1);
   });
 
-  testWidgets('swipe right opens the reply preview; X cancels it',
-      (tester) async {
+  testWidgets('swipe right opens the reply preview; X cancels it', (
+    tester,
+  ) async {
     final client = _FakeClient();
     await _pump(tester, client);
     await tester.pumpAndSettle();
 
-    client._controller.add(ChatFeed(messages: [_msg(uid: 'uid-2', text: 'Hello')]));
+    client._controller.add(
+      ChatFeed(
+        messages: [_msg(uid: 'uid-2', text: 'Hello')],
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.drag(find.text('Hello'), const Offset(600, 0));
@@ -366,13 +418,18 @@ void main() {
     expect(find.text('Reply to Jeric'), findsNothing);
   });
 
-  testWidgets('send passes the reply target and clears the preview',
-      (tester) async {
+  testWidgets('send passes the reply target and clears the preview', (
+    tester,
+  ) async {
     final client = _FakeClient();
     await _pump(tester, client);
     await tester.pumpAndSettle();
 
-    client._controller.add(ChatFeed(messages: [_msg(uid: 'uid-2', text: 'Hello')]));
+    client._controller.add(
+      ChatFeed(
+        messages: [_msg(uid: 'uid-2', text: 'Hello')],
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.drag(find.text('Hello'), const Offset(600, 0));
@@ -388,8 +445,9 @@ void main() {
     expect(find.text('Reply to Jeric'), findsNothing);
   });
 
-  testWidgets('a hanging sign-in falls back after the boot timeout',
-      (tester) async {
+  testWidgets('a hanging sign-in falls back after the boot timeout', (
+    tester,
+  ) async {
     final client = _FakeClient(session: false)..hangSignIn = true;
     await _pump(tester, client);
     await tester.pump();
@@ -402,8 +460,9 @@ void main() {
     expect(client.subscribes, 0);
   });
 
-  testWidgets('an existing session subscribes without waiting for sign-in',
-      (tester) async {
+  testWidgets('an existing session subscribes without waiting for sign-in', (
+    tester,
+  ) async {
     // Kahit hindi matapos ang sign-in, nakakapag-subscribe dahil may session.
     final client = _FakeClient()..hangSignIn = true;
     await _pump(tester, client);
@@ -413,8 +472,9 @@ void main() {
     expect(find.text('Chat unavailable'), findsNothing);
   });
 
-  testWidgets('shows loading until the first snapshot, then the empty state',
-      (tester) async {
+  testWidgets('shows loading until the first snapshot, then the empty state', (
+    tester,
+  ) async {
     final client = _FakeClient();
     await _pump(tester, client);
     await tester.pump();
@@ -434,7 +494,11 @@ void main() {
     await _pump(tester, client, isAdmin: true);
     await tester.pumpAndSettle();
 
-    client._controller.add(ChatFeed(messages: [_msg(uid: 'uid-2', text: 'Hello')]));
+    client._controller.add(
+      ChatFeed(
+        messages: [_msg(uid: 'uid-2', text: 'Hello')],
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.longPress(find.text('Hello'));
@@ -459,15 +523,20 @@ void main() {
     expect(find.text('Mute'), findsNothing);
   });
 
-  testWidgets('long-press on an already-muted user shows Unmute only',
-      (tester) async {
+  testWidgets('long-press on an already-muted user shows Unmute only', (
+    tester,
+  ) async {
     final client = _FakeClient(
       mutedList: const [MutedUser(id: 'uid-2', name: 'Jeric', email: 'j@x.ph')],
     );
     await _pump(tester, client, isAdmin: true);
     await tester.pumpAndSettle();
 
-    client._controller.add(ChatFeed(messages: [_msg(uid: 'uid-2', text: 'Hello')]));
+    client._controller.add(
+      ChatFeed(
+        messages: [_msg(uid: 'uid-2', text: 'Hello')],
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.longPress(find.text('Hello'));
@@ -489,7 +558,11 @@ void main() {
     await _pump(tester, client);
     await tester.pumpAndSettle();
 
-    client._controller.add(ChatFeed(messages: [_msg(uid: 'uid-2', text: 'Hello')]));
+    client._controller.add(
+      ChatFeed(
+        messages: [_msg(uid: 'uid-2', text: 'Hello')],
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.longPress(find.text('Hello'));
@@ -499,8 +572,9 @@ void main() {
     expect(client.muteCalls, isEmpty);
   });
 
-  testWidgets('admin long-press on own message shows no dialog',
-      (tester) async {
+  testWidgets('admin long-press on own message shows no dialog', (
+    tester,
+  ) async {
     final client = _FakeClient();
     await _pump(tester, client, isAdmin: true);
     await tester.pumpAndSettle();
@@ -515,8 +589,9 @@ void main() {
     expect(client.muteCalls, isEmpty);
   });
 
-  testWidgets('a muted user sees the muted bar instead of the composer',
-      (tester) async {
+  testWidgets('a muted user sees the muted bar instead of the composer', (
+    tester,
+  ) async {
     final client = _FakeClient(muted: true);
     await _pump(tester, client);
     await tester.pumpAndSettle();
@@ -534,15 +609,19 @@ void main() {
 
     // The admin unmuted meanwhile; leave the tab and come back.
     client.refreshMutedResult = false;
-    await tester.pumpWidget(MaterialApp(
-      theme: AppTheme.dark,
-      home: Scaffold(body: ChatScreen(client: client, active: false)),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(body: ChatScreen(client: client, active: false)),
+      ),
+    );
     await tester.pumpAndSettle();
-    await tester.pumpWidget(MaterialApp(
-      theme: AppTheme.dark,
-      home: Scaffold(body: ChatScreen(client: client, active: true)),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(body: ChatScreen(client: client, active: true)),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('You are muted in this chat.'), findsNothing);
@@ -554,14 +633,18 @@ void main() {
     await _pump(tester, client);
     await tester.pumpAndSettle();
 
-    client._controller.add(ChatFeed(messages: [
-      _msg(
-        uid: 'uid-2',
-        text: 'Sagot ko',
-        replyName: 'Abbie',
-        replyText: 'Tanong niya',
+    client._controller.add(
+      ChatFeed(
+        messages: [
+          _msg(
+            uid: 'uid-2',
+            text: 'Sagot ko',
+            replyName: 'Abbie',
+            replyText: 'Tanong niya',
+          ),
+        ],
       ),
-    ]));
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Abbie'), findsOneWidget);

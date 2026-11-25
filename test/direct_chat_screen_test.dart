@@ -63,6 +63,7 @@ DirectMessage _message(String id, String senderId, String text, int ts) =>
 Future<void> _pump(
   WidgetTester tester,
   _FakeDirectChatClient client, {
+  ValueChanged<String>? onOpenProfile,
   Future<void> Function({
     required String targetType,
     required String targetId,
@@ -82,6 +83,7 @@ Future<void> _pump(
           peerName: 'Peer name',
           client: client,
           onReport: onReport,
+          onOpenProfile: onOpenProfile,
         ),
       ),
     ),
@@ -90,6 +92,17 @@ Future<void> _pump(
 }
 
 void main() {
+  testWidgets('peer header opens the public profile', (tester) async {
+    String? opened;
+    final client = _FakeDirectChatClient();
+    await _pump(tester, client, onOpenProfile: (id) => opened = id);
+    client.emit([]);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Peer name'));
+    expect(opened, 'peer');
+  });
+
   testWidgets('renders oldest first and aligns own messages right', (
     tester,
   ) async {

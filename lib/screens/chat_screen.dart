@@ -22,6 +22,7 @@ class ChatScreen extends StatefulWidget {
     this.isModerator = false,
     this.onUnreadChanged,
     this.onOpenInbox,
+    this.onOpenProfile,
   });
 
   /// True when shown as a shell tab (the shell supplies the bar).
@@ -43,6 +44,8 @@ class ChatScreen extends StatefulWidget {
   final ValueChanged<int>? onUnreadChanged;
 
   final VoidCallback? onOpenInbox;
+
+  final ValueChanged<String>? onOpenProfile;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -148,16 +151,20 @@ class _ChatScreenState extends State<ChatScreen> {
     // Load the seen marker without blocking the first paint/subscribe — a
     // slow or absent keychain must never leave the chat on "Loading".
     unawaited(
-      ReadStore.chatSeenAtMs().then((v) {
-        if (v > _lastSeenMs) _lastSeenMs = v;
-      }).catchError((_) {}),
+      ReadStore.chatSeenAtMs()
+          .then((v) {
+            if (v > _lastSeenMs) _lastSeenMs = v;
+          })
+          .catchError((_) {}),
     );
     unawaited(
-      Backend.photoUrl().then((p) {
-        if (mounted && p != null && p.isNotEmpty) {
-          setState(() => _myPhotoUrl = p);
-        }
-      }).catchError((_) {}),
+      Backend.photoUrl()
+          .then((p) {
+            if (mounted && p != null && p.isNotEmpty) {
+              setState(() => _myPhotoUrl = p);
+            }
+          })
+          .catchError((_) {}),
     );
 
     if (_client.hasSession) {
@@ -165,7 +172,9 @@ class _ChatScreenState extends State<ChatScreen> {
       // sync (Firebase uid == backend UUID), at ang muted state ay i-resolve
       // sa background para hindi mag-block ng first paint.
       final uid = await _client.currentUid();
-      debugPrint('[ChatScreen] subscribing (session) in ${sw.elapsedMilliseconds}ms');
+      debugPrint(
+        '[ChatScreen] subscribing (session) in ${sw.elapsedMilliseconds}ms',
+      );
       if (mounted) {
         setState(() {
           _myUid = uid;
@@ -194,7 +203,9 @@ class _ChatScreenState extends State<ChatScreen> {
     final ok = await _client.ensureSignedIn().timeout(
       const Duration(seconds: 25),
       onTimeout: () {
-        debugPrint('[ChatScreen] boot timed out after ${sw.elapsedMilliseconds}ms');
+        debugPrint(
+          '[ChatScreen] boot timed out after ${sw.elapsedMilliseconds}ms',
+        );
         return false;
       },
     );
@@ -212,7 +223,9 @@ class _ChatScreenState extends State<ChatScreen> {
       _client.currentUid(),
       _client.isMuted(),
     ]);
-    debugPrint('[ChatScreen] signed in + subscribing in ${sw.elapsedMilliseconds}ms');
+    debugPrint(
+      '[ChatScreen] signed in + subscribing in ${sw.elapsedMilliseconds}ms',
+    );
     if (mounted) {
       setState(() {
         _myUid = results[0] as String?;
@@ -235,7 +248,8 @@ class _ChatScreenState extends State<ChatScreen> {
         if (!mounted) return;
         if (!_booted) {
           debugPrint(
-              '[ChatScreen] first snapshot (${list.length} msgs) in ${sw.elapsedMilliseconds}ms');
+            '[ChatScreen] first snapshot (${list.length} msgs) in ${sw.elapsedMilliseconds}ms',
+          );
         }
         // Badge = messages from other people newer than the last seen marker.
         // While this tab is open everything counts as seen.
@@ -326,8 +340,9 @@ class _ChatScreenState extends State<ChatScreen> {
   static const Duration _onlineWindow = Duration(minutes: 10);
 
   int get _onlineCount {
-    final cutoff =
-        DateTime.now().subtract(_onlineWindow).millisecondsSinceEpoch;
+    final cutoff = DateTime.now()
+        .subtract(_onlineWindow)
+        .millisecondsSinceEpoch;
     final uids = <String>{
       for (final m in _messages)
         if (m.uid.isNotEmpty && m.tsMillis >= cutoff) m.uid,
@@ -340,7 +355,11 @@ class _ChatScreenState extends State<ChatScreen> {
   /// Ang enforcement ay server-side (muted claim sa rules); ito ay UI lang.
   /// Isang action button lang ang pinapakita, batay sa totoong mute state.
   Future<void> _onLongPress(ChatMessage m) async {
-    if (!(widget.isAdmin || widget.isModerator) || m.uid == _myUid || m.name.isEmpty) return;
+    if (!(widget.isAdmin || widget.isModerator) ||
+        m.uid == _myUid ||
+        m.name.isEmpty) {
+      return;
+    }
     final muted = _mutedIds.contains(m.uid);
     final action = await showDialog<String>(
       context: context,
@@ -383,7 +402,9 @@ class _ChatScreenState extends State<ChatScreen> {
       });
     }
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(problem ?? (toMuted ? 'User muted.' : 'User unmuted.'))),
+      SnackBar(
+        content: Text(problem ?? (toMuted ? 'User muted.' : 'User unmuted.')),
+      ),
     );
   }
 
@@ -406,8 +427,9 @@ class _ChatScreenState extends State<ChatScreen> {
       // Kung pumalya, ibalik ang tinype at ang ni-re-reply-an para makapag-retry.
       _input.text = text;
       setState(() => _replyTo = reply);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(problem)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(problem)));
     }
   }
 
@@ -466,11 +488,7 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     }
     if (_connecting) {
-      return (
-        label: 'CONNECTING',
-        icon: Icons.sync,
-        color: AppColors.textDim,
-      );
+      return (label: 'CONNECTING', icon: Icons.sync, color: AppColors.textDim);
     }
     return (label: 'LIVE', icon: Icons.bolt, color: AppColors.green);
   }
@@ -481,19 +499,21 @@ class _ChatScreenState extends State<ChatScreen> {
       callback();
       return;
     }
-    Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => InboxScreen(
-        onOpenThread: (thread, peer) => Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => DirectChatScreen(
-              peerId: peer.id,
-              peerName: peer.name,
-              peerAvatarUrl: peer.avatarUrl,
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => InboxScreen(
+          onOpenThread: (thread, peer) => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => DirectChatScreen(
+                peerId: peer.id,
+                peerName: peer.name,
+                peerAvatarUrl: peer.avatarUrl,
+              ),
             ),
           ),
         ),
       ),
-    ));
+    );
   }
 
   /// Status bar sa taas ng chat: online count sa kaliwa, link state sa kanan.
@@ -595,9 +615,7 @@ class _ChatScreenState extends State<ChatScreen> {
             }
             // RepaintBoundary: isolate ang bawat bubble para hindi ma-repaint
             // ang buong list kapag isang item lang ang nagbago.
-            return RepaintBoundary(
-              child: _swipeable(_messages[i], maxBubble),
-            );
+            return RepaintBoundary(child: _swipeable(_messages[i], maxBubble));
           },
         );
       },
@@ -629,7 +647,18 @@ class _ChatScreenState extends State<ChatScreen> {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             if (!mine) ...[
-              _avatar(m.name, mine, photoUrl: m.photoUrl),
+              GestureDetector(
+                key: ValueKey('avatar-${m.uid}'),
+                behavior: HitTestBehavior.opaque,
+                onTap: widget.onOpenProfile == null
+                    ? null
+                    : () => widget.onOpenProfile!(m.uid),
+                child: Semantics(
+                  button: widget.onOpenProfile != null,
+                  label: 'Open ${m.name} profile',
+                  child: _avatar(m.name, mine, photoUrl: m.photoUrl),
+                ),
+              ),
               const SizedBox(width: AppSpace.sm),
             ],
             ConstrainedBox(
@@ -638,13 +667,19 @@ class _ChatScreenState extends State<ChatScreen> {
                 hint: 'Long press for message actions',
                 child: GestureDetector(
                   onLongPress: () => _onLongPress(m),
+                  onTap: mine || widget.onOpenProfile == null
+                      ? null
+                      : () => widget.onOpenProfile!(m.uid),
                   child: _bubble(m, mine),
                 ),
               ),
             ),
             if (mine) ...[
               const SizedBox(width: AppSpace.sm),
-              _avatar(m.name, mine, photoUrl: m.photoUrl),
+              KeyedSubtree(
+                key: ValueKey('avatar-${m.uid}'),
+                child: _avatar(m.name, mine, photoUrl: m.photoUrl),
+              ),
             ],
           ],
         ),
@@ -709,13 +744,12 @@ class _ChatScreenState extends State<ChatScreen> {
         gradient: mine ? kNeonGradient : null,
         color: mine ? null : AppColors.surfaceHigh,
         shape: BoxShape.circle,
-        border: Border.all(
-          color: mine ? Colors.transparent : AppColors.border,
-        ),
+        border: Border.all(color: mine ? Colors.transparent : AppColors.border),
         boxShadow: [
           BoxShadow(
-            color: (mine ? AppColors.primary : Colors.black)
-                .withValues(alpha: 0.25),
+            color: (mine ? AppColors.primary : Colors.black).withValues(
+              alpha: 0.25,
+            ),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -748,8 +782,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final at = DateTime.fromMillisecondsSinceEpoch(m.tsMillis);
     final hour12 = at.hour % 12 == 0 ? 12 : at.hour % 12;
     final period = at.hour >= 12 ? 'PM' : 'AM';
-    final clock =
-        '$hour12:${at.minute.toString().padLeft(2, '0')} $period';
+    final clock = '$hour12:${at.minute.toString().padLeft(2, '0')} $period';
     // Sariling bubble: cyan gradient + dark text (tulad ng NeonButton).
     final ink = mine ? const Color(0xFF04212A) : AppColors.text;
     final dim = mine ? const Color(0xB304212A) : AppColors.textDim;
@@ -893,10 +926,7 @@ class _ChatScreenState extends State<ChatScreen> {
           Icon(Icons.block, size: 18, color: AppColors.red),
           SizedBox(width: AppSpace.sm),
           Expanded(
-            child: Text(
-              'You are muted in this chat.',
-              style: AppText.caption,
-            ),
+            child: Text('You are muted in this chat.', style: AppText.caption),
           ),
         ],
       ),
@@ -972,59 +1002,61 @@ class _ChatScreenState extends State<ChatScreen> {
             _mutedBar()
           else
             Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpace.lg,
-              AppSpace.sm,
-              AppSpace.sm,
-              AppSpace.sm,
-            ),
-            child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _input,
-                minLines: 1,
-                maxLines: 4,
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => _send(),
-                style: AppText.body.copyWith(fontSize: 14),
-                decoration: InputDecoration(
-                  hintText: 'Message...',
-                  hintStyle: AppText.caption.copyWith(
-                    color: AppColors.textDim,
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.lg,
+                AppSpace.sm,
+                AppSpace.sm,
+                AppSpace.sm,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _input,
+                      minLines: 1,
+                      maxLines: 4,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _send(),
+                      style: AppText.body.copyWith(fontSize: 14),
+                      decoration: InputDecoration(
+                        hintText: 'Message...',
+                        hintStyle: AppText.caption.copyWith(
+                          color: AppColors.textDim,
+                        ),
+                        filled: true,
+                        fillColor: AppColors.surface,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: AppSpace.md,
+                          vertical: AppSpace.sm + 2,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                          borderSide: const BorderSide(color: AppColors.border),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                          borderSide: const BorderSide(color: AppColors.border),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                          borderSide: const BorderSide(
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                  filled: true,
-                  fillColor: AppColors.surface,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: AppSpace.md,
-                    vertical: AppSpace.sm + 2,
+                  const SizedBox(width: AppSpace.xs),
+                  IconButton(
+                    onPressed: _sending ? null : _send,
+                    icon: const Icon(Icons.send),
+                    color: AppColors.primary,
+                    tooltip: 'Send',
                   ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                    borderSide: const BorderSide(color: AppColors.border),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                    borderSide: const BorderSide(color: AppColors.border),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                    borderSide: const BorderSide(color: AppColors.primary),
-                  ),
-                ),
+                ],
               ),
             ),
-            const SizedBox(width: AppSpace.xs),
-            IconButton(
-              onPressed: _sending ? null : _send,
-              icon: const Icon(Icons.send),
-              color: AppColors.primary,
-              tooltip: 'Send',
-            ),
-          ],
-        ),
-          ),
         ],
       ),
     );

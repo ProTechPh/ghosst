@@ -27,6 +27,7 @@ import 'screens/store_screen.dart';
 import 'screens/tamper_screen.dart';
 import 'screens/tutorials_screen.dart';
 import 'screens/update_screen.dart';
+import 'screens/user_profile_screen.dart';
 import 'screens/wallet_screen.dart';
 import 'services/ad_service.dart';
 import 'services/adblock_detector.dart';
@@ -335,9 +336,7 @@ class _AppEntryState extends State<_AppEntry> with WidgetsBindingObserver {
                   updateUrl: playUpdate
                       ? PlayStore.webUrl
                       : (config?.updateUrl(isPlay: Distribution.isPlay) ?? ''),
-                  onUpdate: playUpdate
-                      ? PlayStore.startImmediateUpdate
-                      : null,
+                  onUpdate: playUpdate ? PlayStore.startImmediateUpdate : null,
                   onRetry: _checkUpdate,
                 )
               : blocked
@@ -397,10 +396,7 @@ class _RouterState extends State<Router> {
   @override
   Widget build(BuildContext context) {
     if (route == 'sign-in') {
-      return SignIn(
-        onSignedIn: () => go('home'),
-        onBack: () => go('home'),
-      );
+      return SignIn(onSignedIn: () => go('home'), onBack: () => go('home'));
     }
     return Home(onGoToSignIn: () => go('sign-in'));
   }
@@ -656,8 +652,8 @@ class _HomeShellState extends State<HomeShell> {
       reason = e is ApiException
           ? e.userMessage
           : 'The server did not respond. If this keeps happening, set your '
-            'Private DNS to one.one.one.one (Cloudflare) or install the '
-            'Warp VPN app.';
+                'Private DNS to one.one.one.one (Cloudflare) or install the '
+                'Warp VPN app.';
       return coins;
     });
     final results = await Future.wait<Object?>([
@@ -748,21 +744,113 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
+  void _openDirectChat({
+    required String peerId,
+    required String peerName,
+    String? peerAvatarUrl,
+  }) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => DirectChatScreen(
+          peerId: peerId,
+          peerName: peerName,
+          peerAvatarUrl: peerAvatarUrl,
+          onOpenProfile: _openUserProfile,
+        ),
+      ),
+    );
+  }
+
   void _openInbox() {
-    Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => InboxScreen(
-        onOpenThread: (thread, peer) {
-          Navigator.of(context).pop();
-          Navigator.of(context).push(MaterialPageRoute<void>(
-            builder: (_) => DirectChatScreen(
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => InboxScreen(
+          onOpenThread: (thread, peer) {
+            Navigator.of(context).pop();
+            _openDirectChat(
               peerId: peer.id,
               peerName: peer.name,
               peerAvatarUrl: peer.avatarUrl,
-            ),
-          ));
-        },
+            );
+          },
+        ),
       ),
-    ));
+    );
+  }
+
+  Future<void> _openUserProfile(String id) async {
+    final me = await Backend.currentUser();
+    if (!mounted) return;
+    if (me?.id == id) {
+      _openProfile();
+      return;
+    }
+    PublicUser? profile;
+    try {
+      profile = await Backend.publicUser(id);
+    } catch (_) {
+      // The screen owns the retry/error state.
+    }
+    if (!mounted) return;
+    final name = profile?.displayName ?? 'Member #$id';
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => UserProfileScreen(
+          userId: id,
+          initialName: name,
+          loader: (_) async => profile ?? Backend.publicUser(id),
+          loadBlocked: DirectChatService().isBlocked,
+          onMessage: () => _openDirectChat(
+            peerId: id,
+            peerName: name,
+            peerAvatarUrl: profile?.avatarUrl,
+          ),
+          onReport: () => unawaited(_reportUser(id)),
+          onBlock: () => unawaited(_changeBlock(id, true)),
+          onUnblock: () => unawaited(_changeBlock(id, false)),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _reportUser(String id) async {
+    try {
+      await Backend.reportContent(
+        targetType: 'user',
+        targetId: id,
+        reason: 'other',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Report submitted.')));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not submit report. Try again.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _changeBlock(String id, bool blocked) async {
+    try {
+      final service = DirectChatService();
+      if (blocked) {
+        await service.block(id);
+      } else {
+        await service.unblock(id);
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not ${blocked ? 'block' : 'unblock'} user.'),
+          ),
+        );
+      }
+    }
   }
 
   void _openProfile() {
@@ -830,6 +918,7 @@ class _HomeShellState extends State<HomeShell> {
           if (_chatUnread != count) setState(() => _chatUnread = count);
         },
         onOpenInbox: _openInbox,
+        onOpenProfile: _openUserProfile,
       ),
       if (isAdmin) AdminScreen(onAnnouncementSent: _refresh, active: tab == 5),
     ];
@@ -1018,9 +1107,7 @@ class _HomeShellState extends State<HomeShell> {
           bottomNavigationBar: _GlassNavBar(
             index: safeIndex,
             items: destinations,
-            unread: {
-              if (_chatUnread > 0) 4: _chatUnread,
-            },
+            unread: {if (_chatUnread > 0) 4: _chatUnread},
             onSelected: (i) {
               // Re-tapping the current tab is not a tab switch — it must
               // not count towards (or fire) the interstitial.
@@ -1287,7 +1374,8 @@ class _GlassNavBarState extends State<_GlassNavBar>
                                   child: SizedBox(
                                     height: 64,
                                     child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
                                         Stack(
                                           clipBehavior: Clip.none,
@@ -1295,7 +1383,9 @@ class _GlassNavBarState extends State<_GlassNavBar>
                                             ExcludeSemantics(
                                               child: Icon(
                                                 i == widget.index
-                                                    ? widget.items[i].selectedIcon
+                                                    ? widget
+                                                          .items[i]
+                                                          .selectedIcon
                                                     : widget.items[i].icon,
                                                 size: AppIcon.md,
                                                 color: i == widget.index
@@ -1309,9 +1399,10 @@ class _GlassNavBarState extends State<_GlassNavBar>
                                                 right: -12,
                                                 child: ExcludeSemantics(
                                                   child: Container(
-                                                    constraints: const BoxConstraints(
-                                                      minWidth: 16,
-                                                    ),
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                          minWidth: 16,
+                                                        ),
                                                     height: 16,
                                                     padding:
                                                         const EdgeInsets.symmetric(
@@ -1321,7 +1412,9 @@ class _GlassNavBarState extends State<_GlassNavBar>
                                                     decoration: BoxDecoration(
                                                       color: AppColors.red,
                                                       borderRadius:
-                                                          BorderRadius.circular(8),
+                                                          BorderRadius.circular(
+                                                            8,
+                                                          ),
                                                       border: Border.all(
                                                         color: AppColors.bg,
                                                         width: 1.5,
@@ -1334,7 +1427,8 @@ class _GlassNavBarState extends State<_GlassNavBar>
                                                       style: const TextStyle(
                                                         color: Colors.white,
                                                         fontSize: 9,
-                                                        fontWeight: FontWeight.w800,
+                                                        fontWeight:
+                                                            FontWeight.w800,
                                                         height: 1,
                                                       ),
                                                     ),

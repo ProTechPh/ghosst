@@ -25,6 +25,7 @@ class DirectChatScreen extends StatefulWidget {
     this.peerAvatarUrl,
     this.client,
     this.onReport,
+    this.onOpenProfile,
   });
 
   final String peerId;
@@ -32,6 +33,7 @@ class DirectChatScreen extends StatefulWidget {
   final String? peerAvatarUrl;
   final DirectChatClient? client;
   final ReportContent? onReport;
+  final ValueChanged<String>? onOpenProfile;
 
   @override
   State<DirectChatScreen> createState() => _DirectChatScreenState();
@@ -298,18 +300,28 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
-        title: Row(
-          children: [
-            _avatar(28),
-            const SizedBox(width: AppSpace.sm),
-            Expanded(
-              child: Text(
-                widget.peerName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+        title: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onOpenProfile == null
+              ? null
+              : () => widget.onOpenProfile!(widget.peerId),
+          child: Semantics(
+            button: widget.onOpenProfile != null,
+            label: 'Open ${widget.peerName} profile',
+            child: Row(
+              children: [
+                _avatar(28),
+                const SizedBox(width: AppSpace.sm),
+                Expanded(
+                  child: Text(
+                    widget.peerName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
         actions: [
           PopupMenuButton<String>(
