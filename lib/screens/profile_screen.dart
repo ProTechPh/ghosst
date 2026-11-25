@@ -15,6 +15,7 @@ import '../services/play_store.dart';
 import '../theme.dart';
 import 'my_apps_screen.dart';
 import 'announcements_screen.dart';
+import 'feedback_screen.dart';
 import 'tutorials_screen.dart';
 import 'wallet_screen.dart';
 
@@ -245,9 +246,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _openTutorials() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const TutorialsScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const TutorialsScreen()));
+  }
+
+  void _openFeedback() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const FeedbackScreen()));
   }
 
   void _openAppOwned() {
@@ -387,6 +394,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     label: 'Tutorials',
                     hint: 'Guides',
                     onTap: _openTutorials,
+                  ),
+                  _row(
+                    icon: Icons.feedback_outlined,
+                    label: 'Send feedback',
+                    hint: 'Private message to the team',
+                    onTap: _openFeedback,
                   ),
                   _row(
                     icon: Icons.privacy_tip_outlined,
