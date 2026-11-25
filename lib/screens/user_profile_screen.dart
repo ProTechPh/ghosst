@@ -20,6 +20,8 @@ class UserProfileScreen extends StatefulWidget {
     required this.onReport,
     this.onBlock,
     this.onUnblock,
+    this.onFollow,
+    this.onUnfollow,
   });
 
   final String userId;
@@ -30,6 +32,8 @@ class UserProfileScreen extends StatefulWidget {
   final VoidCallback onReport;
   final Future<bool> Function()? onBlock;
   final Future<bool> Function()? onUnblock;
+  final Future<FollowState> Function(String id)? onFollow;
+  final Future<FollowState> Function(String id)? onUnfollow;
 
   @override
   State<UserProfileScreen> createState() => _UserProfileScreenState();
@@ -42,6 +46,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   bool _notFound = false;
   bool _blocked = false;
   bool _blocking = false;
+  bool _following = false;
+  int _followerCount = 0;
+  bool _followBusy = false;
 
   @override
   void initState() {
@@ -60,6 +67,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       if (!mounted) return;
       setState(() {
         _user = user;
+        _following = user.isFollowing;
+        _followerCount = user.followerCount;
         _loading = false;
       });
       unawaited(_loadBlocked());
@@ -138,6 +147,46 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not unblock user. Try again.')),
+      );
+    }
+  }
+
+  Future<void> _toggleFollow() async {
+    if (_followBusy || _user == null || _user!.isSelf) return;
+    final next = !_following;
+    final previous = _following;
+    final previousCount = _followerCount;
+    setState(() {
+      _followBusy = true;
+      _following = next;
+      _followerCount = (previousCount + (next ? 1 : -1)).clamp(0, 1 << 31);
+    });
+    try {
+      final state = next
+          ? await widget.onFollow?.call(widget.userId)
+          : await widget.onUnfollow?.call(widget.userId);
+      if (!mounted) return;
+      setState(() {
+        _followBusy = false;
+        if (state != null) {
+          _following = state.isFollowing;
+          _followerCount = state.followerCount;
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _followBusy = false;
+        _following = previous;
+        _followerCount = previousCount;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not ${next ? 'follow' : 'unfollow'}. Try again.',
+          ),
+          action: SnackBarAction(label: 'Retry', onPressed: _toggleFollow),
+        ),
       );
     }
   }
@@ -260,7 +309,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     Expanded(
                       child: StatCell(
                         label: 'Followers',
-                        value: groupDigits(user.followerCount),
+                        value: groupDigits(_followerCount),
                       ),
                     ),
                     _divider(),
@@ -280,16 +329,31 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   ],
                 ),
               ),
-              if (!user.isSelf) ...[
-                const SizedBox(height: AppSpace.lg),
-                IslandButton(
-                  label: _blocked ? 'Blocked' : 'Message',
-                  icon: Icons.chat_bubble_outline_rounded,
-                  onPressed: _blocked || _blocking
-                      ? null
-                      : () => widget.onMessage(_user!),
+              if (!user.isSelf)
+                Row(
+                  children: [
+                    Expanded(
+                      child: IslandButton(
+                        label: _blocked ? 'Blocked' : 'Message',
+                        icon: Icons.chat_bubble_outline_rounded,
+                        onPressed: _blocked || _blocking
+                            ? null
+                            : () => widget.onMessage(_user!),
+                      ),
+                    ),
+                    if (widget.onFollow != null ||
+                        widget.onUnfollow != null) ...[
+                      const SizedBox(width: AppSpace.sm),
+                      FilledButton(
+                        onPressed: _followBusy ? null : _toggleFollow,
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 48),
+                        ),
+                        child: Text(_following ? 'Following' : 'Follow'),
+                      ),
+                    ],
+                  ],
                 ),
-              ],
               const SizedBox(height: AppSpace.xl),
               const SectionHeader(title: 'Reels'),
               const SizedBox(height: AppSpace.sm),

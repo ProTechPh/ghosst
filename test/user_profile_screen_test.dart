@@ -13,6 +13,9 @@ PublicUser _user({
   String createdAt = '2026-01-01T00:00:00.000Z',
   bool isAdmin = false,
   bool isModerator = false,
+  bool isFollowing = false,
+  bool isSelf = false,
+  int followerCount = 12,
 }) => PublicUser(
   id: id,
   displayName: displayName,
@@ -20,9 +23,11 @@ PublicUser _user({
   createdAt: createdAt,
   isAdmin: isAdmin,
   isModerator: isModerator,
-  followerCount: 12,
+  followerCount: followerCount,
   followingCount: 7,
   reelCount: 3,
+  isFollowing: isFollowing,
+  isSelf: isSelf,
 );
 
 Future<void> _pump(
@@ -33,6 +38,8 @@ Future<void> _pump(
   VoidCallback? onReport,
   Future<bool> Function()? onBlock,
   Future<bool> Function()? onUnblock,
+  Future<FollowState> Function(String id)? onFollow,
+  Future<FollowState> Function(String id)? onUnfollow,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -46,6 +53,8 @@ Future<void> _pump(
           onReport: onReport ?? () {},
           onBlock: onBlock,
           onUnblock: onUnblock,
+          onFollow: onFollow,
+          onUnfollow: onUnfollow,
         ),
       ),
     ),
@@ -85,6 +94,61 @@ void main() {
 
     expect(find.text('Member #42'), findsWidgets);
     expect(find.text('M'), findsOneWidget);
+  });
+
+  testWidgets('follow is optimistic, updates count, and disables in flight', (
+    tester,
+  ) async {
+    final result = Completer<FollowState>();
+    await _pump(
+      tester,
+      loader: (_) async => _user(),
+      onFollow: (_) => result.future,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Follow'));
+    await tester.pump();
+    expect(find.widgetWithText(FilledButton, 'Following'), findsOneWidget);
+    expect(find.text('13'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Following'))
+          .onPressed,
+      isNull,
+    );
+
+    result.complete(const FollowState(isFollowing: true, followerCount: 13));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(FilledButton, 'Following'), findsOneWidget);
+  });
+
+  testWidgets('failed follow rolls back and offers Retry', (tester) async {
+    await _pump(
+      tester,
+      loader: (_) async => _user(),
+      onFollow: (_) async => throw Exception('offline'),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Follow'));
+    await tester.pumpAndSettle();
+    expect(find.text('Follow'), findsOneWidget);
+    expect(find.text('12'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+  });
+
+  testWidgets('self profile hides Follow', (tester) async {
+    await _pump(
+      tester,
+      loader: (_) async => _user(isSelf: true),
+      onFollow: (_) async =>
+          const FollowState(isFollowing: true, followerCount: 13),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(FilledButton, 'Follow'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Following'), findsNothing);
   });
 
   testWidgets('message and report actions invoke callbacks', (tester) async {

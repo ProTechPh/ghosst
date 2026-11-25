@@ -800,6 +800,8 @@ class _HomeShellState extends State<HomeShell> {
             onReport: () => unawaited(_reportUser(id)),
             onBlock: () => _changeBlock(id, true),
             onUnblock: () => _changeBlock(id, false),
+            onFollow: Backend.followUser,
+            onUnfollow: Backend.unfollowUser,
           ),
         ),
       );
