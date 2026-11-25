@@ -21,22 +21,14 @@ class ReelUploadDraft {
     this.onProgress,
   });
 
-  ReelUploadDraft copyWith({
-    String? filePath,
-    String? fileName,
-    String? caption,
-    int? sizeBytes,
-    String? sha256,
-    String? idempotencyKey,
-    void Function(int sent, int total)? onProgress,
-  }) => ReelUploadDraft(
-    filePath: filePath ?? this.filePath,
-    fileName: fileName ?? this.fileName,
-    caption: caption ?? this.caption,
-    sizeBytes: sizeBytes ?? this.sizeBytes,
-    sha256: sha256 ?? this.sha256,
-    idempotencyKey: idempotencyKey ?? this.idempotencyKey,
-    onProgress: onProgress ?? this.onProgress,
+  ReelUploadDraft copyWith({required String caption}) => ReelUploadDraft(
+    filePath: filePath,
+    fileName: fileName,
+    caption: caption,
+    sizeBytes: sizeBytes,
+    sha256: sha256,
+    idempotencyKey: idempotencyKey,
+    onProgress: onProgress,
   );
 
   final String filePath;
@@ -54,6 +46,7 @@ class ReelUploadScreen extends StatefulWidget {
     this.prepareUpload,
     this.submitUpload,
     this.picker,
+    this.cacheFile,
   });
 
   final Future<ReelUploadTicket?> Function(ReelUploadDraft draft)?
@@ -61,6 +54,7 @@ class ReelUploadScreen extends StatefulWidget {
   final Future<void> Function(ReelUploadDraft draft, ReelUploadTicket ticket)?
   submitUpload;
   final FilePicker? picker;
+  final Future<String?> Function(PlatformFile file)? cacheFile;
 
   @override
   State<ReelUploadScreen> createState() => _ReelUploadScreenState();
@@ -85,13 +79,15 @@ class _ReelUploadScreenState extends State<ReelUploadScreen> {
     setState(() {
       _picking = true;
       _error = null;
+      _draft = null;
+      _progress = null;
     });
     try {
       final result = await (widget.picker ?? FilePicker.platform).pickFiles(
         type: FileType.video,
       );
       final file = result?.files.singleOrNull;
-      if (!mounted || file == null || file.path == null) return;
+      if (!mounted || file == null) return;
       final size = file.size;
       if (size < 1 || size > ReelUploadService.maxBytes) {
         setState(() => _error = 'Video must be between 1 byte and 50 MB.');
@@ -101,19 +97,27 @@ class _ReelUploadScreenState extends State<ReelUploadScreen> {
         setState(() => _error = 'Only MP4 videos are allowed.');
         return;
       }
+      final path = file.path?.isNotEmpty == true
+          ? file.path!
+          : await (widget.cacheFile?.call(file) ?? Future.value(null));
+      if (!mounted) return;
+      if (path == null || path.isEmpty) {
+        setState(() => _error = 'This file has no readable local path.');
+        return;
+      }
       setState(() => _picking = false);
-      final digest = await ReelUploadService.sha256File(file.path!);
+      final digest = await ReelUploadService.sha256File(path);
       if (!mounted) return;
       setState(() {
         _draft = ReelUploadDraft(
-          filePath: file.path!,
+          filePath: path,
           fileName: file.name,
           caption: _caption.text.trim(),
           sizeBytes: size,
           sha256: digest,
           idempotencyKey: Backend.newIdempotencyKey(),
           onProgress: (sent, total) {
-            if (mounted) setState(() => _progress = sent / total);
+            if (mounted && total > 0) setState(() => _progress = sent / total);
           },
         );
         _picking = false;
@@ -143,16 +147,8 @@ class _ReelUploadScreenState extends State<ReelUploadScreen> {
       _progress = 0;
     });
     try {
-      final ticket = await prepare(
-        ReelUploadDraft(
-          filePath: draft.filePath,
-          fileName: draft.fileName,
-          caption: _caption.text.trim(),
-          sizeBytes: draft.sizeBytes,
-          sha256: draft.sha256,
-          idempotencyKey: draft.idempotencyKey,
-        ),
-      );
+      final caption = _caption.text.trim();
+      final ticket = await prepare(draft.copyWith(caption: caption));
       if (ticket == null) {
         throw const ApiException(
           kind: ApiErrorKind.server,
@@ -160,7 +156,7 @@ class _ReelUploadScreenState extends State<ReelUploadScreen> {
           code: 'reels_not_configured',
         );
       }
-      await submit(draft.copyWith(caption: _caption.text.trim()), ticket);
+      await submit(draft.copyWith(caption: caption), ticket);
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } on ApiException catch (e) {
