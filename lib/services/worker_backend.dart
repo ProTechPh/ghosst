@@ -361,6 +361,11 @@ class Backend {
     return ChatUserSummary.fromJson(res['user'] as Map<String, dynamic>);
   }
 
+  static Future<PublicUser> publicUser(String id) async {
+    final res = await _api.get('/users/$id');
+    return PublicUser.fromJson(res['user'] as Map<String, dynamic>);
+  }
+
   static Future<List<ChatUserSummary>> chatUsers(List<String> ids) async {
     if (ids.isEmpty) return const [];
     final res = await _api.post('/users/summaries', data: {'ids': ids});

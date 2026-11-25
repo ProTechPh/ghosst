@@ -47,6 +47,69 @@ class ChatUserSummary {
   }
 }
 
+class PublicUser {
+  const PublicUser({
+    required this.id,
+    required this.displayName,
+    required this.username,
+    required this.createdAt,
+    required this.followerCount,
+    required this.followingCount,
+    required this.reelCount,
+    this.avatarUrl,
+    this.isAdmin = false,
+    this.isModerator = false,
+    this.isFollowing = false,
+    this.isSelf = false,
+  });
+
+  final String id;
+  final String displayName;
+  final String username;
+  final String createdAt;
+  final String? avatarUrl;
+  final bool isAdmin;
+  final bool isModerator;
+  final int followerCount;
+  final int followingCount;
+  final int reelCount;
+  final bool isFollowing;
+  final bool isSelf;
+
+  String get initial {
+    final value = displayName.trim();
+    return value.isEmpty ? 'G' : String.fromCharCode(value.runes.first);
+  }
+
+  factory PublicUser.fromJson(Map<String, dynamic> json) {
+    int count(String key) {
+      final parsed = int.tryParse((json[key] ?? '').toString());
+      return parsed == null || parsed < 0 ? 0 : parsed;
+    }
+
+    final id = (json['id'] ?? '').toString();
+    final username = json['username'] as String? ?? '';
+    final displayName = (json['displayName'] as String? ?? '').trim();
+    final avatar = (json['avatarUrl'] as String? ?? '').trim();
+    return PublicUser(
+      id: id,
+      displayName: displayName.isNotEmpty
+          ? displayName
+          : (username.isNotEmpty ? username : 'Member #$id'),
+      username: username,
+      createdAt: json['createdAt'] as String? ?? '',
+      avatarUrl: avatar.isEmpty ? null : avatar,
+      isAdmin: json['isAdmin'] == true,
+      isModerator: json['isModerator'] == true,
+      followerCount: count('followerCount'),
+      followingCount: count('followingCount'),
+      reelCount: count('reelCount'),
+      isFollowing: json['isFollowing'] == true,
+      isSelf: json['isSelf'] == true,
+    );
+  }
+}
+
 class Product {
   Product({
     required this.id,
