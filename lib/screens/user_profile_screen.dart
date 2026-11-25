@@ -24,6 +24,8 @@ class UserProfileScreen extends StatefulWidget {
     this.onFollow,
     this.onUnfollow,
     this.onOpenSocialList,
+    this.loadReels,
+    this.onOpenReel,
   });
 
   final String userId;
@@ -37,12 +39,15 @@ class UserProfileScreen extends StatefulWidget {
   final Future<FollowState> Function(String id)? onFollow;
   final Future<FollowState> Function(String id)? onUnfollow;
   final ValueChanged<SocialListDirection>? onOpenSocialList;
+  final Future<List<Reel>> Function(String userId, int offset)? loadReels;
+  final ValueChanged<Reel>? onOpenReel;
 
   @override
   State<UserProfileScreen> createState() => _UserProfileScreenState();
 }
 
 class _UserProfileScreenState extends State<UserProfileScreen> {
+  late ScrollController _scroll = ScrollController();
   PublicUser? _user;
   bool _loading = true;
   bool _failed = false;
@@ -52,6 +57,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   bool _following = false;
   int _followerCount = 0;
   bool _followBusy = false;
+  List<Reel> _reels = const [];
+  int _reelOffset = 0;
+  bool _reelsLoading = false;
+  bool _reelsFailed = false;
+  bool _hasMoreReels = true;
+  final _reelScroll = ScrollController();
 
   @override
   void initState() {
@@ -59,7 +70,16 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _scroll.dispose();
+    _reelScroll.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
+    _scroll.dispose();
+    _scroll = ScrollController();
     setState(() {
       _loading = true;
       _failed = false;
@@ -75,6 +95,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         _loading = false;
       });
       unawaited(_loadBlocked());
+      unawaited(_loadReels());
     } on ApiException catch (e) {
       if (mounted) {
         setState(() {
@@ -102,6 +123,43 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       if (mounted) setState(() => _blocked = blocked);
     } catch (_) {
       // Block state is independent from the public profile.
+    }
+  }
+
+  Future<void> _loadReels({bool reset = false}) async {
+    if (reset) {
+      _reels = const [];
+      _reelOffset = 0;
+      _hasMoreReels = true;
+      _reelsLoading = false;
+    }
+    if (_reelsLoading || !_hasMoreReels) return;
+    setState(() {
+      _reelsLoading = true;
+      _reelsFailed = false;
+    });
+    try {
+      final List<Reel> rows;
+      if (widget.loadReels != null) {
+        rows = await widget.loadReels!(widget.userId, _reelOffset);
+      } else {
+        rows = await Backend.userReels(widget.userId, offset: _reelOffset);
+      }
+      final loaded = rows.length;
+      if (!mounted) return;
+      setState(() {
+        _reels = [..._reels, ...rows];
+        _reelOffset += loaded;
+        _hasMoreReels = loaded == 20;
+        _reelsLoading = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _reelsLoading = false;
+          _reelsFailed = true;
+        });
+      }
     }
   }
 
@@ -252,6 +310,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         SafeArea(
           top: false,
           child: ListView(
+            controller: _scroll,
+            key: const ValueKey('profile-scroll'),
             padding: const EdgeInsets.fromLTRB(
               AppSpace.lg,
               AppSpace.md,
@@ -393,26 +453,136 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               const SizedBox(height: AppSpace.xl),
               const SectionHeader(title: 'Reels'),
               const SizedBox(height: AppSpace.sm),
-              GlowCard(
-                padding: const EdgeInsets.all(AppSpace.xl),
-                child: const Column(
-                  children: [
-                    Icon(
-                      Icons.movie_outlined,
-                      color: AppColors.textDim,
-                      size: AppIcon.xl,
-                    ),
-                    SizedBox(height: AppSpace.sm),
-                    Text('No reels yet', style: AppText.subtitle),
-                  ],
-                ),
-              ),
+              _reelsSection(),
             ],
           ),
         ),
       ],
     );
   }
+
+  Widget _reelsSection() {
+    if (_reelsLoading && _reels.isEmpty) {
+      return const SizedBox(
+        height: 120,
+        child: ColoredBox(color: AppColors.surface),
+      );
+    }
+    if (widget.onOpenReel != null) {
+      return GridView.builder(
+        controller: _reelScroll,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          mainAxisSpacing: 4,
+          crossAxisSpacing: 4,
+        ),
+        itemCount: _reels.length,
+        itemBuilder: (_, index) {
+          final reel = _reels[index];
+          return GestureDetector(
+            key: ValueKey('profile-reel-${reel.id}'),
+            onTap: () => widget.onOpenReel!(reel),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (reel.posterUrl != null)
+                  CachedNetworkImage(
+                    imageUrl: reel.posterUrl!,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, _, _) => _reelPlaceholder(),
+                  )
+                else
+                  _reelPlaceholder(),
+                const Center(
+                  child: Icon(Icons.play_arrow_rounded, color: Colors.white),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    }
+    if (_reelsFailed && _reels.isEmpty) {
+      return Center(
+        child: TextButton(
+          onPressed: () => _loadReels(reset: true),
+          child: const Text('Could not load reels. Retry'),
+        ),
+      );
+    }
+    if (_reels.isEmpty) {
+      return const GlowCard(
+        padding: EdgeInsets.all(AppSpace.xl),
+        child: Column(
+          children: [
+            Icon(
+              Icons.movie_outlined,
+              color: AppColors.textDim,
+              size: AppIcon.xl,
+            ),
+            SizedBox(height: AppSpace.sm),
+            Text('No reels yet', style: AppText.subtitle),
+          ],
+        ),
+      );
+    }
+    return GridView.builder(
+      controller: _reelScroll,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        mainAxisSpacing: 4,
+        crossAxisSpacing: 4,
+      ),
+      itemCount: _reels.length,
+      itemBuilder: (_, index) {
+        final reel = _reels[index];
+        return GestureDetector(
+          key: ValueKey('profile-reel-${reel.id}'),
+          onTap: widget.onOpenReel == null
+              ? null
+              : () => widget.onOpenReel!(reel),
+          child: SizedBox(
+            height: 160,
+            child: Semantics(
+              label: 'Open reel ${index + 1}',
+              button: widget.onOpenReel != null,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.input),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (reel.posterUrl != null)
+                      CachedNetworkImage(
+                        imageUrl: reel.posterUrl!,
+                        fit: BoxFit.cover,
+                        errorWidget: (_, _, _) => _reelPlaceholder(),
+                      )
+                    else
+                      _reelPlaceholder(),
+                    const Center(
+                      child: Icon(
+                        Icons.play_arrow_rounded,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _reelPlaceholder() => const ColoredBox(
+    color: AppColors.surface,
+    child: Center(child: Icon(Icons.movie_outlined, color: AppColors.textDim)),
+  );
 
   Widget _divider() => Container(
     width: 1,

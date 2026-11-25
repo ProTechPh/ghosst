@@ -42,6 +42,8 @@ Future<void> _pump(
   Future<FollowState> Function(String id)? onFollow,
   Future<FollowState> Function(String id)? onUnfollow,
   ValueChanged<SocialListDirection>? onOpenSocialList,
+  Future<List<Reel>> Function(String id, int offset)? loadReels,
+  ValueChanged<Reel>? onOpenReel,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -58,6 +60,8 @@ Future<void> _pump(
           onFollow: onFollow,
           onUnfollow: onUnfollow,
           onOpenSocialList: onOpenSocialList,
+          loadReels: loadReels ?? ((_, _) async => const []),
+          onOpenReel: onOpenReel,
         ),
       ),
     ),
@@ -98,7 +102,7 @@ void main() {
     expect(find.text('12'), findsOneWidget);
     expect(find.text('7'), findsOneWidget);
     expect(find.text('3'), findsOneWidget);
-    expect(find.text('No reels yet'), findsOneWidget);
+    expect(find.text('Reels'), findsOneWidget);
   });
 
   testWidgets('uses initials and member fallback when identity is blank', (
@@ -331,7 +335,56 @@ void main() {
     expect(find.text('Jeric'), findsOneWidget);
   });
 
-  testWidgets('shows loading until the profile arrives', (tester) async {
+  testWidgets('reel grid uses posters/placeholders and opens the chosen reel', (
+    tester,
+  ) async {
+    Reel? opened;
+    await _pump(
+      tester,
+      loader: (_) async => _user(),
+      loadReels: (_, _) async => [
+        Reel(
+          id: 'r1',
+          caption: '',
+          videoUrl: 'https://example.com/r1.mp4',
+          posterUrl: 'https://example.com/r1.jpg',
+          createdAt: '',
+          creator: _user(),
+          likeCount: 0,
+          commentCount: 0,
+        ),
+        Reel(
+          id: 'r2',
+          caption: '',
+          videoUrl: 'https://example.com/r2.mp4',
+          createdAt: '',
+          creator: _user(),
+          likeCount: 0,
+          commentCount: 0,
+        ),
+      ],
+      onOpenReel: (reel) => opened = reel,
+    );
+    await tester.pumpAndSettle();
+    await tester.pumpAndSettle();
+    final scrollable = tester.state<ScrollableState>(
+      find
+          .descendant(
+            of: find.byType(ListView),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    scrollable.position.jumpTo(scrollable.position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('profile-reel-r1')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('profile-reel-r2')));
+    expect(opened?.id, 'r2');
+  });
+
+  testWidgets('profile shows loading until the profile arrives', (
+    tester,
+  ) async {
     final result = Completer<PublicUser>();
     await _pump(tester, loader: (_) => result.future);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);

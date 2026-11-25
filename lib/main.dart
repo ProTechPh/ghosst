@@ -808,12 +808,47 @@ class _HomeShellState extends State<HomeShell> {
             onUnfollow: Backend.unfollowUser,
             onOpenSocialList: (direction) =>
                 unawaited(_openSocialList(id, direction)),
+            loadReels: (userId, offset) =>
+                Backend.userReels(userId, offset: offset),
+            onOpenReel: (reel) => unawaited(_openCreatorReel(reel)),
           ),
         ),
       );
     } finally {
       _openingProfiles.remove(id);
     }
+  }
+
+  Future<void> _openCreatorReel(Reel reel) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          backgroundColor: Colors.black,
+          body: ReelsScreen(
+            embedded: false,
+            initialReelId: reel.id,
+            initialCreatorId: reel.creator.id,
+            load: (feed, offset) async {
+              final page = await Backend.reels(feed: feed, offset: offset);
+              final index = page.reels.indexWhere((item) => item.id == reel.id);
+              final reels = [...page.reels];
+              if (index >= 0) {
+                final selected = reels.removeAt(index);
+                reels.insert(0, selected);
+              } else if (page.reels.every(
+                (item) => item.creator.id != reel.creator.id,
+              )) {
+                reels.addAll(
+                  await Backend.userReels(reel.creator.id, limit: 10),
+                );
+              }
+              return ReelFeedPage(reels: reels, nextOffset: page.nextOffset);
+            },
+            onOpenProfile: _openUserProfile,
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _openSocialList(String userId, SocialListDirection direction) {

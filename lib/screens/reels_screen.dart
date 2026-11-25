@@ -66,6 +66,8 @@ class ReelsScreen extends StatefulWidget {
     this.loadComments,
     this.submitComment,
     this.onOpenUpload,
+    this.initialReelId,
+    this.initialCreatorId,
     this.active = true,
     this.embedded = true,
   });
@@ -80,6 +82,8 @@ class ReelsScreen extends StatefulWidget {
   loadComments;
   final Future<void> Function(String reelId, String text)? submitComment;
   final VoidCallback? onOpenUpload;
+  final String? initialReelId;
+  final String? initialCreatorId;
   final bool active;
   final bool embedded;
 
@@ -174,14 +178,40 @@ class _ReelsScreenState extends State<ReelsScreen> {
       setState(() {
         if (reset) {
           unawaited(_disposePlayers());
-          _reels = page.reels;
+          _active = 0;
+          _reels = [
+            ...page.reels,
+            if (widget.initialReelId != null)
+              for (final item in page.reels.where(
+                (r) => r.id != widget.initialReelId,
+              ))
+                item,
+          ];
           _liked.clear();
         } else {
           _reels = [..._reels, ...page.reels];
         }
+        if (_active == 0 &&
+            (widget.initialReelId != null || widget.initialCreatorId != null)) {
+          final reelIndex = _reels.indexWhere(
+            (r) => r.id == widget.initialReelId,
+          );
+          final creatorIndex = _reels.indexWhere(
+            (r) => r.creator.id == widget.initialCreatorId,
+          );
+          _active = reelIndex >= 0 ? reelIndex : creatorIndex;
+          if (reelIndex > 0) {
+            _reels.insert(0, _reels.removeAt(reelIndex));
+            _active = 0;
+          }
+        }
         _liked.addAll(page.reels.where((r) => r.isLiked).map((r) => r.id));
         _offset = page.nextOffset;
         _loading = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_page.hasClients) return;
+        _page.jumpToPage(_active);
       });
     } on ApiException catch (e) {
       if (!mounted) return;
