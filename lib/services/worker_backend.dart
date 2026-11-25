@@ -108,7 +108,10 @@ class Backend {
     String idToken, {
     String? photoUrl,
   }) async {
-    await _startSession('/auth/google', {'idToken': idToken});
+    await _startSession('/auth/google', {
+      'idToken': idToken,
+      if (photoUrl != null && photoUrl.trim().isNotEmpty) 'photoUrl': photoUrl.trim(),
+    });
     if (photoUrl != null && photoUrl.trim().isNotEmpty) {
       await _session.writePhotoUrl(photoUrl.trim());
     }
