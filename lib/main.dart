@@ -22,6 +22,8 @@ import 'screens/landing_screen.dart';
 import 'screens/my_keys_screen.dart';
 import 'screens/notice_screen.dart';
 import 'screens/profile_screen.dart';
+import 'screens/reel_upload_screen.dart';
+import 'screens/reels_screen.dart';
 import 'screens/social_list_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/store_screen.dart';
@@ -43,6 +45,7 @@ import 'services/play_integrity.dart';
 import 'services/play_store.dart';
 import 'services/push.dart';
 import 'services/read_store.dart';
+import 'services/reel_upload_service.dart';
 import 'services/security.dart';
 import 'sign_in.dart';
 import 'theme.dart';
@@ -846,6 +849,44 @@ class _HomeShellState extends State<HomeShell> {
     }
   }
 
+  Future<void> _openReelUpload() async {
+    final uploaded = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => ReelUploadScreen(
+          prepareUpload: (draft) => Backend.startReelUpload(
+            fileName: draft.fileName,
+            sizeBytes: draft.sizeBytes,
+            sha256: draft.sha256,
+            caption: draft.caption,
+            idempotencyKey: draft.idempotencyKey,
+          ),
+          submitUpload: (draft, ticket) async {
+            final player = ReelUploadService();
+            try {
+              final result = await player.upload(
+                filePath: draft.filePath,
+                ticket: ticket,
+                onProgress: (sent, total) {
+                  if (total > 0) draft.onProgress?.call(sent, total);
+                },
+              );
+              await Backend.completeReelUpload(
+                reelId: ticket.reelId,
+                videoUrl: result.videoUrl,
+                sha256: result.sha256,
+                sizeBytes: result.sizeBytes,
+              );
+            } finally {
+              player.close();
+            }
+          },
+        ),
+      ),
+    );
+    if (!mounted || uploaded == null) return;
+    setState(() => tab = 5);
+  }
+
   Future<bool> _changeBlock(String id, bool blocked) async {
     try {
       final service = DirectChatService();
@@ -934,7 +975,12 @@ class _HomeShellState extends State<HomeShell> {
         onOpenInbox: _openInbox,
         onOpenProfile: _openUserProfile,
       ),
-      if (isAdmin) AdminScreen(onAnnouncementSent: _refresh, active: tab == 5),
+      ReelsScreen(
+        active: tab == 5,
+        onOpenProfile: _openUserProfile,
+        onOpenUpload: _openReelUpload,
+      ),
+      if (isAdmin) AdminScreen(onAnnouncementSent: _refresh, active: tab == 6),
     ];
 
     final destinations = <_NavItem>[
@@ -943,6 +989,7 @@ class _HomeShellState extends State<HomeShell> {
       _NavItem(Icons.shopping_bag_outlined, Icons.shopping_bag, 'Purchases'),
       _NavItem(Icons.menu_book_outlined, Icons.menu_book, 'Tutorials'),
       _NavItem(Icons.chat_bubble_outline, Icons.chat_bubble, 'Chat'),
+      _NavItem(Icons.video_library_outlined, Icons.video_library, 'Reels'),
       if (isAdmin)
         _NavItem(
           Icons.admin_panel_settings_outlined,

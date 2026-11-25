@@ -456,7 +456,7 @@ class Backend {
         'mimeType': 'video/mp4',
         'caption': caption,
       },
-      headers: {'idempotency-key': idempotencyKey ?? _newIdempotencyKey()},
+      headers: {'idempotency-key': idempotencyKey ?? newIdempotencyKey()},
     );
     return ReelUploadTicket.fromJson(res);
   }
@@ -541,7 +541,7 @@ class Backend {
         .toList();
   }
 
-  static String _newIdempotencyKey() {
+  static String newIdempotencyKey() {
     final random = Random.secure();
     return List.generate(
       16,

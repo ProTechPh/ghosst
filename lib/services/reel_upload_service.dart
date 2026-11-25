@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 
 import 'models.dart';
@@ -21,9 +22,13 @@ class ReelUploadResult {
 }
 
 class ReelUploadService {
-  ReelUploadService({Dio? dio}) : _dio = dio ?? Dio();
+  ReelUploadService({Dio? dio, void Function()? disposeDio})
+    : _dio = dio ?? Dio(),
+      _disposeDio = disposeDio ?? (dio == null ? () => _owned.close() : null);
 
   final Dio _dio;
+  static final Dio _owned = Dio();
+  final void Function()? _disposeDio;
   static const int maxBytes = 50 * 1024 * 1024;
 
   static String? validateInput({
@@ -48,6 +53,13 @@ class ReelUploadService {
       return 'Upload is not configured.';
     }
     return null;
+  }
+
+  void close() => _disposeDio?.call();
+
+  static Future<String> sha256File(String filePath) async {
+    final digest = await sha256.bind(File(filePath).openRead()).first;
+    return digest.toString();
   }
 
   Future<ReelUploadResult> upload({
