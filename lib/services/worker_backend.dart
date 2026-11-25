@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
@@ -384,10 +385,10 @@ class Backend {
     int limit = 20,
     int offset = 0,
   }) async {
-    final res = await _api.get('/users/$id/followers', query: {
-      'limit': '$limit',
-      'offset': '$offset',
-    });
+    final res = await _api.get(
+      '/users/$id/followers',
+      query: {'limit': '$limit', 'offset': '$offset'},
+    );
     return publicUsersFromJson(res['users']);
   }
 
@@ -396,10 +397,10 @@ class Backend {
     int limit = 20,
     int offset = 0,
   }) async {
-    final res = await _api.get('/users/$id/following', query: {
-      'limit': '$limit',
-      'offset': '$offset',
-    });
+    final res = await _api.get(
+      '/users/$id/following',
+      query: {'limit': '$limit', 'offset': '$offset'},
+    );
     return publicUsersFromJson(res['users']);
   }
 
@@ -437,6 +438,115 @@ class Backend {
         .whereType<Map<String, dynamic>>()
         .map(AppFeedback.fromJson)
         .toList();
+  }
+
+  static Future<ReelUploadTicket> startReelUpload({
+    required String fileName,
+    required int sizeBytes,
+    required String sha256,
+    String caption = '',
+    String? idempotencyKey,
+  }) async {
+    final res = await _api.post(
+      '/reels/uploads',
+      data: {
+        'fileName': fileName,
+        'sizeBytes': sizeBytes,
+        'sha256': sha256,
+        'mimeType': 'video/mp4',
+        'caption': caption,
+      },
+      headers: {'idempotency-key': idempotencyKey ?? _newIdempotencyKey()},
+    );
+    return ReelUploadTicket.fromJson(res);
+  }
+
+  static Future<Reel> completeReelUpload({
+    required String reelId,
+    required String videoUrl,
+    required String sha256,
+    required int sizeBytes,
+  }) async {
+    await _api.post(
+      '/reels/$reelId/complete',
+      data: {'videoUrl': videoUrl, 'sha256': sha256, 'sizeBytes': sizeBytes},
+    );
+    final res = await _api.get('/reels/$reelId');
+    return Reel.fromJson(res['reel'] as Map<String, dynamic>);
+  }
+
+  static Future<void> deleteReel(String id) => _api.delete('/reels/$id');
+
+  static Future<ReelFeedPage> reels({
+    String feed = 'for-you',
+    int limit = 10,
+    int offset = 0,
+  }) async {
+    final res = await _api.get(
+      '/reels',
+      query: {'feed': feed, 'limit': '$limit', 'offset': '$offset'},
+    );
+    return ReelFeedPage.fromJson(res);
+  }
+
+  static Future<({bool isLiked, int likeCount})> likeReel(String id) async {
+    final res = await _api.post('/reels/$id/likes');
+    return (
+      isLiked: res['isLiked'] == true,
+      likeCount: (res['likeCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  static Future<({bool isLiked, int likeCount})> unlikeReel(String id) async {
+    final res = await _api.deleteMap('/reels/$id/likes');
+    return (
+      isLiked: res['isLiked'] == true,
+      likeCount: (res['likeCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  static Future<List<ReelComment>> reelComments(
+    String id, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final res = await _api.get(
+      '/reels/$id/comments',
+      query: {'limit': '$limit', 'offset': '$offset'},
+    );
+    return (res['comments'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(ReelComment.fromJson)
+        .toList();
+  }
+
+  static Future<void> postReelComment(String id, String text) =>
+      _api.post('/reels/$id/comments', data: {'text': text});
+
+  static Future<void> deleteReelComment(String reelId, String commentId) =>
+      _api.delete('/reels/$reelId/comments/$commentId');
+
+  static Future<List<Reel>> userReels(
+    String id, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final res = await _api.get(
+      '/users/$id/reels',
+      query: {'limit': '$limit', 'offset': '$offset'},
+    );
+    return (res['reels'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(Reel.fromJson)
+        .toList();
+  }
+
+  static String _newIdempotencyKey() {
+    final random = Random.secure();
+    return List.generate(
+      16,
+      (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+    ).join();
   }
 
   static Future<void> reportContent({

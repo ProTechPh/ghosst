@@ -235,6 +235,7 @@ class ReelUploadTicket {
     required this.token,
     required this.expiresAt,
     required this.maxBytes,
+    this.sha256 = '',
   });
 
   final String reelId;
@@ -242,6 +243,7 @@ class ReelUploadTicket {
   final String token;
   final DateTime expiresAt;
   final int maxBytes;
+  final String sha256;
 
   factory ReelUploadTicket.fromJson(Map<String, dynamic> json) {
     final reel = json['reel'] as Map<String, dynamic>? ?? const {};
@@ -250,9 +252,11 @@ class ReelUploadTicket {
       reelId: (reel['id'] ?? '').toString(),
       uploadUrl: upload['url'] as String? ?? '',
       token: upload['token'] as String? ?? '',
-      expiresAt: DateTime.tryParse(upload['expiresAt'] as String? ?? '') ??
+      expiresAt:
+          DateTime.tryParse(upload['expiresAt'] as String? ?? '') ??
           DateTime.now().add(const Duration(minutes: 15)),
       maxBytes: int.tryParse((upload['maxBytes'] ?? '').toString()) ?? 0,
+      sha256: upload['sha256'] as String? ?? '',
     );
   }
 }
@@ -284,8 +288,12 @@ class AppFeedback {
 String? validateAppFeedback(String comment, int rating) {
   final value = comment.trim();
   if (value.runes.length < 10) return 'Comment must be at least 10 characters.';
-  if (value.runes.length > 1000) return 'Comment must be 1000 characters or less.';
-  if (RegExp(r'<[a-zA-Z/!]').hasMatch(value)) return 'HTML tags are not allowed.';
+  if (value.runes.length > 1000) {
+    return 'Comment must be 1000 characters or less.';
+  }
+  if (RegExp(r'<[a-zA-Z/!]').hasMatch(value)) {
+    return 'HTML tags are not allowed.';
+  }
   if (rating < 1 || rating > 5) return 'Rating must be 1-5.';
   return null;
 }
@@ -456,32 +464,28 @@ class Announcement {
   final String createdAt;
 
   factory Announcement.fromJson(Map<String, dynamic> json) => Announcement(
-        id: json['id'] as String? ?? '',
-        title: json['title'] as String? ?? '',
-        body: json['body'] as String? ?? '',
-        createdAt: json['createdAt'] as String? ?? '',
-      );
+    id: json['id'] as String? ?? '',
+    title: json['title'] as String? ?? '',
+    body: json['body'] as String? ?? '',
+    createdAt: json['createdAt'] as String? ?? '',
+  );
 }
 
 /// Isang user na naka-mute sa world chat (admin "Muted chat users" list).
 /// Ang list ay nasa Admin screen — hindi depende sa chat messages na
 /// mag-e-expire, kaya laging may paraan mag-unmute.
 class MutedUser {
-  const MutedUser({
-    required this.id,
-    required this.name,
-    required this.email,
-  });
+  const MutedUser({required this.id, required this.name, required this.email});
 
   final String id;
   final String name;
   final String email;
 
   factory MutedUser.fromJson(Map<String, dynamic> json) => MutedUser(
-        id: json['id'] as String? ?? '',
-        name: json['displayName'] as String? ?? '',
-        email: json['email'] as String? ?? '',
-      );
+    id: json['id'] as String? ?? '',
+    name: json['displayName'] as String? ?? '',
+    email: json['email'] as String? ?? '',
+  );
 }
 
 /// Isang banned word sa auto-moderation.
@@ -492,9 +496,9 @@ class BannedWord {
   final String word;
 
   factory BannedWord.fromJson(Map<String, dynamic> json) => BannedWord(
-        id: (json['id'] as num?)?.toInt() ?? 0,
-        word: json['word'] as String? ?? '',
-      );
+    id: (json['id'] as num?)?.toInt() ?? 0,
+    word: json['word'] as String? ?? '',
+  );
 }
 
 /// Ang moderation settings: block links ba, at gaano katagal ang auto-mute.
@@ -505,9 +509,9 @@ class Moderation {
   final int muteHours;
 
   factory Moderation.fromJson(Map<String, dynamic> json) => Moderation(
-        blockLinks: json['blockLinks'] as bool? ?? false,
-        muteHours: (json['muteHours'] as num?)?.toInt() ?? 24,
-      );
+    blockLinks: json['blockLinks'] as bool? ?? false,
+    muteHours: (json['muteHours'] as num?)?.toInt() ?? 24,
+  );
 }
 
 /// Null when there is nothing to show or the user already closed this one.
@@ -631,7 +635,9 @@ class ShopGame {
       slug: json['slug'] as String? ?? '',
       description: json['description'] as String? ?? '',
       image: json['image'] as String? ?? '',
-      images: (json['images'] as List? ?? const []).whereType<String>().toList(),
+      images: (json['images'] as List? ?? const [])
+          .whereType<String>()
+          .toList(),
       price: (json['price'] as num?)?.toDouble() ?? 0,
       priceMax: (json['priceMax'] as num?)?.toDouble() ?? 0,
       stock: (json['stock'] as num?)?.toInt() ?? 0,
@@ -702,11 +708,11 @@ class AppConfig {
   final String directUrl;
 
   factory AppConfig.fromJson(Map<String, dynamic> json) => AppConfig(
-        minVersionCode: (json['minVersionCode'] as num?)?.toInt() ?? 0,
-        latestVersionCode: (json['latestVersionCode'] as num?)?.toInt() ?? 0,
-        playUrl: json['playUrl'] as String? ?? '',
-        directUrl: json['directUrl'] as String? ?? '',
-      );
+    minVersionCode: (json['minVersionCode'] as num?)?.toInt() ?? 0,
+    latestVersionCode: (json['latestVersionCode'] as num?)?.toInt() ?? 0,
+    playUrl: json['playUrl'] as String? ?? '',
+    directUrl: json['directUrl'] as String? ?? '',
+  );
 
   /// True when this install must update before it can be used. A min of 0
   /// means the gate is off (nothing published yet).
@@ -743,15 +749,15 @@ class Tutorial {
   final String createdAt;
 
   factory Tutorial.fromJson(Map<String, dynamic> json) => Tutorial(
-        id: (json['id'] as num?)?.toInt() ?? 0,
-        title: json['title'] as String? ?? '',
-        slug: json['slug'] as String? ?? '',
-        category: json['category'] as String? ?? '',
-        videoUrl: json['videoUrl'] as String? ?? '',
-        content: json['content'] as String? ?? '',
-        views: (json['views'] as num?)?.toInt() ?? 0,
-        createdAt: json['createdAt'] as String? ?? '',
-      );
+    id: (json['id'] as num?)?.toInt() ?? 0,
+    title: json['title'] as String? ?? '',
+    slug: json['slug'] as String? ?? '',
+    category: json['category'] as String? ?? '',
+    videoUrl: json['videoUrl'] as String? ?? '',
+    content: json['content'] as String? ?? '',
+    views: (json['views'] as num?)?.toInt() ?? 0,
+    createdAt: json['createdAt'] as String? ?? '',
+  );
 }
 
 /// `₱620`, `₱99.50`, or `₱620 – ₱1,200` when keys are priced differently.
@@ -760,10 +766,7 @@ String shopPriceLabel(String currency, double price, double priceMax) {
     final digits = v == v.roundToDouble()
         ? v.toStringAsFixed(0)
         : v.toStringAsFixed(2);
-    return digits.replaceAllMapped(
-      RegExp(r'\B(?=(\d{3})+(?!\d))'),
-      (m) => ',',
-    );
+    return digits.replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
   }
 
   final low = '$currency${money(price)}';
