@@ -173,4 +173,70 @@ void main() {
       expect(called, isFalse);
     }
   });
+
+  testWidgets('successful multi-image submit calls prepare/submit once with ordered images', (
+    tester,
+  ) async {
+    final dir = await Directory.systemTemp.createTemp('ghosst-reel-ui-');
+    try {
+      final f1 = File('${dir.path}/a.jpg')..writeAsBytesSync([1, 2, 3]);
+      final f2 = File('${dir.path}/b.png')..writeAsBytesSync([4, 5, 6]);
+      ReelUploadDraft? prepared;
+      ReelUploadDraft? submittedDraft;
+      ReelUploadTicket? submittedTicket;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark,
+          home: ReelUploadScreen(
+            picker: _FakePicker([
+              PlatformFile(name: 'a.jpg', size: 3, path: f1.path),
+              PlatformFile(name: 'b.png', size: 3, path: f2.path),
+            ]),
+            prepareUpload: (draft) async {
+              prepared = draft;
+              return _ticket(
+                uploads: [
+                  ReelImageUploadTicket(
+                    position: 1,
+                    uploadUrl: 'https://z/upload.php',
+                    token: 't1',
+                    sha256: draft.images[0].sha256,
+                    storageKey: 'r1-1.jpg',
+                    maxBytes: 10485760,
+                  ),
+                  ReelImageUploadTicket(
+                    position: 2,
+                    uploadUrl: 'https://z/upload.php',
+                    token: 't2',
+                    sha256: draft.images[1].sha256,
+                    storageKey: 'r1-2.png',
+                    maxBytes: 10485760,
+                  ),
+                ],
+              );
+            },
+            submitUpload: (draft, ticket) async {
+              submittedDraft = draft;
+              submittedTicket = ticket;
+            },
+          ),
+        ),
+      );
+      await tester.tap(find.textContaining('Choose'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Post reel'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      expect(prepared, isNotNull);
+      expect(submittedDraft, isNotNull);
+      expect(submittedTicket, isNotNull);
+      expect(prepared!.images.map((i) => i.fileName), ['a.jpg', 'b.png']);
+      expect(submittedDraft!.images.map((i) => i.fileName), ['a.jpg', 'b.png']);
+    } finally {
+      await dir.delete(recursive: true);
+    }
+  });
 }

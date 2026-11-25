@@ -891,26 +891,21 @@ class _HomeShellState extends State<HomeShell> {
         MaterialPageRoute<bool>(
           builder: (_) => ReelUploadScreen(
             prepareUpload: (draft) => Backend.startReelUpload(
-              fileName: draft.fileName,
-              sizeBytes: draft.sizeBytes,
-              sha256: draft.sha256,
               caption: draft.caption,
-              idempotencyKey: draft.idempotencyKey,
+              images: [for (final i in draft.images) i.toJson()],
+              idempotencyKey: draft.idempotencyBase,
             ),
             submitUpload: (draft, ticket) async {
-              final result = await service.upload(
-                filePath: draft.filePath,
+              final results = await service.uploadImages(
+                images: draft.images,
                 ticket: ticket,
-                onProgress: (sent, total) {
-                  if (total > 0) draft.onProgress?.call(sent, total);
-                },
+                onImageProgress: (done, total) =>
+                    draft.onProgress?.call(done, total),
               );
               await Backend.completeReelUpload(
                 reelId: ticket.reelId,
-                videoUrl: result.videoUrl,
-                sha256: result.sha256,
-                sizeBytes: result.sizeBytes,
-                idempotencyKey: draft.idempotencyKey,
+                images: [for (final r in results) r.toJson()],
+                idempotencyKey: draft.idempotencyBase,
               );
             },
           ),
