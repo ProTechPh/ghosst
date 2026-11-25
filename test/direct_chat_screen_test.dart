@@ -7,10 +7,11 @@ import 'package:ghosst/services/direct_chat_service.dart';
 import 'package:ghosst/theme.dart';
 
 class _FakeDirectChatClient implements DirectChatClient {
-  final _controller = StreamController<List<DirectMessage>>();
+  final _controller = StreamController<DirectMessageFeed>();
   final sent = <String>[];
   final markedRead = <String>[];
   final blocked = <String>[];
+  bool failMarkRead = false;
   String? sendError;
   bool isBlockedResult = false;
 
@@ -21,7 +22,7 @@ class _FakeDirectChatClient implements DirectChatClient {
   Stream<List<DirectThread>> threads() => const Stream.empty();
 
   @override
-  Stream<List<DirectMessage>> messages(String threadId) => _controller.stream;
+  Stream<DirectMessageFeed> messages(String threadId) => _controller.stream;
 
   @override
   Future<String?> send(String threadId, String text) async {
@@ -32,6 +33,7 @@ class _FakeDirectChatClient implements DirectChatClient {
   @override
   Future<void> markRead(String threadId) async {
     markedRead.add(threadId);
+    if (failMarkRead) throw StateError('missing thread');
   }
 
   @override
@@ -51,7 +53,8 @@ class _FakeDirectChatClient implements DirectChatClient {
   @override
   Future<void> signOut() async {}
 
-  void emit(List<DirectMessage> messages) => _controller.add(messages);
+  void emit(List<DirectMessage> messages, {bool pending = false}) => _controller
+      .add(DirectMessageFeed(messages: messages, hasPendingWrites: pending));
 }
 
 DirectMessage _message(String id, String senderId, String text, int ts) =>
@@ -66,6 +69,7 @@ Future<void> _pump(
     required String reason,
     String details,
     String? snapshot,
+    String? threadId,
   })?
   onReport,
 }) async {
@@ -110,6 +114,27 @@ void main() {
     expect(client.markedRead, contains('me__peer'));
   });
 
+  testWidgets('a missing thread read marker does not block rendering', (
+    tester,
+  ) async {
+    final client = _FakeDirectChatClient()..failMarkRead = true;
+    await _pump(tester, client);
+    client.emit([_message('m1', 'peer', 'Still visible', 1000)]);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Still visible'), findsOneWidget);
+    expect(find.text('Could not load messages'), findsNothing);
+  });
+
+  testWidgets('pending writes show delivery state', (tester) async {
+    final client = _FakeDirectChatClient();
+    await _pump(tester, client);
+    client.emit([_message('m1', 'me', 'Queued', 1000)], pending: true);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pending'), findsOneWidget);
+  });
+
   testWidgets('empty input never sends and a failed send restores the draft', (
     tester,
   ) async {
@@ -149,6 +174,44 @@ void main() {
     expect(find.text('You blocked this user.'), findsOneWidget);
   });
 
+  testWidgets('user report is available from an empty conversation', (
+    tester,
+  ) async {
+    final client = _FakeDirectChatClient();
+    String? reportedType;
+    String? reportedTarget;
+    await _pump(
+      tester,
+      client,
+      onReport:
+          ({
+            required String targetType,
+            required String targetId,
+            required String reason,
+            String details = '',
+            String? snapshot,
+            String? threadId,
+          }) async {
+            reportedType = targetType;
+            reportedTarget = targetId;
+          },
+    );
+    client.emit([]);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('More actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Report user'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.ensureVisible(find.text('Submit report'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('Submit report'));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(reportedType, 'user');
+    expect(reportedTarget, 'peer');
+  });
+
   testWidgets('message report includes the reported text snapshot', (
     tester,
   ) async {
@@ -165,6 +228,7 @@ void main() {
             required String reason,
             String details = '',
             String? snapshot,
+            String? threadId,
           }) async {
             reportedId = targetId;
             reportedSnapshot = snapshot;

@@ -14,6 +14,7 @@ typedef ReportContent =
       required String reason,
       String details,
       String? snapshot,
+      String? threadId,
     });
 
 class DirectChatScreen extends StatefulWidget {
@@ -40,13 +41,14 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   late final DirectChatClient _client = widget.client ?? DirectChatService();
   final _input = TextEditingController();
   final _scroll = ScrollController();
-  StreamSubscription<List<DirectMessage>>? _sub;
+  StreamSubscription<DirectMessageFeed>? _sub;
   List<DirectMessage> _messages = const [];
   String? _myId;
   bool _loading = true;
   bool _failed = false;
   bool _sending = false;
   bool _blocked = false;
+  bool _pendingWrites = false;
   int _lastMarkedTs = 0;
 
   String get _threadId => directThreadId(_myId ?? '', widget.peerId);
@@ -71,26 +73,20 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       _failed = false;
     });
     try {
-      final results = await Future.wait([
-        _client.currentUid(),
-        _client.isBlocked(widget.peerId),
-      ]);
+      final uid = await _client.currentUid();
       if (!mounted) return;
-      setState(() {
-        _myId = results[0] as String?;
-        _blocked = results[1] as bool;
-      });
-      if (_myId == null) throw StateError('No chat session');
-      await _client.markRead(_threadId);
+      if (uid == null || uid.isEmpty) throw StateError('No chat session');
+      setState(() => _myId = uid);
       _sub = _client
           .messages(_threadId)
           .listen(
-            (messages) {
+            (feed) {
               if (!mounted) return;
-              final ordered = [...messages]
+              final ordered = [...feed.messages]
                 ..sort((a, b) => a.tsMillis.compareTo(b.tsMillis));
               setState(() {
                 _messages = ordered;
+                _pendingWrites = feed.hasPendingWrites;
                 _loading = false;
                 _failed = false;
               });
@@ -105,6 +101,15 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
               });
             },
           );
+      unawaited(_client.markRead(_threadId).catchError((_) {}));
+      unawaited(
+        _client
+            .isBlocked(widget.peerId)
+            .then((blocked) {
+              if (mounted) setState(() => _blocked = blocked);
+            })
+            .catchError((_) {}),
+      );
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -172,16 +177,32 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       ),
     );
     if (approved != true || !mounted) return;
-    await _client.block(widget.peerId);
-    if (mounted) setState(() => _blocked = true);
+    try {
+      await _client.block(widget.peerId);
+      if (mounted) setState(() => _blocked = true);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not block user. Try again.')),
+        );
+      }
+    }
   }
 
   Future<void> _unblock() async {
-    await _client.unblock(widget.peerId);
-    if (mounted) setState(() => _blocked = false);
+    try {
+      await _client.unblock(widget.peerId);
+      if (mounted) setState(() => _blocked = false);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not unblock user. Try again.')),
+        );
+      }
+    }
   }
 
-  Future<void> _report(DirectMessage message) async {
+  Future<void> _report(DirectMessage message, {bool userTarget = false}) async {
     final details = TextEditingController();
     var reason = 'spam';
     final result = await showModalBottomSheet<Map<String, String>>(
@@ -197,46 +218,51 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
             MediaQuery.viewInsetsOf(sheetContext).bottom + AppSpace.md,
           ),
           child: StatefulBuilder(
-            builder: (context, setSheetState) => Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Report message', style: AppText.title),
-                const SizedBox(height: AppSpace.md),
-                DropdownButtonFormField<String>(
-                  initialValue: reason,
-                  decoration: const InputDecoration(labelText: 'Reason'),
-                  items: const [
-                    DropdownMenuItem(value: 'spam', child: Text('Spam')),
-                    DropdownMenuItem(
-                      value: 'harassment',
-                      child: Text('Harassment'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'hate_speech',
-                      child: Text('Hate speech'),
-                    ),
-                    DropdownMenuItem(value: 'other', child: Text('Other')),
-                  ],
-                  onChanged: (value) =>
-                      setSheetState(() => reason = value ?? 'spam'),
-                ),
-                const SizedBox(height: AppSpace.md),
-                TextField(
-                  controller: details,
-                  maxLength: 500,
-                  decoration: const InputDecoration(
-                    labelText: 'Details (optional)',
+            builder: (context, setSheetState) => SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    userTarget ? 'Report user' : 'Report message',
+                    style: AppText.title,
                   ),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(sheetContext, {
-                    'reason': reason,
-                    'details': details.text.trim(),
-                  }),
-                  child: const Text('Submit report'),
-                ),
-              ],
+                  const SizedBox(height: AppSpace.md),
+                  DropdownButtonFormField<String>(
+                    initialValue: reason,
+                    decoration: const InputDecoration(labelText: 'Reason'),
+                    items: const [
+                      DropdownMenuItem(value: 'spam', child: Text('Spam')),
+                      DropdownMenuItem(
+                        value: 'harassment',
+                        child: Text('Harassment'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'hate_speech',
+                        child: Text('Hate speech'),
+                      ),
+                      DropdownMenuItem(value: 'other', child: Text('Other')),
+                    ],
+                    onChanged: (value) =>
+                        setSheetState(() => reason = value ?? 'spam'),
+                  ),
+                  const SizedBox(height: AppSpace.md),
+                  TextField(
+                    controller: details,
+                    maxLength: 500,
+                    decoration: const InputDecoration(
+                      labelText: 'Details (optional)',
+                    ),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(sheetContext, {
+                      'reason': reason,
+                      'details': details.text.trim(),
+                    }),
+                    child: const Text('Submit report'),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -246,11 +272,12 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     if (result == null || !mounted) return;
     try {
       await (widget.onReport ?? Backend.reportContent)(
-        targetType: 'message',
-        targetId: message.id,
+        targetType: userTarget ? 'user' : 'message',
+        targetId: userTarget ? widget.peerId : message.id,
         reason: result['reason'] ?? 'spam',
         details: result['details'] ?? '',
-        snapshot: message.text,
+        snapshot: userTarget ? null : message.text,
+        threadId: userTarget ? null : _threadId,
       );
       if (mounted) {
         ScaffoldMessenger.of(
@@ -290,11 +317,28 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
             onSelected: (value) {
               if (value == 'block') unawaited(_block());
               if (value == 'unblock') unawaited(_unblock());
+              if (value == 'report_user') {
+                unawaited(
+                  _report(
+                    DirectMessage(
+                      id: widget.peerId,
+                      senderId: widget.peerId,
+                      text: '',
+                      tsMillis: 0,
+                    ),
+                    userTarget: true,
+                  ),
+                );
+              }
             },
             itemBuilder: (_) => [
               PopupMenuItem(
                 value: _blocked ? 'unblock' : 'block',
                 child: Text(_blocked ? 'Unblock user' : 'Block user'),
+              ),
+              const PopupMenuItem(
+                value: 'report_user',
+                child: Text('Report user'),
               ),
             ],
           ),
@@ -334,6 +378,17 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                           itemBuilder: (_, i) => _bubble(_messages[i]),
                         ),
                 ),
+                if (_pendingWrites)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: AppSpace.md),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Pending',
+                        style: TextStyle(color: AppColors.gold),
+                      ),
+                    ),
+                  ),
                 if (!_blocked) _composer(),
               ],
             ),
@@ -405,9 +460,29 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
         ),
         child: mine
             ? bubble
-            : GestureDetector(
-                onLongPress: () => unawaited(_report(message)),
-                child: Semantics(hint: 'Long press to report', child: bubble),
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Report message',
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 40,
+                      height: 40,
+                    ),
+                    onPressed: () => unawaited(_report(message)),
+                    icon: const Icon(Icons.flag_outlined, size: 18),
+                  ),
+                  Flexible(
+                    child: GestureDetector(
+                      onLongPress: () => unawaited(_report(message)),
+                      child: Semantics(
+                        hint: 'Long press to report',
+                        child: bubble,
+                      ),
+                    ),
+                  ),
+                ],
               ),
       ),
     );

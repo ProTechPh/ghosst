@@ -11,6 +11,8 @@ import 'session_store.dart';
 export 'models.dart';
 
 /// The signed-in account, as much of it as the UI shows.
+enum BackendSessionState { live, unknown, revoked }
+
 class AppUser {
   const AppUser({
     required this.id,
@@ -38,6 +40,7 @@ class Backend {
   static final ApiBackend _apiBackend = ApiBackend(_api);
 
   static AppUser? _user;
+  static DateTime? _userCheckedAt;
   static bool? _isAdmin;
   static bool? _isModerator;
   static bool? _chatMuted;
@@ -47,15 +50,53 @@ class Backend {
 
   // ---- session ----
 
+  static const _sessionCacheTtl = Duration(minutes: 5);
+
   static Future<AppUser?> currentUser() async {
+    final status = await sessionStatus();
+    return status.user;
+  }
+
+  /// Live = verified recently; unknown = transient failure (keep Firebase
+  /// cache); revoked = definitive authentication rejection.
+  static Future<({BackendSessionState state, AppUser? user})> sessionStatus({
+    bool refresh = false,
+  }) async {
     final cached = _user;
-    if (cached != null) return cached;
-    if (await _session.accessToken() == null) return null;
-    try {
-      return _user = await _me();
-    } on ApiException {
-      return null;
+    final checkedAt = _userCheckedAt;
+    final now = DateTime.now();
+    if (!refresh &&
+        cached != null &&
+        checkedAt != null &&
+        now.difference(checkedAt) < _sessionCacheTtl) {
+      return (state: BackendSessionState.live, user: cached);
     }
+    if (await _session.accessToken() == null) {
+      return (state: BackendSessionState.revoked, user: null);
+    }
+    try {
+      final user = await _me();
+      _user = user;
+      _userCheckedAt = DateTime.now();
+      return (state: BackendSessionState.live, user: user);
+    } on ApiException catch (e) {
+      return (
+        state: sessionStateAfterError(e, hasCachedUser: cached != null),
+        user: cached,
+      );
+    }
+  }
+
+  static BackendSessionState sessionStateAfterError(
+    ApiException? error, {
+    required bool hasCachedUser,
+  }) {
+    if (error == null) return BackendSessionState.live;
+    if (error.kind == ApiErrorKind.unauthorized ||
+        error.kind == ApiErrorKind.forbidden) {
+      return BackendSessionState.revoked;
+    }
+    return BackendSessionState.unknown;
   }
 
   static Future<void> signIn(String email, String password) =>
@@ -63,7 +104,10 @@ class Backend {
 
   /// Google ang ID token; ang server ang nagbe-verify at gumagawa ng account
   /// kung wala pa sa email.
-  static Future<void> signInWithGoogle(String idToken, {String? photoUrl}) async {
+  static Future<void> signInWithGoogle(
+    String idToken, {
+    String? photoUrl,
+  }) async {
     await _startSession('/auth/google', {'idToken': idToken});
     if (photoUrl != null && photoUrl.trim().isNotEmpty) {
       await _session.writePhotoUrl(photoUrl.trim());
@@ -87,6 +131,7 @@ class Backend {
       refreshToken: res['refreshToken'] as String,
     );
     _user = null;
+    _userCheckedAt = null;
     _isAdmin = null;
     _isModerator = null;
     _chatMuted = null;
@@ -95,6 +140,7 @@ class Backend {
   static Future<void> signOut() async {
     await _api.logout();
     _user = null;
+    _userCheckedAt = null;
     _isAdmin = null;
     _isModerator = null;
     _chatMuted = null;
@@ -109,6 +155,7 @@ class Backend {
     await _api.delete('/account', data: {'confirm': 'DELETE'});
     await _session.clear();
     _user = null;
+    _userCheckedAt = null;
     _isAdmin = null;
     _isModerator = null;
     _chatMuted = null;
@@ -160,6 +207,7 @@ class Backend {
   static Future<bool> chatMuted({bool refresh = false}) async {
     if (refresh) {
       _user = null;
+      _userCheckedAt = null;
       _chatMuted = null;
     }
     final cached = _chatMuted;
@@ -310,26 +358,37 @@ class Backend {
     return ChatUserSummary.fromJson(res['user'] as Map<String, dynamic>);
   }
 
+  static Future<List<ChatUserSummary>> chatUsers(List<String> ids) async {
+    if (ids.isEmpty) return const [];
+    final res = await _api.post('/users/summaries', data: {'ids': ids});
+    return (res['users'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(ChatUserSummary.fromJson)
+        .toList();
+  }
+
   static Future<void> reportContent({
     required String targetType,
     required String targetId,
     required String reason,
     String details = '',
     String? snapshot,
-  }) =>
-      _api.post(
-        '/reports',
-        data: {
-          'targetType': targetType,
-          'targetId': targetId,
-          'reason': reason,
-          'details': details,
-          'snapshot': ?snapshot,
-        },
-      );
+    String? threadId,
+  }) => _api.post(
+    '/reports',
+    data: {
+      'targetType': targetType,
+      'targetId': targetId,
+      'reason': reason,
+      'details': details,
+      'snapshot': ?snapshot,
+      'threadId': ?threadId,
+    },
+  );
 
   /// Server-owned read markers. Null when signed out or the call fails.
-  static Future<({String announcementsSeenAt, int chatSeenAtMs})?> reads() async {
+  static Future<({String announcementsSeenAt, int chatSeenAtMs})?>
+  reads() async {
     try {
       if (await _session.accessToken() == null) return null;
       final res = await _api.get('/reads');
@@ -350,10 +409,13 @@ class Backend {
   }) async {
     try {
       if (await _session.accessToken() == null) return;
-      await _api.post('/reads', data: {
-        'announcementsSeenAt': ?announcementsSeenAt,
-        'chatSeenAtMs': ?chatSeenAtMs,
-      });
+      await _api.post(
+        '/reads',
+        data: {
+          'announcementsSeenAt': ?announcementsSeenAt,
+          'chatSeenAtMs': ?chatSeenAtMs,
+        },
+      );
     } catch (_) {
       // Best effort.
     }
@@ -741,7 +803,9 @@ class Backend {
     await _api.delete('/admin/moderators/$userId');
   }
 
-  static Future<List<Map<String, dynamic>>> searchAdminUsers(String query) async {
+  static Future<List<Map<String, dynamic>>> searchAdminUsers(
+    String query,
+  ) async {
     final res = await _api.get('/admin/users', query: {'search': query});
     final rows = (res['users'] as List?) ?? const [];
     return rows.map((e) => (e as Map).cast<String, dynamic>()).toList();

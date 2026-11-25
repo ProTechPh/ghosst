@@ -132,6 +132,18 @@ void main() {
       expect(message.senderId, '10');
       expect(message.text, 'hello');
       expect(message.tsMillis, 1234);
+      expect(message.pending, isFalse);
+    });
+
+    test('pending writes use a local timestamp estimate', () {
+      final before = DateTime.now().millisecondsSinceEpoch;
+      final message = DirectMessage.fromMap('m1', {
+        'senderId': '10',
+        'text': 'queued',
+        'ts': null,
+      }, pending: true);
+      expect(message.pending, isTrue);
+      expect(message.tsMillis, greaterThanOrEqualTo(before));
     });
   });
 }

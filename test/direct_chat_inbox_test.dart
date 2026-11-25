@@ -13,6 +13,7 @@ class _FakeDirectChatClient implements DirectChatClient {
   final bool fail;
   final _controller = StreamController<List<DirectThread>>.broadcast();
   String uid = 'me';
+  bool failMarkRead = false;
 
   @override
   Future<String?> currentUid() async => uid;
@@ -24,13 +25,15 @@ class _FakeDirectChatClient implements DirectChatClient {
   }
 
   @override
-  Stream<List<DirectMessage>> messages(String threadId) => const Stream.empty();
+  Stream<DirectMessageFeed> messages(String threadId) => const Stream.empty();
 
   @override
   Future<String?> send(String threadId, String text) async => null;
 
   @override
-  Future<void> markRead(String threadId) async {}
+  Future<void> markRead(String threadId) async {
+    if (failMarkRead) throw StateError('missing thread');
+  }
 
   @override
   Future<bool> isBlocked(String uid) async => false;
@@ -71,6 +74,7 @@ Future<void> _pump(
   WidgetTester tester,
   _FakeDirectChatClient client, {
   void Function(DirectThread, ChatUserSummary)? onOpenThread,
+  Future<List<ChatUserSummary>> Function(List<String>)? loadUsers,
   Future<List<ChatUserSummary>> Function(String)? searchUsers,
 }) async {
   await tester.pumpWidget(
@@ -80,10 +84,15 @@ Future<void> _pump(
         body: InboxScreen(
           key: UniqueKey(),
           client: client,
-          loadUser: (id) async => ChatUserSummary(
-            id: id,
-            name: id == 'new' ? 'New peer' : 'Old peer',
-          ),
+          loadUsers:
+              loadUsers ??
+              (ids) async => [
+                for (final id in ids)
+                  ChatUserSummary(
+                    id: id,
+                    name: id == 'new' ? 'New peer' : 'Old peer',
+                  ),
+              ],
           searchUsers: searchUsers,
           onOpenThread: onOpenThread,
         ),
@@ -98,7 +107,21 @@ void main() {
     tester,
   ) async {
     final client = _FakeDirectChatClient();
-    await _pump(tester, client);
+    final loaded = <String>[];
+    await _pump(
+      tester,
+      client,
+      loadUsers: (ids) async {
+        loaded.addAll(ids);
+        return [
+          for (final id in ids)
+            ChatUserSummary(
+              id: id,
+              name: id == 'new' ? 'New peer' : 'Old peer',
+            ),
+        ];
+      },
+    );
     client.emit([
       _thread(
         id: 'me__old',
@@ -124,6 +147,7 @@ void main() {
       tester.getTopLeft(find.text('New peer')).dy,
       lessThan(tester.getTopLeft(find.text('Old peer')).dy),
     );
+    expect(loaded, containsAll(['new', 'old']));
   });
 
   testWidgets('shows an empty state and retries a failed stream', (
@@ -143,7 +167,7 @@ void main() {
   });
 
   testWidgets('new message search opens the selected thread', (tester) async {
-    final client = _FakeDirectChatClient();
+    final client = _FakeDirectChatClient()..failMarkRead = true;
     DirectThread? opened;
     await _pump(
       tester,

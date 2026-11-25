@@ -5,7 +5,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import 'chat_service.dart';
-import 'worker_backend.dart';
 
 const _dmMaxLength = 500;
 const _dmPageSize = 50;
@@ -33,12 +32,12 @@ bool directCooldownPassed(DateTime? lastSend, DateTime now) {
   return now.difference(lastSend) >= dmCooldown;
 }
 
-int _timestampMillis(Object? value) {
+int _timestampMillis(Object? value, {bool pending = false}) {
   if (value is Timestamp) return value.millisecondsSinceEpoch;
   if (value is DateTime) return value.millisecondsSinceEpoch;
   if (value is int) return value;
   if (value is num) return value.toInt();
-  return 0;
+  return pending ? DateTime.now().millisecondsSinceEpoch : 0;
 }
 
 class DirectThread {
@@ -103,26 +102,44 @@ class DirectMessage {
     required this.senderId,
     required this.text,
     required this.tsMillis,
+    this.pending = false,
   });
 
   final String id;
   final String senderId;
   final String text;
   final int tsMillis;
+  final bool pending;
 
-  factory DirectMessage.fromMap(String id, Map<String, dynamic> data) =>
-      DirectMessage(
-        id: id,
-        senderId: data['senderId'] as String? ?? '',
-        text: data['text'] as String? ?? '',
-        tsMillis: _timestampMillis(data['ts']),
-      );
+  factory DirectMessage.fromMap(
+    String id,
+    Map<String, dynamic> data, {
+    bool pending = false,
+  }) => DirectMessage(
+    id: id,
+    senderId: data['senderId'] as String? ?? '',
+    text: data['text'] as String? ?? '',
+    tsMillis: _timestampMillis(data['ts'], pending: pending),
+    pending: pending,
+  );
+}
+
+class DirectMessageFeed {
+  const DirectMessageFeed({
+    required this.messages,
+    this.fromCache = false,
+    this.hasPendingWrites = false,
+  });
+
+  final List<DirectMessage> messages;
+  final bool fromCache;
+  final bool hasPendingWrites;
 }
 
 abstract class DirectChatClient {
   Future<String?> currentUid();
   Stream<List<DirectThread>> threads();
-  Stream<List<DirectMessage>> messages(String threadId);
+  Stream<DirectMessageFeed> messages(String threadId);
   Future<String?> send(String threadId, String text);
   Future<void> markRead(String threadId);
   Future<bool> isBlocked(String uid);
@@ -138,14 +155,7 @@ class DirectChatService implements DirectChatClient {
   FirebaseFirestore get _db => FirebaseFirestore.instance;
 
   @override
-  Future<bool> ensureSignedIn() async {
-    final user = await Backend.currentUser();
-    if (user == null) {
-      await signOut();
-      return false;
-    }
-    return ChatService().ensureSignedIn();
-  }
+  Future<bool> ensureSignedIn() => ChatService().ensureSignedIn();
 
   Future<String?> _uid() async {
     if (!await ChatService.started) return null;
@@ -155,7 +165,7 @@ class DirectChatService implements DirectChatClient {
 
   bool _validThreadFor(String threadId, String uid) {
     final parts = threadId.split('__');
-    if (parts.length != 2 || parts.contains(uid) == false) return false;
+    if (parts.length != 2 || !parts.contains(uid)) return false;
     return directThreadId(parts[0], parts[1]) == threadId;
   }
 
@@ -165,26 +175,40 @@ class DirectChatService implements DirectChatClient {
     return FirebaseAuth.instance.currentUser?.uid;
   }
 
+  CollectionReference<Map<String, dynamic>> _inboxThreads(String uid) =>
+      _db.collection('user_inboxes').doc(uid).collection('threads');
+
   @override
   Stream<List<DirectThread>> threads() async* {
     final uid = await _uid();
     if (uid == null) return;
-    yield* _db
-        .collection('direct_threads')
-        .where('participants', arrayContains: uid)
+    // Pointers carry no message text, so the list rule stays queryable. Each
+    // thread document is fetched under the block-aware get rule.
+    yield* _inboxThreads(uid)
         .orderBy('updatedAt', descending: true)
         .limit(_dmPageSize)
         .snapshots(includeMetadataChanges: true)
-        .map(
-          (snap) => [
-            for (final doc in snap.docs)
-              DirectThread.fromMap(doc.id, doc.data()),
-          ],
-        );
+        .asyncMap((snap) async {
+          final threads = await Future.wait(
+            snap.docs.map((pointer) async {
+              try {
+                final doc = await _db
+                    .collection('direct_threads')
+                    .doc(pointer.id)
+                    .get();
+                if (!doc.exists) return null;
+                return DirectThread.fromMap(doc.id, doc.data()!);
+              } catch (_) {
+                return null; // blocked, deleted, or unavailable
+              }
+            }),
+          );
+          return threads.whereType<DirectThread>().toList();
+        });
   }
 
   @override
-  Stream<List<DirectMessage>> messages(String threadId) async* {
+  Stream<DirectMessageFeed> messages(String threadId) async* {
     final uid = await _uid();
     if (uid == null || !_validThreadFor(threadId, uid)) return;
     yield* _db
@@ -195,10 +219,18 @@ class DirectChatService implements DirectChatClient {
         .limit(_dmPageSize)
         .snapshots(includeMetadataChanges: true)
         .map(
-          (snap) => [
-            for (final doc in snap.docs)
-              DirectMessage.fromMap(doc.id, doc.data()),
-          ],
+          (snap) => DirectMessageFeed(
+            messages: [
+              for (final doc in snap.docs)
+                DirectMessage.fromMap(
+                  doc.id,
+                  doc.data(),
+                  pending: doc.metadata.hasPendingWrites,
+                ),
+            ],
+            fromCache: snap.metadata.isFromCache,
+            hasPendingWrites: snap.metadata.hasPendingWrites,
+          ),
         );
   }
 
@@ -214,18 +246,22 @@ class DirectChatService implements DirectChatClient {
     if (!directCooldownPassed(_lastSend, now)) {
       return 'Wait a moment before sending';
     }
-    if (await isBlocked(threadId.split('__').firstWhere((id) => id != uid))) {
-      return 'You blocked this user';
-    }
 
     final clean = text.trim();
     final threadRef = _db.collection('direct_threads').doc(threadId);
     final messageRef = threadRef.collection('messages').doc();
     try {
-      final existing = await threadRef.get();
-      if (existing.exists) {
+      DocumentSnapshot<Map<String, dynamic>>? existing;
+      try {
+        // shortcut: an offline cache miss assumes a new thread; an uncached
+        // existing thread may need one online retry before the batch can apply.
+        existing = await threadRef.get(const GetOptions(source: Source.cache));
+      } catch (_) {
+        existing = null;
+      }
+      if (existing?.exists ?? false) {
         final participants =
-            (existing.data()?['participants'] as List? ?? const [])
+            (existing!.data()?['participants'] as List? ?? const [])
                 .whereType<String>()
                 .toList();
         if (!participants.contains(uid) || participants.length != 2) {
@@ -240,7 +276,7 @@ class DirectChatService implements DirectChatClient {
         'text': clean,
         'ts': FieldValue.serverTimestamp(),
       });
-      if (existing.exists) {
+      if (existing?.exists ?? false) {
         batch.set(threadRef, {
           'lastMessage': clean,
           'lastMessageAt': FieldValue.serverTimestamp(),
@@ -257,6 +293,16 @@ class DirectChatService implements DirectChatClient {
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
+      }
+      final participants = threadId.split('__');
+      for (final owner in participants) {
+        final peer = owner == uid
+            ? participants.firstWhere((id) => id != uid)
+            : uid;
+        batch.set(_inboxThreads(owner).doc(threadId), {
+          'peerId': peer,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
       }
       await batch.commit().timeout(const Duration(seconds: 4));
       _lastSend = now;
@@ -275,10 +321,17 @@ class DirectChatService implements DirectChatClient {
   Future<void> markRead(String threadId) async {
     final uid = await _uid();
     if (uid == null || !_validThreadFor(threadId, uid)) return;
-    await _db.collection('direct_threads').doc(threadId).update({
-      'lastReadAt.$uid': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    try {
+      final ref = _db.collection('direct_threads').doc(threadId);
+      final doc = await ref.get(const GetOptions(source: Source.cache));
+      if (!doc.exists) return; // synthetic/new thread
+      await ref.update({
+        'lastReadAt.$uid': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {
+      // Read marking is best-effort and must never block navigation.
+    }
   }
 
   DocumentReference<Map<String, dynamic>> _blockDoc(String uid) => _db
@@ -291,7 +344,11 @@ class DirectChatService implements DirectChatClient {
   Future<bool> isBlocked(String uid) async {
     final myId = await _uid();
     if (myId == null || uid.isEmpty || uid == myId) return false;
-    return (await _blockDoc(uid).get()).exists;
+    try {
+      return (await _blockDoc(uid).get()).exists;
+    } catch (_) {
+      return false;
+    }
   }
 
   @override

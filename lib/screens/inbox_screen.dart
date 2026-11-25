@@ -12,13 +12,13 @@ class InboxScreen extends StatefulWidget {
   const InboxScreen({
     super.key,
     this.client,
-    this.loadUser,
+    this.loadUsers,
     this.searchUsers,
     this.onOpenThread,
   });
 
   final DirectChatClient? client;
-  final Future<ChatUserSummary> Function(String id)? loadUser;
+  final Future<List<ChatUserSummary>> Function(List<String> ids)? loadUsers;
   final Future<List<ChatUserSummary>> Function(String query)? searchUsers;
   final void Function(DirectThread thread, ChatUserSummary peer)? onOpenThread;
 
@@ -57,6 +57,13 @@ class _InboxScreenState extends State<InboxScreen> {
         .currentUid()
         .then((id) {
           if (!mounted) return;
+          if (id == null || id.isEmpty) {
+            setState(() {
+              _loading = false;
+              _failed = true;
+            });
+            return;
+          }
           setState(() => _myId = id);
           _sub = _client.threads().listen(
             (threads) {
@@ -92,21 +99,29 @@ class _InboxScreenState extends State<InboxScreen> {
   Future<void> _loadPeers(List<DirectThread> threads) async {
     final myId = _myId;
     if (myId == null) return;
-    for (final thread in threads) {
-      final peerId = thread.peerId(myId);
-      if (peerId.isEmpty || _users.containsKey(peerId)) continue;
-      try {
-        final user = await (widget.loadUser ?? Backend.chatUser)(peerId);
-        if (mounted) setState(() => _users[peerId] = user);
-      } catch (_) {
-        if (mounted) {
-          setState(() {
-            _users[peerId] = ChatUserSummary(
-              id: peerId,
-              name: 'Member #$peerId',
-            );
-          });
-        }
+    final missing = <String>{
+      for (final thread in threads)
+        if (thread.peerId(myId).isNotEmpty &&
+            !_users.containsKey(thread.peerId(myId)))
+          thread.peerId(myId),
+    }.toList();
+    if (missing.isEmpty) return;
+    try {
+      final users = await (widget.loadUsers ?? Backend.chatUsers)(missing);
+      if (mounted) {
+        setState(() {
+          for (final user in users) {
+            _users[user.id] = user;
+          }
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          for (final id in missing) {
+            _users[id] = ChatUserSummary(id: id, name: 'Member #$id');
+          }
+        });
       }
     }
   }
@@ -141,7 +156,7 @@ class _InboxScreenState extends State<InboxScreen> {
   }
 
   Future<void> _openThread(DirectThread thread, ChatUserSummary peer) async {
-    await _client.markRead(thread.id);
+    unawaited(_client.markRead(thread.id).catchError((_) {}));
     if (!mounted) return;
     final callback = widget.onOpenThread;
     if (callback != null) {
