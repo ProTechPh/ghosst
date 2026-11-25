@@ -154,13 +154,21 @@ class ChatService implements ChatClient {
       // users merge the old session still carries the old UUID, and every
       // write is denied by the rules (data.uid != auth.uid) until re-minted.
       final me = await Backend.currentUser();
-      final expectedUid = me?.id;
-      if (current != null && expectedUid != null && current.uid != expectedUid) {
+      if (me == null || !backendSessionActive(me)) {
+        try {
+          await FirebaseAuth.instance.signOut();
+        } catch (_) {
+          // No initialized Firebase session to revoke.
+        }
+        return false;
+      }
+      final expectedUid = me.id;
+      if (current != null && current.uid != expectedUid) {
         debugPrint(
           '[ChatService] uid mismatch ${current.uid} -> $expectedUid, re-minting',
         );
       }
-      if (current != null && expectedUid != null && current.uid == expectedUid) {
+      if (current != null && current.uid == expectedUid) {
         // Parallelize: both read from the cached /me payload, but if it's
         // not cached yet they share the same single /me call internally.
         // Running them concurrently still saves the microtask overhead.
@@ -543,6 +551,9 @@ class ChatService implements ChatClient {
       // Hindi pa nag-init ang Firebase — wala namang session na aalisin.
     }
   }
+
+  /// A backend rejection means the Firebase session must not survive.
+  static bool backendSessionActive(AppUser? user) => user != null;
 
   /// `null` = valid; string = dahilan. Sinasalamin ang Firestore rules.
   static String? validate(String text) {

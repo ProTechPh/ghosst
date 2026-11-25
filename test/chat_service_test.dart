@@ -1,7 +1,19 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/services/chat_service.dart';
+import 'package:ghosst/services/worker_backend.dart';
 
 void main() {
+  group('ChatService.backendSessionActive', () {
+    test('a rejected backend session must be revoked', () {
+      expect(ChatService.backendSessionActive(null), isFalse);
+    });
+
+    test('a live backend session remains active', () {
+      const user = AppUser(id: '42', email: 'user@example.com', name: 'User');
+      expect(ChatService.backendSessionActive(user), isTrue);
+    });
+  });
+
   group('ChatService.validate', () {
     test('rejects empty text', () {
       expect(ChatService.validate(''), isNotNull);
