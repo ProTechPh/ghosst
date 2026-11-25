@@ -105,7 +105,7 @@
       <div class="meta">
         <strong>App:</strong> Ghosst (com.astrixtech.ghosst)<br />
         <strong>Developer:</strong> AstrixTech<br />
-        <strong>Last Updated:</strong> October 9, 2026
+        <strong>Last Updated:</strong> November 25, 2026
       </div>
     </header>
 
@@ -140,7 +140,7 @@
         <strong>Firebase Cloud Messaging (Google):</strong> Used only to deliver device notifications — new products, restocked items, and app announcements. The app joins an anonymous notification topic handled entirely by Firebase Cloud Messaging; we do not store a push token, your email, coin balance, or purchase data for notifications. Delivery happens under the <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">Firebase Privacy Policy</a>.
       </li>
       <li>
-        <strong>Firebase (Firestore):</strong> Used for the world chat. Firebase receives your account ID and display name (or an anonymous handle) to deliver world chat messages; message text is stored there. No email, coin balance, or purchase data is sent to Firebase. See the <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">Firebase Privacy Policy</a>.
+        <strong>Firebase (Firestore):</strong> Used for world chat and private messages. Firebase receives your account ID and message text to deliver these conversations; your display name (or an anonymous handle) is also stored for world chat. Block relationships are stored so blocked users cannot start new private messages. No email, coin balance, or purchase data is sent to Firebase. See the <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">Firebase Privacy Policy</a>.
       </li>
     </ul>
     <p>Where required, the app uses Google's User Messaging Platform to request consent before requesting ads. You can revisit available choices from <strong>Profile → Privacy choices</strong>.</p>
@@ -167,7 +167,7 @@
       We take reasonable administrative, technical, and physical security measures to protect your personal information. We do not sell, rent, or lease your personal information to third parties.
     </p>
     <p>
-      Account data is kept while your account is active. You can permanently delete your account in the app through <strong>Profile → Delete account</strong>. This deletes your account, profile, coin balance, reward history, and purchase records; claimed inventory records are disassociated from your user ID. You may also use our <a href="delete-account.html">web deletion request page</a>.
+      Account data is kept while your account is active. You can permanently delete your account in the app through <strong>Profile → Delete account</strong>. This deletes your account, profile, coin balance, private conversations (for both participants), block records you own, reward history, and purchase records; claimed inventory records are disassociated from your user ID. World chat messages are retained with your name blanked. Firebase and media cleanup are best-effort if the third-party service is unavailable. You may also use our <a href="delete-account.html">web deletion request page</a>.
     </p>
 
     <h2>6. Children's Privacy</h2>

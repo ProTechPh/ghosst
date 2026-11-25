@@ -1,7 +1,7 @@
 # Private Chat, Public Profiles, Feedback, and User Reels — Design
 
 Date: 2026-11-25
-Status: pending owner sign-off
+Status: approved by owner 2026-11-25
 Chosen approach: Firebase direct messages + PHP/MySQL social data + self-hosted z.com video files
 
 ## 1. Intent and why
