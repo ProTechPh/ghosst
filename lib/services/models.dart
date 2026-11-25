@@ -110,6 +110,39 @@ class PublicUser {
   }
 }
 
+class AppFeedback {
+  const AppFeedback({
+    required this.id,
+    required this.comment,
+    required this.rating,
+    required this.status,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String comment;
+  final int rating;
+  final String status;
+  final String createdAt;
+
+  factory AppFeedback.fromJson(Map<String, dynamic> json) => AppFeedback(
+    id: (json['id'] ?? '').toString(),
+    comment: json['comment'] as String? ?? '',
+    rating: int.tryParse((json['rating'] ?? '').toString()) ?? 0,
+    status: json['status'] as String? ?? 'hidden',
+    createdAt: json['createdAt'] as String? ?? '',
+  );
+}
+
+String? validateAppFeedback(String comment, int rating) {
+  final value = comment.trim();
+  if (value.runes.length < 10) return 'Comment must be at least 10 characters.';
+  if (value.runes.length > 1000) return 'Comment must be 1000 characters or less.';
+  if (RegExp(r'<[a-zA-Z/!]').hasMatch(value)) return 'HTML tags are not allowed.';
+  if (rating < 1 || rating > 5) return 'Rating must be 1-5.';
+  return null;
+}
+
 class Product {
   Product({
     required this.id,

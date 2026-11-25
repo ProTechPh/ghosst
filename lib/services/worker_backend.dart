@@ -378,6 +378,31 @@ class Backend {
         .toList();
   }
 
+  static Future<String> submitFeedback({
+    required String comment,
+    required int rating,
+  }) async {
+    final res = await _api.post('/feedback', data: {
+      'comment': comment.trim(),
+      'rating': rating,
+    });
+    return (res['feedbackId'] ?? '').toString();
+  }
+
+  static Future<List<AppFeedback>> myFeedback({
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final res = await _api.get('/feedback/mine', query: {
+      'limit': '$limit',
+      'offset': '$offset',
+    });
+    return (res['feedbacks'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(AppFeedback.fromJson)
+        .toList();
+  }
+
   static Future<void> reportContent({
     required String targetType,
     required String targetId,
