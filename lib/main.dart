@@ -22,6 +22,7 @@ import 'screens/landing_screen.dart';
 import 'screens/my_keys_screen.dart';
 import 'screens/notice_screen.dart';
 import 'screens/profile_screen.dart';
+import 'screens/social_list_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/store_screen.dart';
 import 'screens/tamper_screen.dart';
@@ -802,12 +803,26 @@ class _HomeShellState extends State<HomeShell> {
             onUnblock: () => _changeBlock(id, false),
             onFollow: Backend.followUser,
             onUnfollow: Backend.unfollowUser,
+            onOpenSocialList: (direction) =>
+                unawaited(_openSocialList(id, direction)),
           ),
         ),
       );
     } finally {
       _openingProfiles.remove(id);
     }
+  }
+
+  Future<void> _openSocialList(String userId, SocialListDirection direction) {
+    return Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SocialListScreen(
+          userId: userId,
+          direction: direction,
+          onOpenProfile: _openUserProfile,
+        ),
+      ),
+    );
   }
 
   Future<void> _reportUser(String id) async {

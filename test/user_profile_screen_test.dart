@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/screens/user_profile_screen.dart';
+import 'package:ghosst/screens/social_list_screen.dart';
 import 'package:ghosst/services/models.dart';
 import 'package:ghosst/theme.dart';
 
@@ -40,6 +41,7 @@ Future<void> _pump(
   Future<bool> Function()? onUnblock,
   Future<FollowState> Function(String id)? onFollow,
   Future<FollowState> Function(String id)? onUnfollow,
+  ValueChanged<SocialListDirection>? onOpenSocialList,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -55,6 +57,7 @@ Future<void> _pump(
           onUnblock: onUnblock,
           onFollow: onFollow,
           onUnfollow: onUnfollow,
+          onOpenSocialList: onOpenSocialList,
         ),
       ),
     ),
@@ -63,6 +66,21 @@ Future<void> _pump(
 }
 
 void main() {
+  testWidgets('profile stats open the correct social list', (tester) async {
+    SocialListDirection? opened;
+    await _pump(
+      tester,
+      loader: (_) async => _user(),
+      onOpenSocialList: (direction) => opened = direction,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Followers'));
+    expect(opened, SocialListDirection.followers);
+    await tester.tap(find.text('Following'));
+    expect(opened, SocialListDirection.following);
+  });
+
   testWidgets('renders safe identity, badges, join date, and stats', (
     tester,
   ) async {

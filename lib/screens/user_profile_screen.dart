@@ -8,6 +8,7 @@ import '../premium.dart';
 import '../services/direct_chat_service.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
+import 'social_list_screen.dart';
 
 class UserProfileScreen extends StatefulWidget {
   const UserProfileScreen({
@@ -22,6 +23,7 @@ class UserProfileScreen extends StatefulWidget {
     this.onUnblock,
     this.onFollow,
     this.onUnfollow,
+    this.onOpenSocialList,
   });
 
   final String userId;
@@ -34,6 +36,7 @@ class UserProfileScreen extends StatefulWidget {
   final Future<bool> Function()? onUnblock;
   final Future<FollowState> Function(String id)? onFollow;
   final Future<FollowState> Function(String id)? onUnfollow;
+  final ValueChanged<SocialListDirection>? onOpenSocialList;
 
   @override
   State<UserProfileScreen> createState() => _UserProfileScreenState();
@@ -307,16 +310,38 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 child: Row(
                   children: [
                     Expanded(
-                      child: StatCell(
-                        label: 'Followers',
-                        value: groupDigits(_followerCount),
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: widget.onOpenSocialList == null
+                            ? null
+                            : () => widget.onOpenSocialList!(
+                                SocialListDirection.followers,
+                              ),
+                        child: Semantics(
+                          button: widget.onOpenSocialList != null,
+                          child: StatCell(
+                            label: 'Followers',
+                            value: groupDigits(_followerCount),
+                          ),
+                        ),
                       ),
                     ),
                     _divider(),
                     Expanded(
-                      child: StatCell(
-                        label: 'Following',
-                        value: groupDigits(user.followingCount),
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: widget.onOpenSocialList == null
+                            ? null
+                            : () => widget.onOpenSocialList!(
+                                SocialListDirection.following,
+                              ),
+                        child: Semantics(
+                          button: widget.onOpenSocialList != null,
+                          child: StatCell(
+                            label: 'Following',
+                            value: groupDigits(user.followingCount),
+                          ),
+                        ),
                       ),
                     ),
                     _divider(),
