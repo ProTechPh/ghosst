@@ -21,6 +21,7 @@ import 'screens/profile_screen.dart';
 import 'screens/profile_hub_screen.dart';
 import 'screens/reel_upload_screen.dart';
 import 'screens/reels_screen.dart';
+import 'screens/shop_hub_screen.dart';
 import 'screens/social_list_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/store_screen.dart';
@@ -1012,12 +1013,14 @@ class _HomeShellState extends State<HomeShell> {
         onOpenProfile: _openUserProfile,
         onDeleteReel: Backend.deleteReel,
       ),
-      StoreScreen(
+      ShopHubScreen(
         coins: coins,
         onRefresh: _refresh,
-        active: tab == SocialTab.shop,
+        onOpenEarn: _openEarn,
+        onOpenStore: _openStore,
+        onOpenKeys: _openKeys,
+        onOpenTutorials: _openTutorials,
         onOpenWallet: _openWallet,
-        onGoToEarn: _openEarn,
       ),
       InboxScreen(
         onOpenThread: (thread, peer) => _openDirectChat(
