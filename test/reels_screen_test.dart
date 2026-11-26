@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/api/api_exception.dart';
@@ -8,35 +9,41 @@ import 'package:ghosst/screens/reels_screen.dart';
 import 'package:ghosst/services/models.dart';
 import 'package:ghosst/theme.dart';
 
-Reel _reel(String id, String name, {int imageCount = 1, bool isMine = false}) =>
-    Reel(
-      id: id,
-      caption: 'Caption $id',
-      posterUrl: 'https://example.com/$id-1.jpg',
-      images: [
-        for (var i = 1; i <= imageCount; i++)
-          ReelImage(
-            position: i,
-            url: 'https://example.com/$id-$i.jpg',
-            sha256: 'a' * 64,
-            sizeBytes: 1,
-            mimeType: 'image/jpeg',
-          ),
-      ],
-      createdAt: '',
-      creator: PublicUser(
-        id: name,
-        displayName: name,
-        username: name.toLowerCase(),
-        createdAt: '',
-        followerCount: 0,
-        followingCount: 0,
-        reelCount: 0,
+Reel _reel(
+  String id,
+  String name, {
+  int imageCount = 1,
+  bool isMine = false,
+  int likeCount = 0,
+  int commentCount = 0,
+}) => Reel(
+  id: id,
+  caption: 'Caption $id',
+  posterUrl: 'https://example.com/$id-1.jpg',
+  images: [
+    for (var i = 1; i <= imageCount; i++)
+      ReelImage(
+        position: i,
+        url: 'https://example.com/$id-$i.jpg',
+        sha256: 'a' * 64,
+        sizeBytes: 1,
+        mimeType: 'image/jpeg',
       ),
-      likeCount: 0,
-      commentCount: 0,
-      isMine: isMine,
-    );
+  ],
+  createdAt: '',
+  creator: PublicUser(
+    id: name,
+    displayName: name,
+    username: name.toLowerCase(),
+    createdAt: '',
+    followerCount: 0,
+    followingCount: 0,
+    reelCount: 0,
+  ),
+  likeCount: likeCount,
+  commentCount: commentCount,
+  isMine: isMine,
+);
 
 Future<void> _pump(
   WidgetTester tester, {
@@ -220,6 +227,57 @@ void main() {
     await tester.tap(find.text('Submit report'));
     await _settle(tester);
     expect(report, 'reel:r1');
+  });
+
+  testWidgets('Reel rail shows full images, counts, and TikTok-style actions', (
+    tester,
+  ) async {
+    String? profile;
+    String? liked;
+    await _pump(
+      tester,
+      load: (_, _) async => ReelFeedPage(
+        reels: [_reel('r1', 'One', likeCount: 1200, commentCount: 34)],
+        nextOffset: 1,
+      ),
+      onOpenProfile: (id) => profile = id,
+      onLike: (id) async => liked = id,
+    );
+    await _settle(tester);
+
+    final image = tester.widget<CachedNetworkImage>(
+      find.byKey(const ValueKey('reel-image-r1-1')),
+    );
+    expect(image.fit, BoxFit.contain);
+    expect(find.text('1.2K'), findsOneWidget);
+    expect(find.text('34'), findsOneWidget);
+    expect(find.byKey(const ValueKey('reel-follow-badge-r1')), findsOneWidget);
+
+    for (final key in [
+      const ValueKey('reel-like-r1'),
+      const ValueKey('reel-comments-r1'),
+      const ValueKey('reel-report-r1'),
+    ]) {
+      expect(tester.getSize(find.byKey(key)).height, greaterThanOrEqualTo(48));
+    }
+
+    await tester.tap(find.byKey(const ValueKey('reel-profile-One')));
+    expect(profile, 'One');
+    await tester.tap(find.byKey(const ValueKey('reel-like-r1')));
+    await _settle(tester);
+    expect(liked, 'r1');
+    final heart = tester.widget<Icon>(find.byIcon(Icons.favorite));
+    expect(heart.color, AppColors.red);
+
+    await _pump(
+      tester,
+      load: (_, _) async => ReelFeedPage(
+        reels: [_reel('mine', 'Me', isMine: true)],
+        nextOffset: 1,
+      ),
+    );
+    await _settle(tester);
+    expect(find.byKey(const ValueKey('reel-follow-badge-mine')), findsNothing);
   });
 
   testWidgets('carousel renders dots and horizontal swipe changes image', (

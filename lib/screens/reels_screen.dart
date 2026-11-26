@@ -442,7 +442,7 @@ class _ReelPageState extends State<_ReelPage> {
                   'reel-image-${widget.reel.id}-${images[i].position}',
                 ),
                 imageUrl: images[i].url,
-                fit: BoxFit.cover,
+                fit: BoxFit.contain,
                 placeholder: (_, _) =>
                     const Center(child: CircularProgressIndicator()),
                 errorWidget: (_, _, _) => const Center(
@@ -482,7 +482,7 @@ class _ReelPageState extends State<_ReelPage> {
               ),
             ),
           Positioned(
-            right: 12,
+            right: AppSpace.sm,
             bottom: 96,
             child: Column(
               children: [
@@ -490,47 +490,83 @@ class _ReelPageState extends State<_ReelPage> {
                   key: ValueKey(
                     'reel-profile-${widget.reel.creator.displayName}',
                   ),
+                  behavior: HitTestBehavior.opaque,
                   onTap: widget.onProfile == null
                       ? null
                       : () => widget.onProfile!(widget.reel.creator.id),
-                  child: CircleAvatar(
-                    radius: 24,
-                    backgroundImage: widget.reel.creator.avatarUrl == null
-                        ? null
-                        : CachedNetworkImageProvider(
-                            widget.reel.creator.avatarUrl!,
+                  child: SizedBox(
+                    width: 60,
+                    height: 60,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      alignment: Alignment.center,
+                      children: [
+                        CircleAvatar(
+                          radius: 24,
+                          backgroundColor: AppColors.surfaceHigh,
+                          backgroundImage: widget.reel.creator.avatarUrl == null
+                              ? null
+                              : CachedNetworkImageProvider(
+                                  widget.reel.creator.avatarUrl!,
+                                ),
+                          child: widget.reel.creator.avatarUrl == null
+                              ? Text(widget.reel.creator.initial)
+                              : null,
+                        ),
+                        if (!widget.reel.isMine)
+                          Positioned(
+                            right: 2,
+                            bottom: 0,
+                            child: IgnorePointer(
+                              child: Container(
+                                key: ValueKey(
+                                  'reel-follow-badge-${widget.reel.id}',
+                                ),
+                                width: 20,
+                                height: 20,
+                                decoration: const BoxDecoration(
+                                  color: AppColors.primary,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.add,
+                                  size: 14,
+                                  color: Colors.black,
+                                ),
+                              ),
+                            ),
                           ),
-                    child: widget.reel.creator.avatarUrl == null
-                        ? Text(widget.reel.creator.initial)
-                        : null,
+                      ],
+                    ),
                   ),
                 ),
-                IconButton(
+                _RailAction(
                   key: ValueKey('reel-like-${widget.reel.id}'),
-                  onPressed: widget.onLike,
-                  icon: Icon(
-                    widget.liked ? Icons.favorite : Icons.favorite_border,
-                    color: widget.liked ? AppColors.red : Colors.white,
-                  ),
+                  tooltip: widget.liked ? 'Unlike' : 'Like',
+                  icon: Icons.favorite,
+                  color: widget.liked ? AppColors.red : Colors.white,
+                  count: widget.reel.likeCount,
+                  onTap: widget.onLike,
                 ),
-                IconButton(
+                _RailAction(
                   key: ValueKey('reel-comments-${widget.reel.id}'),
-                  onPressed: widget.onComments,
-                  icon: const Icon(
-                    Icons.chat_bubble_outline,
-                    color: Colors.white,
-                  ),
+                  tooltip: 'Comments',
+                  icon: Icons.mode_comment,
+                  count: widget.reel.commentCount,
+                  onTap: widget.onComments,
                 ),
                 if (widget.reel.isMine)
-                  IconButton(
+                  _RailAction(
                     key: ValueKey('reel-delete-${widget.reel.id}'),
-                    onPressed: widget.onDelete,
-                    icon: const Icon(Icons.delete_outline, color: Colors.white),
+                    tooltip: 'Delete',
+                    icon: Icons.delete,
+                    onTap: widget.onDelete,
                   ),
-                IconButton(
+                _RailAction(
                   key: ValueKey('reel-report-${widget.reel.id}'),
-                  onPressed: widget.onReport,
-                  icon: const Icon(Icons.flag_outlined, color: Colors.white),
+                  tooltip: 'Report',
+                  icon: Icons.flag,
+                  onTap: widget.onReport,
                 ),
               ],
             ),
@@ -555,6 +591,78 @@ class _ReelPageState extends State<_ReelPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+String _compactCount(int value) {
+  if (value < 1000) return '$value';
+  if (value >= 1000000000) {
+    return '${(value / 1000000000).toStringAsFixed(value < 10000000000 ? 1 : 0)}B';
+  }
+  if (value >= 1000000) {
+    return '${(value / 1000000).toStringAsFixed(value < 10000000 ? 1 : 0)}M';
+  }
+  return '${(value / 1000).toStringAsFixed(value < 10000 ? 1 : 0)}K';
+}
+
+class _RailAction extends StatelessWidget {
+  const _RailAction({
+    super.key,
+    required this.tooltip,
+    required this.icon,
+    required this.onTap,
+    this.color = Colors.white,
+    this.count,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onTap;
+  final Color color;
+  final int? count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: tooltip,
+      value: count == null ? null : _compactCount(count!),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: SizedBox(
+          width: 56,
+          height: count == null ? kTouchMin : 64,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 30,
+                color: color,
+                shadows: const [Shadow(color: Colors.black54, blurRadius: 4)],
+              ),
+              if (count != null) ...[
+                const SizedBox(height: AppSpace.xs),
+                Text(
+                  _compactCount(count!),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.figure.copyWith(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    shadows: const [
+                      Shadow(color: Colors.black54, blurRadius: 4),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
