@@ -67,8 +67,8 @@ Future<void> _pump(
           active: active,
           coins: coins,
           onOpenWallet: onOpenWallet,
-          loadComments: (_, __) async => const [],
-          submitComment: (_, __) async {},
+          loadComments: (_, _) async => const [],
+          submitComment: (_, _) async {},
         ),
       ),
     ),
@@ -85,7 +85,7 @@ void main() {
   testWidgets('inactive tab loads on first activation', (tester) async {
     final key = GlobalKey();
     var calls = 0;
-    Future<ReelFeedPage> loader(_, __) async {
+    Future<ReelFeedPage> loader(_, _) async {
       calls++;
       return ReelFeedPage(reels: [_reel('r1', 'One')], nextOffset: 1);
     }
@@ -149,7 +149,7 @@ void main() {
     String? deleted;
     await _pump(
       tester,
-      load: (_, __) async {
+      load: (_, _) async {
         if (deleted != null) {
           return const ReelFeedPage(reels: [], nextOffset: 0);
         }
@@ -175,7 +175,7 @@ void main() {
     String? report;
     await _pump(
       tester,
-      load: (_, __) async =>
+      load: (_, _) async =>
           ReelFeedPage(reels: [_reel('r1', 'One')], nextOffset: 1),
       onLike: (id) async => liked = id,
       onUnlike: (id) async => unliked = id,
@@ -227,7 +227,7 @@ void main() {
   ) async {
     await _pump(
       tester,
-      load: (_, __) async => ReelFeedPage(
+      load: (_, _) async => ReelFeedPage(
         reels: [_reel('r1', 'One', imageCount: 3)],
         nextOffset: 1,
       ),
@@ -262,7 +262,7 @@ void main() {
   testWidgets('empty and error states support Retry', (tester) async {
     await _pump(
       tester,
-      load: (_, __) async => const ReelFeedPage(reels: [], nextOffset: 0),
+      load: (_, _) async => const ReelFeedPage(reels: [], nextOffset: 0),
     );
     await _settle(tester);
     expect(find.text('No reels yet'), findsOneWidget);
@@ -270,7 +270,7 @@ void main() {
     var fail = true;
     await _pump(
       tester,
-      load: (_, __) async {
+      load: (_, _) async {
         if (fail) throw Exception('offline');
         return ReelFeedPage(reels: [_reel('r1', 'One')], nextOffset: 1);
       },
@@ -283,6 +283,76 @@ void main() {
     expect(find.text('Caption r1'), findsOneWidget);
   });
 
+  testWidgets(
+    'embedded top bar uses centered text tabs and compact wallet control',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      String? wallet;
+      await _pump(
+        tester,
+        load: (_, _) async =>
+            ReelFeedPage(reels: [_reel('r1', 'One')], nextOffset: 1),
+        coins: 160,
+        onOpenWallet: () => wallet = 'opened',
+      );
+      await _settle(tester);
+
+      const forYou = ValueKey('reel-feed-for-you');
+      const following = ValueKey('reel-feed-following');
+      expect(find.byKey(forYou), findsOneWidget);
+      expect(find.byKey(following), findsOneWidget);
+      expect(find.byType(ChoiceChip), findsNothing);
+      expect(find.byKey(const ValueKey('reels-top-scrim')), findsOneWidget);
+
+      for (final key in [forYou, following]) {
+        expect(
+          tester.getSize(find.byKey(key)).height,
+          greaterThanOrEqualTo(48),
+        );
+      }
+      final tabsCenter =
+          (tester.getCenter(find.byKey(forYou)).dx +
+              tester.getCenter(find.byKey(following)).dx) /
+          2;
+      expect(tabsCenter, closeTo(160, 1));
+
+      final forYouSemantics = tester.widget<Semantics>(find.byKey(forYou));
+      final followingSemantics = tester.widget<Semantics>(
+        find.byKey(following),
+      );
+      expect(forYouSemantics.properties.selected, isTrue);
+      expect(followingSemantics.properties.selected, isFalse);
+      final forYouUnderline = find.byKey(
+        const ValueKey('reel-feed-underline-for-you'),
+      );
+      expect(tester.getSize(forYouUnderline).height, 2);
+
+      await tester.tap(find.byKey(following));
+      await _settle(tester);
+      expect(
+        tester.widget<Semantics>(find.byKey(following)).properties.selected,
+        isTrue,
+      );
+      expect(forYouUnderline, findsNothing);
+      expect(
+        tester
+            .getSize(
+              find.byKey(const ValueKey('reel-feed-underline-following')),
+            )
+            .height,
+        2,
+      );
+
+      expect(find.text('160'), findsOneWidget);
+      await tester.tap(find.text('160'));
+      expect(wallet, 'opened');
+    },
+  );
+
   testWidgets('embedded home shows wallet balance without an upload FAB', (
     tester,
   ) async {
@@ -290,7 +360,7 @@ void main() {
     var uploadCalls = 0;
     await _pump(
       tester,
-      load: (_, __) async =>
+      load: (_, _) async =>
           ReelFeedPage(reels: [_reel('r1', 'One')], nextOffset: 1),
       coins: 250,
       onOpenWallet: () => wallet = 'opened',
@@ -310,7 +380,7 @@ void main() {
   ) async {
     await _pump(
       tester,
-      load: (_, __) async => throw const ApiException(
+      load: (_, _) async => throw const ApiException(
         kind: ApiErrorKind.server,
         message: 'not configured',
         code: 'reels_not_configured',
@@ -333,7 +403,7 @@ void main() {
           body: ReelsScreen(
             embedded: false,
             initialReelId: selected.id,
-            load: (_, __) async => ReelFeedPage(
+            load: (_, _) async => ReelFeedPage(
               reels: [_reel('r1', 'Other'), selected],
               nextOffset: 2,
             ),

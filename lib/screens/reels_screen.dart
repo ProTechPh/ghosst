@@ -251,37 +251,73 @@ class _ReelsScreenState extends State<ReelsScreen> {
       body: Column(
         children: [
           if (widget.embedded)
-            SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpace.md),
-                child: Row(
-                  children: [
-                    _FeedChip(
-                      label: 'For You',
-                      selected: _feed == 'for-you',
-                      onTap: () {
-                        if (_feed == 'for-you') return;
-                        setState(() => _feed = 'for-you');
-                        unawaited(_load(reset: true));
-                      },
+            Stack(
+              children: [
+                const Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      key: ValueKey('reels-top-scrim'),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Colors.black54, Colors.transparent],
+                        ),
+                      ),
                     ),
-                    const SizedBox(width: AppSpace.sm),
-                    _FeedChip(
-                      label: 'Following',
-                      selected: _feed == 'following',
-                      onTap: () {
-                        if (_feed == 'following') return;
-                        setState(() => _feed = 'following');
-                        unawaited(_load(reset: true));
-                      },
-                    ),
-                    const Spacer(),
-                    if (widget.onOpenWallet != null)
-                      CoinPill(coins: widget.coins, onTap: widget.onOpenWallet),
-                  ],
+                  ),
                 ),
-              ),
+                SafeArea(
+                  bottom: false,
+                  child: SizedBox(
+                    height: kTouchMin + AppSpace.md,
+                    child: Stack(
+                      children: [
+                        Center(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _FeedTab(
+                                feedKey: 'following',
+                                label: 'Following',
+                                selected: _feed == 'following',
+                                onTap: () {
+                                  if (_feed == 'following') return;
+                                  setState(() => _feed = 'following');
+                                  unawaited(_load(reset: true));
+                                },
+                              ),
+                              const SizedBox(width: AppSpace.lg),
+                              _FeedTab(
+                                feedKey: 'for-you',
+                                label: 'For You',
+                                selected: _feed == 'for-you',
+                                onTap: () {
+                                  if (_feed == 'for-you') return;
+                                  setState(() => _feed = 'for-you');
+                                  unawaited(_load(reset: true));
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (widget.onOpenWallet != null)
+                          Positioned(
+                            right: AppSpace.sm,
+                            top: 0,
+                            bottom: 0,
+                            child: Center(
+                              child: CoinPill(
+                                coins: widget.coins,
+                                onTap: widget.onOpenWallet,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           Expanded(child: _buildBody()),
         ],
@@ -392,9 +428,9 @@ class _ReelPageState extends State<_ReelPage> {
                 ),
                 imageUrl: images[i].url,
                 fit: BoxFit.cover,
-                placeholder: (_, __) =>
+                placeholder: (_, _) =>
                     const Center(child: CircularProgressIndicator()),
-                errorWidget: (_, __, ___) => const Center(
+                errorWidget: (_, _, _) => const Center(
                   child: Icon(
                     Icons.broken_image_outlined,
                     color: Colors.white54,
@@ -509,23 +545,58 @@ class _ReelPageState extends State<_ReelPage> {
   }
 }
 
-class _FeedChip extends StatelessWidget {
-  const _FeedChip({
+class _FeedTab extends StatelessWidget {
+  const _FeedTab({
+    required this.feedKey,
     required this.label,
     required this.selected,
     required this.onTap,
   });
 
+  final String feedKey;
   final String label;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return ChoiceChip(
-      label: Text(label),
+    return Semantics(
+      key: ValueKey('reel-feed-$feedKey'),
+      button: true,
       selected: selected,
-      onSelected: (_) => onTap(),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: SizedBox(
+          width: 72,
+          height: kTouchMin,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppText.subtitle.copyWith(
+                  fontSize: 15,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                  color: Colors.white.withValues(alpha: selected ? 1 : 0.65),
+                ),
+              ),
+              const SizedBox(height: AppSpace.xs),
+              if (selected)
+                Container(
+                  key: ValueKey('reel-feed-underline-$feedKey'),
+                  width: 24,
+                  height: 2,
+                  color: Colors.white,
+                )
+              else
+                const SizedBox(width: 24, height: 2),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
