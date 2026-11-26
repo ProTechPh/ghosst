@@ -16,19 +16,19 @@ class AppColors {
 
   // Palette derived from the Ghosst emblem: teal-black canvas, glowing cyan,
   // brushed steel — no purple anywhere.
-  static const Color bg = Color(0xFF050B0E);
-  static const Color bgSoft = Color(0xFF08151A);
-  static const Color surface = Color(0xFF0C1D23);
-  static const Color surfaceHigh = Color(0xFF122A31);
-  static const Color border = Color(0xFF1A3740);
+  static const Color bg = Color(0xFF0B0F12);
+  static const Color bgSoft = Color(0xFF111820);
+  static const Color surface = Color(0xFF171D23);
+  static const Color surfaceHigh = Color(0xFF26323B);
+  static const Color border = Color(0xFF26323B);
   static const Color primary = Color(0xFF22D3EE);
   static const Color primaryDeep = Color(0xFF0E7490);
   static const Color cyan = Color(0xFF67E8F9);
   static const Color gold = Color(0xFFFBBF24);
   static const Color green = Color(0xFF34D399);
   static const Color red = Color(0xFFF43F5E);
-  static const Color text = Color(0xFFF1FAFC);
-  static const Color textDim = Color(0xFF8DA6AF);
+  static const Color text = Color(0xFFF8FAFC);
+  static const Color textDim = Color(0xFF8B98A5);
 }
 
 const Gradient kNeonGradient = LinearGradient(
@@ -248,12 +248,12 @@ class AppTheme {
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: AppColors.surface,
+        backgroundColor: Colors.black,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        height: 68,
-        indicatorColor: AppColors.primary.withValues(alpha: 0.20),
-        indicatorShape: const StadiumBorder(),
+        height: 64,
+        indicatorColor: Colors.transparent,
+        indicatorShape: null,
         iconTheme: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return IconThemeData(
@@ -400,31 +400,31 @@ class LogoBadge extends StatelessWidget {
             ),
           ],
         ),
-      child: ClipOval(
-        child: Image.asset(
-          'assets/images/logo.jpg',
-          fit: BoxFit.cover,
-          // 2x retina — the 250KB source decoded at full size for a 28px badge
-          // on every frame of the app bar / nav.
-          cacheWidth: (size * 2).round(),
-          cacheHeight: (size * 2).round(),
-          errorBuilder: (context, error, stackTrace) => Container(
-            decoration: const BoxDecoration(
-              gradient: kNeonGradient,
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              'G',
-              style: TextStyle(
-                color: const Color(0xFF04212A),
-                fontSize: fontSize,
-                fontWeight: FontWeight.w900,
-                height: 1,
+        child: ClipOval(
+          child: Image.asset(
+            'assets/images/logo.jpg',
+            fit: BoxFit.cover,
+            // 2x retina — the 250KB source decoded at full size for a 28px badge
+            // on every frame of the app bar / nav.
+            cacheWidth: (size * 2).round(),
+            cacheHeight: (size * 2).round(),
+            errorBuilder: (context, error, stackTrace) => Container(
+              decoration: const BoxDecoration(
+                gradient: kNeonGradient,
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                'G',
+                style: TextStyle(
+                  color: const Color(0xFF04212A),
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.w900,
+                  height: 1,
+                ),
               ),
             ),
           ),
-        ),
         ),
       ),
     );
@@ -507,13 +507,13 @@ class _NeonButtonState extends State<NeonButton> {
           ? [
               if (widget.glow)
                 BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.30),
-                  blurRadius: 24,
+                  color: AppColors.primary.withValues(alpha: 0.12),
+                  blurRadius: 14,
                   spreadRadius: -6,
-                  offset: const Offset(0, 8),
+                  offset: const Offset(0, 4),
                 ),
               BoxShadow(
-                color: Colors.white.withValues(alpha: 0.14),
+                color: Colors.white.withValues(alpha: 0.08),
                 offset: const Offset(0, 1),
                 blurRadius: 1,
                 blurStyle: BlurStyle.inner,
@@ -597,27 +597,19 @@ class GlowCard extends StatelessWidget {
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        gradient:
-            gradient ??
-            const LinearGradient(
-              colors: [Color(0xFF0C1C22), Color(0xFF071317)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+        color: gradient == null ? AppColors.surface : null,
+        gradient: gradient,
         borderRadius: radius,
         border: Border.all(color: AppColors.border),
         boxShadow: [
-          // One light source, above: a soft cyan-tinted cast, never pure black.
-          // Cheaper blurs (was 30/18) — same lift, less GPU per card.
           BoxShadow(
-            color: AppColors.primary.withValues(alpha: glow ? 0.18 : 0.08),
-            blurRadius: glow ? 22 : 14,
+            color: AppColors.primary.withValues(alpha: glow ? 0.08 : 0.03),
+            blurRadius: glow ? 14 : 8,
             spreadRadius: -6,
-            offset: const Offset(0, 10),
+            offset: const Offset(0, 4),
           ),
-          // 1px inner top highlight so the top edge catches light.
           BoxShadow(
-            color: Colors.white.withValues(alpha: 0.06),
+            color: Colors.white.withValues(alpha: 0.04),
             offset: const Offset(0, 1),
             blurRadius: 1,
             blurStyle: BlurStyle.inner,
@@ -657,7 +649,9 @@ class NeonPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ExcludeSemantics(child: Icon(icon, size: AppIcon.xs, color: color)),
+          ExcludeSemantics(
+            child: Icon(icon, size: AppIcon.xs, color: color),
+          ),
           const SizedBox(width: AppSpace.xs),
           Text(
             label,
@@ -689,21 +683,15 @@ class CoinPill extends StatelessWidget {
         vertical: AppSpace.sm - 1,
       ),
       decoration: BoxDecoration(
-        gradient: kGoldGradient,
+        color: AppColors.surfaceHigh,
+        border: Border.all(color: AppColors.gold.withValues(alpha: 0.35)),
         borderRadius: BorderRadius.circular(AppRadius.pill),
         boxShadow: [
           BoxShadow(
-            color: AppColors.gold.withValues(alpha: 0.30),
-            blurRadius: 14,
+            color: AppColors.gold.withValues(alpha: 0.08),
+            blurRadius: 10,
             spreadRadius: -4,
-            offset: const Offset(0, 4),
-          ),
-          // Inner top highlight — the pill is raised, lit from above.
-          BoxShadow(
-            color: Colors.white.withValues(alpha: 0.30),
-            offset: const Offset(0, 1),
-            blurRadius: 1,
-            blurStyle: BlurStyle.inner,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -722,7 +710,7 @@ class CoinPill extends StatelessWidget {
             '$coins',
             // Tabular mono digits — the balance never wiggles as it counts.
             style: AppText.figure.copyWith(
-              color: const Color(0xFF422006),
+              color: AppColors.gold,
               fontSize: 14,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.3,
