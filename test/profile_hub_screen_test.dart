@@ -283,4 +283,83 @@ void main() {
     expect(find.text('Admin'), findsNothing);
     expect(find.text('Keys'), findsOneWidget);
   });
+
+  testWidgets('own reels render as an edge-to-edge TikTok grid', (tester) async {
+    await _pump(
+      tester,
+      screen: _screen(
+        isAdmin: false,
+        onOpenKeys: () {},
+        onOpenWallet: () {},
+        onOpenFeedback: () {},
+        onOpenAdmin: () {},
+        onOpenSettings: () {},
+        onOpenShare: () {},
+        loadProfile: (_) async => _user(),
+        loadReels: (_, _) async => [_reel('r1'), _reel('r2'), _reel('r3')],
+      ),
+    );
+
+    expect(find.text('Your reels'), findsNothing);
+    final grid = tester.widget<GridView>(find.byType(GridView));
+    final delegate = grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+    expect(delegate.crossAxisCount, 3);
+    expect(delegate.crossAxisSpacing, 2);
+    expect(delegate.mainAxisSpacing, 2);
+    expect(delegate.childAspectRatio, 0.75);
+    expect(find.byKey(const ValueKey('profile-reel-r1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-reel-r2')), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-reel-r3')), findsOneWidget);
+  });
+
+  testWidgets('reel failure keeps Retry on the TikTok profile', (tester) async {
+    var fail = true;
+    await _pump(
+      tester,
+      screen: _screen(
+        isAdmin: false,
+        onOpenKeys: () {},
+        onOpenWallet: () {},
+        onOpenFeedback: () {},
+        onOpenAdmin: () {},
+        onOpenSettings: () {},
+        onOpenShare: () {},
+        loadProfile: (_) async => _user(),
+        loadReels: (_, _) async {
+          if (fail) throw Exception('offline');
+          return [_reel('r9')];
+        },
+      ),
+    );
+    expect(find.text('Could not load reels'), findsOneWidget);
+    await tester.drag(find.byType(ListView), const Offset(0, -220));
+    await tester.pump();
+    fail = false;
+    await tester.tap(find.text('Retry'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const ValueKey('profile-reel-r9')), findsOneWidget);
+  });
+
+  testWidgets('TikTok profile fits a 320px screen', (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _pump(
+      tester,
+      screen: _screen(
+        isAdmin: true,
+        onOpenKeys: () {},
+        onOpenWallet: () {},
+        onOpenFeedback: () {},
+        onOpenAdmin: () {},
+        onOpenSettings: () {},
+        onOpenShare: () {},
+        loadProfile: (_) async => _user(),
+        loadReels: (_, _) async => [_reel('r1'), _reel('r2'), _reel('r3')],
+      ),
+    );
+    expect(tester.takeException(), isNull);
+  });
 }

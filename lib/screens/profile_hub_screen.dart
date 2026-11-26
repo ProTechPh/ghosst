@@ -165,15 +165,15 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
             onSelected: (value) {
               switch (value) {
                 case 'settings':
-                  widget.onOpenSettings?.call();
+                  widget.onOpenSettings();
                 case 'keys':
-                  widget.onOpenKeys?.call();
+                  widget.onOpenKeys();
                 case 'wallet':
-                  widget.onOpenWallet?.call();
+                  widget.onOpenWallet();
                 case 'feedback':
-                  widget.onOpenFeedback?.call();
+                  widget.onOpenFeedback();
                 case 'admin':
-                  widget.onOpenAdmin?.call();
+                  widget.onOpenAdmin();
               }
             },
             itemBuilder: (_) => [
@@ -247,9 +247,15 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _stat('Following', profile?.followingCount ?? 0),
-                      _stat('Followers', profile?.followerCount ?? 0),
-                      _stat('Reels', profile?.reelCount ?? _reels.length),
+                      Expanded(
+                        child: _stat('Following', profile?.followingCount ?? 0),
+                      ),
+                      Expanded(
+                        child: _stat('Followers', profile?.followerCount ?? 0),
+                      ),
+                      Expanded(
+                        child: _stat('Reels', profile?.reelCount ?? _reels.length),
+                      ),
                     ],
                   ),
                   const SizedBox(height: AppSpace.md),
@@ -296,8 +302,9 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
                 physics: const NeverScrollableScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 3,
-                  mainAxisSpacing: 3,
-                  crossAxisSpacing: 3,
+                  mainAxisSpacing: 2,
+                  crossAxisSpacing: 2,
+                  childAspectRatio: 0.75,
                 ),
                 itemCount: _reels.length,
                 itemBuilder: (context, index) {
