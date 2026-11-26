@@ -470,13 +470,15 @@ void main() {
     expect(find.text('Caption r1'), findsOneWidget);
   });
 
-  testWidgets('horizontal drag switches For You and Following', (tester) async {
+  testWidgets('horizontal drag cycles all four reel tabs', (tester) async {
     await _pump(
       tester,
       load: (feed, _) async => ReelFeedPage(
         reels: [_reel('r1', 'One')],
         nextOffset: 1,
       ),
+      loadTutorials: () async => const [],
+      loadSiteFeedback: () async => const [],
     );
     await _settle(tester);
 
@@ -489,23 +491,27 @@ void main() {
       isTrue,
     );
 
+    Future<void> swipeRight() async {
+      await tester.dragFrom(const Offset(60, 30), const Offset(300, 0));
+      await _settle(tester);
+    }
+
+    Future<void> expectSelected(String key) async {
+      expect(
+        tester.widget<Semantics>(find.byKey(ValueKey(key))).properties.selected,
+        isTrue,
+      );
+    }
+
+    await swipeRight();
+    await expectSelected('reel-feed-following');
+    await swipeRight();
+    await expectSelected('reel-feed-feedback');
+    await swipeRight();
+    await expectSelected('reel-feed-tutorials');
     await tester.dragFrom(const Offset(360, 30), const Offset(-300, 0));
     await _settle(tester);
-    expect(
-      tester.widget<Semantics>(
-        find.byKey(const ValueKey('reel-feed-following')),
-      ).properties.selected,
-      isTrue,
-    );
-
-    await tester.dragFrom(const Offset(60, 30), const Offset(300, 0));
-    await _settle(tester);
-    expect(
-      tester.widget<Semantics>(
-        find.byKey(const ValueKey('reel-feed-for-you')),
-      ).properties.selected,
-      isTrue,
-    );
+    await expectSelected('reel-feed-feedback');
   });
 
   testWidgets('plus badge follows the creator', (tester) async {

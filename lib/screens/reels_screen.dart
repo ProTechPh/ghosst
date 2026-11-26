@@ -176,13 +176,13 @@ class _ReelsScreenState extends State<ReelsScreen> {
     if (startX == null || startY == null || startY > 112) return;
     final dx = e.localPosition.dx - startX;
     if (dx.abs() < 60) return;
-    final next = dx < 0 ? 'following' : 'for-you';
-    if (_section == next) return;
-    setState(() {
-      _section = next;
-      _feed = next;
-    });
-    unawaited(_load(reset: true));
+    const sections = ['tutorials', 'feedback', 'following', 'for-you'];
+    final index = sections.indexOf(_section);
+    if (index < 0) return;
+    var nextIndex = dx < 0 ? index + 1 : index - 1;
+    if (nextIndex < 0) nextIndex = 0;
+    if (nextIndex >= sections.length) nextIndex = sections.length - 1;
+    _switchSection(sections[nextIndex]);
   }
 
   void _switchSection(String section) {
@@ -190,6 +190,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
     setState(() {
       _section = section;
       _extraError = null;
+      if (section == 'following' || section == 'for-you') _feed = section;
     });
     if (section == 'tutorials' || section == 'feedback') {
       unawaited(_loadExtra(section));
