@@ -4,14 +4,18 @@ import 'package:ghosst/screens/reel_comments_screen.dart';
 import 'package:ghosst/services/models.dart';
 import 'package:ghosst/theme.dart';
 
-ReelComment _comment(String text) => ReelComment(
+ReelComment _comment(
+  String text, {
+  String name = 'Jeric',
+  String createdAt = '',
+}) => ReelComment(
   id: text,
   text: text,
-  createdAt: '',
+  createdAt: createdAt,
   user: PublicUser(
     id: '42',
-    displayName: 'Jeric',
-    username: 'jeric',
+    displayName: name,
+    username: name.toLowerCase(),
     createdAt: '',
     followerCount: 0,
     followingCount: 0,
@@ -22,11 +26,19 @@ ReelComment _comment(String text) => ReelComment(
 Future<void> _pump(
   WidgetTester tester, {
   required Future<List<ReelComment>> Function(int) load,
+  Future<void> Function(String)? submit,
+  Size size = const Size(800, 600),
 }) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(
     MaterialApp(
       theme: AppTheme.dark,
-      home: ReelCommentsScreen(reelId: 'r1', load: load),
+      home: Scaffold(
+        body: ReelCommentsScreen(reelId: 'r1', load: load, submit: submit),
+      ),
     ),
   );
   await tester.pump();
@@ -60,5 +72,69 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Recovered'), findsOneWidget);
+  });
+
+  testWidgets('comments sheet uses TikTok chrome and keeps composer actions', (
+    tester,
+  ) async {
+    const longText =
+        'A very long comment that should wrap inside the narrow comments sheet '
+        'without pushing the composer off screen';
+    final submitted = <String>[];
+    await _pump(
+      tester,
+      size: const Size(320, 640),
+      load: (_) async => [
+        _comment(
+          longText,
+          name: 'VeryLongDisplayNameForComments',
+          createdAt: '2026-11-20T10:00:00.000Z',
+        ),
+      ],
+      submit: (text) async => submitted.add(text),
+    );
+
+    expect(find.byKey(const ValueKey('reel-comments-handle')), findsOneWidget);
+    expect(find.text('Comments'), findsOneWidget);
+    expect(find.text('VeryLongDisplayNameForComments'), findsOneWidget);
+    expect(find.text(longText), findsOneWidget);
+    expect(find.text('Reply'), findsOneWidget);
+    final heartKey = ValueKey('reel-comment-heart-$longText');
+    expect(
+      tester.getSize(find.byKey(heartKey)).height,
+      greaterThanOrEqualTo(48),
+    );
+    expect(
+      find.byKey(const ValueKey('reel-comments-composer')),
+      findsOneWidget,
+    );
+    expect(
+      tester.getSize(find.byKey(const ValueKey('reel-comments-send'))).height,
+      greaterThanOrEqualTo(48),
+    );
+    for (var i = 0; i < 3; i++) {
+      expect(
+        find.byKey(ValueKey('reel-comments-emoji-$i')),
+        findsOneWidget,
+      );
+    }
+
+    await tester.enterText(find.byType(TextField), 'hello');
+    await tester.tap(find.byKey(const ValueKey('reel-comments-send')));
+    await tester.pump();
+    expect(submitted, ['hello']);
+
+    await _pump(
+      tester,
+      size: const Size(320, 640),
+      load: (_) async => [_comment('Draft')],
+      submit: (_) async => throw StateError('offline'),
+    );
+    await tester.enterText(find.byType(TextField), 'try again');
+    await tester.tap(find.byKey(const ValueKey('reel-comments-send')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('try again'), findsOneWidget);
+    expect(find.text('Could not post comment. Try again.'), findsOneWidget);
   });
 }

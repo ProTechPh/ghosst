@@ -216,21 +216,23 @@ class _ReelsScreenState extends State<ReelsScreen> {
     }
   }
 
-  void _openComments(Reel reel) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ReelCommentsScreen(
-          reelId: reel.id,
-          load: (offset) => (widget.loadComments ?? Backend.reelComments)(
-            reel.id,
-            offset: offset,
-          ),
-          submit: (text) =>
-              (widget.submitComment ?? Backend.postReelComment)(reel.id, text),
-        ),
+  Future<void> _openComments(Reel reel) => showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    constraints: BoxConstraints(
+      maxHeight: MediaQuery.sizeOf(context).height * 0.82,
+    ),
+    builder: (_) => ReelCommentsScreen(
+      reelId: reel.id,
+      load: (offset) => (widget.loadComments ?? Backend.reelComments)(
+        reel.id,
+        offset: offset,
       ),
-    );
-  }
+      submit: (text) =>
+          (widget.submitComment ?? Backend.postReelComment)(reel.id, text),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -382,7 +384,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
         reel: _reels[i],
         liked: _liked[_reels[i].id] ?? _reels[i].isLiked,
         onLike: () => unawaited(_toggleLike(_reels[i])),
-        onComments: () => _openComments(_reels[i]),
+        onComments: () => unawaited(_openComments(_reels[i])),
         onDelete: () => unawaited(_deleteReel(_reels[i])),
         onProfile: widget.onOpenProfile,
         onReport: () => unawaited(_report(_reels[i].id)),

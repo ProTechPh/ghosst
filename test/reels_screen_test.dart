@@ -215,8 +215,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Comments'), findsOneWidget);
-    await tester.pageBack();
-    await _settle(tester);
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Comments'), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('reel-profile-One')));
     expect(profile, 'One');
@@ -278,6 +280,22 @@ void main() {
     );
     await _settle(tester);
     expect(find.byKey(const ValueKey('reel-follow-badge-mine')), findsNothing);
+  });
+
+  testWidgets('comments open as a modal sheet over the Reel', (tester) async {
+    await _pump(
+      tester,
+      load: (_, _) async =>
+          ReelFeedPage(reels: [_reel('r1', 'One')], nextOffset: 1),
+    );
+    await _settle(tester);
+
+    await tester.tap(find.byKey(const ValueKey('reel-comments-r1')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byKey(const ValueKey('reel-image-r1-1')), findsOneWidget);
   });
 
   testWidgets('carousel renders dots and horizontal swipe changes image', (
