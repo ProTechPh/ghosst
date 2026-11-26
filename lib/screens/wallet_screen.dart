@@ -3,9 +3,9 @@ import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-import '../arcade.dart';
 import '../premium.dart';
 import '../services/worker_backend.dart';
+import '../social_shell.dart';
 import '../theme.dart';
 
 /// One merged timeline entry (ad reward or key claim).
@@ -113,15 +113,10 @@ class _WalletScreenState extends State<WalletScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(titleSpacing: 20, title: const Text('Wallet')),
-      body: Stack(
-        children: [
-          const MeshBackground(),
-          const Positioned.fill(child: IgnorePointer(child: TableSurface())),
-          if (_loading)
-            _loadingView()
-          else
-            SafeArea(
+      appBar: const SocialAppBar(title: 'Wallet'),
+      body: _loading
+          ? _loadingView()
+          : SafeArea(
               top: false,
               child: RefreshIndicator(
                 color: AppColors.cyan,
@@ -181,8 +176,6 @@ class _WalletScreenState extends State<WalletScreen> {
                 ),
               ),
             ),
-        ],
-      ),
     );
   }
 

@@ -786,11 +786,7 @@ class _HomeShellState extends State<HomeShell> {
   void _openAdmin() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => Scaffold(
-          backgroundColor: AppColors.bg,
-          appBar: const SocialAppBar(title: 'Admin'),
-          body: AdminScreen(onAnnouncementSent: _refresh),
-        ),
+        builder: (_) => AdminScreen(onAnnouncementSent: _refresh),
       ),
     );
   }

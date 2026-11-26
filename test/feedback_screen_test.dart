@@ -16,12 +16,10 @@ Future<void> _pump(
   await tester.pumpWidget(
     MaterialApp(
       theme: AppTheme.dark,
-      home: Scaffold(
-        body: FeedbackScreen(
-          key: UniqueKey(),
-          submit: submit,
-          loadMine: loadMine,
-        ),
+      home: FeedbackScreen(
+        key: UniqueKey(),
+        submit: submit,
+        loadMine: loadMine,
       ),
     ),
   );
@@ -39,6 +37,8 @@ void main() {
       find.text('Feedback is private to the Ghosst team.'),
       findsOneWidget,
     );
+    final appBar = tester.widget<AppBar>(find.byType(AppBar));
+    expect(appBar.backgroundColor, Colors.black);
     final submit = find.widgetWithText(FilledButton, 'Submit feedback');
     expect(tester.widget<FilledButton>(submit).onPressed, isNull);
 

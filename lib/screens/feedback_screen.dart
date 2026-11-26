@@ -6,6 +6,7 @@ import '../api/api_exception.dart';
 
 import '../premium.dart';
 import '../services/worker_backend.dart';
+import '../social_shell.dart';
 import '../theme.dart';
 
 class FeedbackScreen extends StatefulWidget {
@@ -124,7 +125,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(title: const Text('Send feedback')),
+      appBar: const SocialAppBar(title: 'Send feedback'),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(
           AppSpace.lg,
