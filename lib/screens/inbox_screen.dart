@@ -229,9 +229,101 @@ class _InboxScreenState extends State<InboxScreen> {
   }
 
   @override
+  Widget _circle({
+    required String label,
+    required VoidCallback onTap,
+    Key? key,
+    String? avatarUrl,
+    String? initial,
+    IconData? icon,
+    Color ring = AppColors.primary,
+  }) => GestureDetector(
+    key: key,
+    onTap: onTap,
+    child: SizedBox(
+      width: 68,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: ring, width: 2),
+            ),
+            child: CircleAvatar(
+              backgroundColor: AppColors.surfaceHigh,
+              backgroundImage: avatarUrl == null || avatarUrl.isEmpty
+                  ? null
+                  : CachedNetworkImageProvider(avatarUrl),
+              child: icon != null
+                  ? Icon(icon, color: AppColors.primary, size: 24)
+                  : Text(initial ?? '?', style: AppText.subtitle),
+            ),
+          ),
+          const SizedBox(height: AppSpace.xs),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppText.caption,
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _circleShelf() => SizedBox(
+    key: const ValueKey('inbox-circles'),
+    height: 104,
+    child: ListView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.lg,
+        vertical: AppSpace.sm,
+      ),
+      children: [
+        _circle(
+          label: 'Create',
+          icon: Icons.add,
+          onTap: _newMessage,
+        ),
+        _circle(
+          key: const ValueKey('inbox-world'),
+          label: 'World chat',
+          icon: Icons.public,
+          ring: AppColors.tiktokCoral,
+          onTap: widget.onOpenWorldChat ?? () {},
+        ),
+        for (final thread in _threads.take(12)) ...[
+          _circle(
+            label: _users[thread.peerId(_myId ?? '')]?.name ?? 'Member',
+            avatarUrl: _users[thread.peerId(_myId ?? '')]?.avatarUrl,
+            initial: () {
+              final name = _users[thread.peerId(_myId ?? '')]?.name ?? 'M';
+              return name.isEmpty ? 'M' : name.substring(0, 1).toUpperCase();
+            }(),
+            ring: AppColors.tiktokCoral,
+            onTap: () => _openThread(
+              thread,
+              _users[thread.peerId(_myId ?? '')] ??
+                  ChatUserSummary(
+                    id: thread.peerId(_myId ?? ''),
+                    name: 'Member',
+                  ),
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+
   Widget build(BuildContext context) {
     final body = Column(
       children: [
+        _circleShelf(),
         if (_notifications.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -321,58 +413,38 @@ class _InboxScreenState extends State<InboxScreen> {
               ],
             ),
           ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpace.lg,
-            AppSpace.md,
-            AppSpace.lg,
-            AppSpace.sm,
-          ),
-          child: GlowCard(
-            onTap: widget.onOpenWorldChat,
-            child: Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(AppRadius.input),
-                  ),
-                  child: const Icon(Icons.public, color: AppColors.primary),
-                ),
-                const SizedBox(width: AppSpace.md),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('World chat', style: AppText.subtitle),
-                      SizedBox(height: 2),
-                      Text(
-                        'Join the public community room',
-                        style: AppText.caption,
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.chevron_right, color: AppColors.textDim),
-              ],
-            ),
-          ),
-        ),
         Expanded(child: _threadContent()),
       ],
     );
     if (widget.embedded) return body;
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: SocialAppBar(
-        title: 'Inbox',
+      appBar: AppBar(
+        backgroundColor: AppColors.bg,
+        leading: IconButton(
+          key: const ValueKey('inbox-add'),
+          tooltip: 'New message',
+          onPressed: _newMessage,
+          icon: const Icon(Icons.person_add_alt_1_outlined),
+        ),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Inbox'),
+            const SizedBox(width: 6),
+            Icon(
+              Icons.arrow_drop_down,
+              size: 18,
+              color: AppColors.textDim,
+            ),
+          ],
+        ),
         actions: [
           IconButton(
-            tooltip: 'New message',
+            key: const ValueKey('inbox-search'),
+            tooltip: 'Search people',
             onPressed: _newMessage,
-            icon: const Icon(Icons.edit_outlined),
+            icon: const Icon(Icons.search),
           ),
         ],
       ),
@@ -463,11 +535,11 @@ class _InboxScreenState extends State<InboxScreen> {
                   label: 'Unread messages',
                   child: Container(
                     key: ValueKey('unread-${thread.id}'),
-                    width: 10,
-                    height: 10,
+                    width: 16,
+                    height: 16,
                     decoration: const BoxDecoration(
                       shape: BoxShape.circle,
-                      color: AppColors.primary,
+                      color: AppColors.tiktokCoral,
                     ),
                   ),
                 ),

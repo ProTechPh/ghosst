@@ -470,6 +470,44 @@ void main() {
     expect(find.text('Caption r1'), findsOneWidget);
   });
 
+  testWidgets('horizontal drag switches For You and Following', (tester) async {
+    await _pump(
+      tester,
+      load: (feed, _) async => ReelFeedPage(
+        reels: [_reel('r1', 'One')],
+        nextOffset: 1,
+      ),
+    );
+    await _settle(tester);
+
+    final area = find.byKey(const ValueKey('reels-swipe-area'));
+    expect(area, findsOneWidget);
+    expect(
+      tester.widget<Semantics>(
+        find.byKey(const ValueKey('reel-feed-for-you')),
+      ).properties.selected,
+      isTrue,
+    );
+
+    await tester.dragFrom(const Offset(360, 30), const Offset(-300, 0));
+    await _settle(tester);
+    expect(
+      tester.widget<Semantics>(
+        find.byKey(const ValueKey('reel-feed-following')),
+      ).properties.selected,
+      isTrue,
+    );
+
+    await tester.dragFrom(const Offset(60, 30), const Offset(300, 0));
+    await _settle(tester);
+    expect(
+      tester.widget<Semantics>(
+        find.byKey(const ValueKey('reel-feed-for-you')),
+      ).properties.selected,
+      isTrue,
+    );
+  });
+
   testWidgets('plus badge follows the creator', (tester) async {
     final followed = <String>[];
     await _pump(

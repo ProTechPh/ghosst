@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -157,6 +158,31 @@ class _ReelsScreenState extends State<ReelsScreen> {
         _error = 'Could not load reels';
       });
     }
+  }
+
+  double? _swipeStartX;
+  double? _swipeStartY;
+
+  void _onSwipeDown(PointerDownEvent e) {
+    _swipeStartX = e.localPosition.dx;
+    _swipeStartY = e.localPosition.dy;
+  }
+
+  void _onSwipeUp(PointerUpEvent e) {
+    final startX = _swipeStartX;
+    final startY = _swipeStartY;
+    _swipeStartX = null;
+    _swipeStartY = null;
+    if (startX == null || startY == null || startY > 112) return;
+    final dx = e.localPosition.dx - startX;
+    if (dx.abs() < 60) return;
+    final next = dx < 0 ? 'following' : 'for-you';
+    if (_section == next) return;
+    setState(() {
+      _section = next;
+      _feed = next;
+    });
+    unawaited(_load(reset: true));
   }
 
   void _switchSection(String section) {
@@ -358,106 +384,113 @@ class _ReelsScreenState extends State<ReelsScreen> {
               top: 0,
               left: 0,
               right: 0,
-              child: SizedBox(
-                height: kTouchMin * 2 + AppSpace.lg,
-                child: Stack(
-                  children: [
-                    const Positioned.fill(
-                      child: IgnorePointer(
-                        child: DecoratedBox(
-                          key: ValueKey('reels-top-scrim'),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.black54,
-                                Colors.black26,
-                                Colors.transparent,
-                              ],
-                              stops: [0, 0.55, 1],
+              child: Listener(
+                key: const ValueKey('reels-swipe-area'),
+                behavior: HitTestBehavior.opaque,
+                onPointerDown: _onSwipeDown,
+                onPointerUp: _onSwipeUp,
+                child: SizedBox(
+                  height: kTouchMin * 2 + AppSpace.lg,
+                  child: Stack(
+                    children: [
+                      const Positioned.fill(
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            key: ValueKey('reels-top-scrim'),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.black54,
+                                  Colors.black26,
+                                  Colors.transparent,
+                                ],
+                                stops: [0, 0.55, 1],
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    SafeArea(
-                      bottom: false,
-                      child: SizedBox(
-                        height: kTouchMin + AppSpace.md,
-                        child: Stack(
-                          children: [
-                            Positioned(
-                              left: AppSpace.sm,
-                              right: AppSpace.sm,
-                              top: 0,
-                              bottom: 0,
-                              child: Center(
-                                child: SizedBox(
-                                  height: kTouchMin,
-                                  child: SingleChildScrollView(
-                                    key: const ValueKey('reels-tabs-scroll'),
-                                    scrollDirection: Axis.horizontal,
-                                    physics:
-                                        const AlwaysScrollableScrollPhysics(),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        _FeedTab(
-                                          feedKey: 'tutorials',
-                                          label: 'Tutorials',
-                                          width: 76,
-                                          selected: _section == 'tutorials',
-                                          onTap: () =>
-                                              _switchSection('tutorials'),
-                                        ),
-                                        _FeedTab(
-                                          feedKey: 'feedback',
-                                          label: 'Feedback',
-                                          width: 76,
-                                          selected: _section == 'feedback',
-                                          onTap: () =>
-                                              _switchSection('feedback'),
-                                        ),
-                                        _FeedTab(
-                                          feedKey: 'following',
-                                          label: 'Following',
-                                          width: 76,
-                                          selected: _section == 'following',
-                                          onTap: () {
-                                            if (_section == 'following') return;
-                                            setState(() {
-                                              _section = 'following';
-                                              _feed = 'following';
-                                            });
-                                            unawaited(_load(reset: true));
-                                          },
-                                        ),
-                                        _FeedTab(
-                                          feedKey: 'for-you',
-                                          label: 'For You',
-                                          width: 76,
-                                          selected: _section == 'for-you',
-                                          onTap: () {
-                                            if (_section == 'for-you') return;
-                                            setState(() {
-                                              _section = 'for-you';
-                                              _feed = 'for-you';
-                                            });
-                                            unawaited(_load(reset: true));
-                                          },
-                                        ),
-                                      ],
+                      SafeArea(
+                        bottom: false,
+                        child: SizedBox(
+                          height: kTouchMin + AppSpace.md,
+                          child: Stack(
+                            children: [
+                              Positioned(
+                                left: AppSpace.sm,
+                                right: AppSpace.sm,
+                                top: 0,
+                                bottom: 0,
+                                child: Center(
+                                  child: SizedBox(
+                                    height: kTouchMin,
+                                    child: SingleChildScrollView(
+                                      key: const ValueKey('reels-tabs-scroll'),
+                                      scrollDirection: Axis.horizontal,
+                                      physics:
+                                          const AlwaysScrollableScrollPhysics(),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          _FeedTab(
+                                            feedKey: 'tutorials',
+                                            label: 'Tutorials',
+                                            width: 76,
+                                            selected: _section == 'tutorials',
+                                            onTap: () =>
+                                                _switchSection('tutorials'),
+                                          ),
+                                          _FeedTab(
+                                            feedKey: 'feedback',
+                                            label: 'Feedback',
+                                            width: 76,
+                                            selected: _section == 'feedback',
+                                            onTap: () =>
+                                                _switchSection('feedback'),
+                                          ),
+                                          _FeedTab(
+                                            feedKey: 'following',
+                                            label: 'Following',
+                                            width: 76,
+                                            selected: _section == 'following',
+                                            onTap: () {
+                                              if (_section == 'following')
+                                                return;
+                                              setState(() {
+                                                _section = 'following';
+                                                _feed = 'following';
+                                              });
+                                              unawaited(_load(reset: true));
+                                            },
+                                          ),
+                                          _FeedTab(
+                                            feedKey: 'for-you',
+                                            label: 'For You',
+                                            width: 76,
+                                            selected: _section == 'for-you',
+                                            onTap: () {
+                                              if (_section == 'for-you') return;
+                                              setState(() {
+                                                _section = 'for-you';
+                                                _feed = 'for-you';
+                                              });
+                                              unawaited(_load(reset: true));
+                                            },
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -505,7 +538,10 @@ class _ReelsScreenState extends State<ReelsScreen> {
     if (_section == 'tutorials') {
       if (_tutorials.isEmpty) {
         return const Center(
-          child: Text('Nothing here yet', style: TextStyle(color: Colors.white)),
+          child: Text(
+            'Nothing here yet',
+            style: TextStyle(color: Colors.white),
+          ),
         );
       }
       return ListView.separated(
@@ -604,7 +640,10 @@ class _ReelsScreenState extends State<ReelsScreen> {
               style: AppText.subtitle.copyWith(color: Colors.white),
             ),
             const SizedBox(height: AppSpace.xs),
-            Text(item.comment, style: AppText.body.copyWith(color: Colors.white)),
+            Text(
+              item.comment,
+              style: AppText.body.copyWith(color: Colors.white),
+            ),
             const SizedBox(height: AppSpace.xs),
             Text(
               '★' * item.rating,

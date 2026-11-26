@@ -67,9 +67,10 @@ class _TabItem extends StatelessWidget {
       SocialTab.inbox => 'Inbox',
       SocialTab.profile => 'Profile',
     };
+    // TikTok bottom bar: Home, Friends, +, Inbox, Profile.
     final icon = switch (tab) {
       SocialTab.home => selected ? Icons.home : Icons.home_outlined,
-      SocialTab.shop => selected ? Icons.storefront : Icons.storefront_outlined,
+      SocialTab.shop => selected ? Icons.people : Icons.people_outline,
       SocialTab.create => Icons.add,
       SocialTab.inbox =>
         selected ? Icons.chat_bubble : Icons.chat_bubble_outline,
@@ -118,7 +119,7 @@ class _TabItem extends StatelessWidget {
                     Icon(
                       icon,
                       size: 23,
-                      color: selected ? AppColors.primary : AppColors.textDim,
+                      color: selected ? Colors.white : AppColors.textDim,
                     ),
                     if (unread > 0)
                       Positioned(

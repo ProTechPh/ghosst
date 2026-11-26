@@ -50,6 +50,10 @@ void main() {
     );
     expect(home.properties.selected, isTrue);
     expect(shop.properties.selected, isFalse);
+    expect(find.byIcon(Icons.home), findsOneWidget);
+    expect(find.byIcon(Icons.people_outline), findsOneWidget);
+    expect(find.byIcon(Icons.chat_bubble_outline), findsOneWidget);
+    expect(find.byIcon(Icons.person_outline), findsOneWidget);
   });
 
   testWidgets('FiveTabBar uses 48dp targets and shows Inbox unread', (

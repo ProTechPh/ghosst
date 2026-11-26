@@ -112,6 +112,48 @@ Future<void> _pump(
 }
 
 void main() {
+  testWidgets('inbox uses TikTok chrome with circles and badges', (
+    tester,
+  ) async {
+    final client = _FakeDirectChatClient();
+    int? unread;
+    await _pump(
+      tester,
+      client,
+      onUnreadChanged: (count) => unread = count,
+      loadUsers: (ids) async => [
+        for (final id in ids)
+          ChatUserSummary(id: id, name: id == 'old' ? 'Old peer' : 'New peer'),
+      ],
+      loadAnnouncements: () async => [
+        const Announcement(
+          id: 'a1',
+          title: 'New drop',
+          body: 'Fresh keys are live.',
+          createdAt: '2026-11-26T10:00:00.000Z',
+        ),
+      ],
+    );
+    client.emit([
+      _thread(
+        id: 'me__old',
+        lastSenderId: 'old',
+        lastMessageAt: 2000,
+        lastReadAt: {'me': 1000},
+        lastMessage: 'hello',
+      ),
+    ]);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('inbox-add')), findsOneWidget);
+    expect(find.byKey(const ValueKey('inbox-search')), findsOneWidget);
+    expect(find.byKey(const ValueKey('inbox-circles')), findsOneWidget);
+    expect(find.byKey(const ValueKey('inbox-notifications')), findsOneWidget);
+    expect(find.byKey(const ValueKey('inbox-world')), findsOneWidget);
+    expect(find.byKey(const ValueKey('thread-me__old')), findsOneWidget);
+    expect(unread, 1);
+  });
+
   testWidgets('inbox shows all announcements as notifications', (
     tester,
   ) async {
@@ -185,13 +227,15 @@ void main() {
     ]);
     await tester.pumpAndSettle();
 
-    expect(find.text('New peer'), findsOneWidget);
-    expect(find.text('Old peer'), findsOneWidget);
+    expect(find.byKey(const ValueKey('thread-me__new')), findsOneWidget);
+    expect(find.byKey(const ValueKey('thread-me__old')), findsOneWidget);
     expect(find.byKey(const ValueKey('unread-me__new')), findsOneWidget);
     expect(find.byKey(const ValueKey('unread-me__old')), findsNothing);
     expect(
-      tester.getTopLeft(find.text('New peer')).dy,
-      lessThan(tester.getTopLeft(find.text('Old peer')).dy),
+      tester.getTopLeft(find.byKey(const ValueKey('thread-me__new'))).dy,
+      lessThan(
+        tester.getTopLeft(find.byKey(const ValueKey('thread-me__old'))).dy,
+      ),
     );
     expect(loaded, containsAll(['new', 'old']));
     expect(unreadTotals, contains(1));
@@ -222,7 +266,9 @@ void main() {
     expect(find.byType(AppBar), findsNothing);
     expect(
       tester.getTopLeft(find.text('World chat')).dy,
-      lessThan(tester.getTopLeft(find.text('New peer')).dy),
+      lessThan(
+        tester.getTopLeft(find.byKey(const ValueKey('thread-me__new'))).dy,
+      ),
     );
     await tester.tap(find.text('World chat'));
     expect(worldChatOpens, 1);
