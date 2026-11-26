@@ -63,7 +63,7 @@ ProfileHubScreen _screen({
   ValueChanged<Reel>? onOpenReel,
   Future<PublicUser> Function(String id)? loadProfile,
   Future<List<Reel>> Function(String id, int offset)? loadReels,
-  Future<String> Function(String bio)? onSaveBio,
+  Future<void> Function({required String bio, String? cover})? onSaveProfile,
   Future<String> Function()? onPickCover,
 }) => ProfileHubScreen(
   userId: '42',
@@ -78,7 +78,7 @@ ProfileHubScreen _screen({
   onOpenReel: onOpenReel,
   loadProfile: loadProfile,
   loadReels: loadReels,
-  onSaveBio: onSaveBio,
+  onSaveProfile: onSaveProfile,
   onPickCover: onPickCover,
 );
 
@@ -373,6 +373,7 @@ void main() {
     tester,
   ) async {
     final saved = <String>[];
+    final covers = <String>[];
     await _pump(
       tester,
       screen: _screen(
@@ -388,9 +389,9 @@ void main() {
           coverUrl: 'https://example.com/cover.jpg',
         ),
         loadReels: (_, _) async => const [],
-        onSaveBio: (bio) async {
+        onSaveProfile: ({required String bio, String? cover}) async {
           saved.add(bio);
-          return bio;
+          covers.add(cover ?? '');
         },
         onPickCover: () async => 'https://example.com/new-cover.jpg',
       ),
@@ -403,6 +404,8 @@ void main() {
     expect(find.byKey(const ValueKey('profile-bio-field')), findsOneWidget);
     expect(find.byKey(const ValueKey('profile-cover-pick')), findsOneWidget);
 
+    await tester.tap(find.byKey(const ValueKey('profile-cover-pick')));
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('profile-bio-field')),
       'New bio here',
@@ -410,5 +413,6 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('profile-save')));
     await tester.pumpAndSettle();
     expect(saved, ['New bio here']);
+    expect(covers, ['https://example.com/new-cover.jpg']);
   });
 }

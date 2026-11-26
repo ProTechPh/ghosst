@@ -135,6 +135,16 @@ function social_avatar_select(): string
     return $column;
 }
 
+/** Bio/cover columns are added by a separate migration — fail open before it. */
+function social_profile_select(): string
+{
+    static $bio = null;
+    static $cover = null;
+    if ($bio === null) $bio = social_column_exists(T_USERS, 'bio') ? 'bio' : "'' AS bio";
+    if ($cover === null) $cover = social_column_exists(T_USERS, 'cover_url') ? 'cover_url' : 'NULL AS cover_url';
+    return $bio . ', ' . $cover;
+}
+
 function social_user_is_visible(array $row): bool
 {
     return ($row['deleted_at'] ?? null) === null && (int) ($row['is_banned'] ?? 0) !== 1;
@@ -200,6 +210,7 @@ function social_user_by_id(string $id): ?array
     $userId = social_positive_id($id);
     $row = one(
         'SELECT id, username, display_name, ' . social_avatar_select() . ',
+                ' . social_profile_select() . ',
                 created_at, is_admin, is_moderator, deleted_at, is_banned
            FROM ' . T_USERS . ' WHERE id = ? LIMIT 1',
         [$userId]
@@ -215,6 +226,7 @@ function social_users_by_ids(array $ids): array
     $placeholders = implode(',', array_fill(0, count($ids), '?'));
     return all_rows(
         'SELECT id, username, display_name, ' . social_avatar_select() . ',
+                ' . social_profile_select() . ',
                 is_admin, is_moderator
            FROM ' . T_USERS . '
           WHERE id IN (' . $placeholders . ') AND deleted_at IS NULL AND is_banned = 0',

@@ -112,7 +112,7 @@ Future<void> _pump(
 }
 
 void main() {
-  testWidgets('inbox shows the latest announcement as a notification', (
+  testWidgets('inbox shows all announcements as notifications', (
     tester,
   ) async {
     final client = _FakeDirectChatClient();
@@ -127,6 +127,12 @@ void main() {
           body: 'Fresh keys are live in the shop.',
           createdAt: '2026-11-26T10:00:00.000Z',
         ),
+        const Announcement(
+          id: 'a2',
+          title: 'Double coins',
+          body: 'Weekend promo is live.',
+          createdAt: '2026-11-25T10:00:00.000Z',
+        ),
       ],
     );
     client.emit(const []);
@@ -134,6 +140,8 @@ void main() {
 
     expect(find.text('New drop'), findsOneWidget);
     expect(find.text('Fresh keys are live in the shop.'), findsOneWidget);
+    expect(find.text('Double coins'), findsOneWidget);
+    expect(find.text('Weekend promo is live.'), findsOneWidget);
     await tester.tap(find.text('New drop'));
     await tester.pumpAndSettle();
     expect(find.text('Fresh keys are live in the shop.'), findsWidgets);

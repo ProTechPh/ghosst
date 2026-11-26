@@ -161,9 +161,11 @@ class Backend {
       (await _api.get('/firebase/token'))['token'] as String;
 
   /// Admin product image → the site's FTP storage (uploads/products).
-  static Future<String> updateBio(String bio) async {
-    final res = await _api.post('/me/profile', data: {'bio': bio.trim()});
-    return (res['bio'] ?? '').toString();
+  static Future<String> updateBio(String bio, {String? cover}) async {
+    final data = <String, dynamic>{'bio': bio.trim()};
+    if (cover != null) data['cover'] = cover;
+    final res = await _api.post('/me/profile', data: data);
+    return (res['coverUrl'] ?? res['bio'] ?? '').toString();
   }
 
   static Future<String> uploadCover(String path) async {

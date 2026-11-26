@@ -37,8 +37,6 @@ function uploadImageTo(string $field, string $slug, string $folder, string $pref
         throw new RuntimeException('Image must be 5MB or smaller.');
     }
 
-    $safeSlug = preg_replace('/[^a-z0-9_-]+/i', '-', strtolower($slug));
-    $safeSlug = trim($safeSlug, '-') ?: 'product';
     $dir = __DIR__ . '/../' . $folder;
     if (!is_dir($dir)) {
         mkdir($dir, 0755, true);

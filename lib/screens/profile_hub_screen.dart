@@ -26,7 +26,7 @@ class ProfileHubScreen extends StatefulWidget {
     this.loadProfile,
     this.loadReels,
     this.onOpenReel,
-    this.onSaveBio,
+    this.onSaveProfile,
     this.onPickCover,
   });
 
@@ -43,7 +43,8 @@ class ProfileHubScreen extends StatefulWidget {
   final Future<PublicUser> Function(String id)? loadProfile;
   final Future<List<Reel>> Function(String id, int offset)? loadReels;
   final ValueChanged<Reel>? onOpenReel;
-  final Future<String> Function(String bio)? onSaveBio;
+  final Future<void> Function({required String bio, String? cover})?
+  onSaveProfile;
   final Future<String> Function()? onPickCover;
 
   @override
@@ -398,71 +399,30 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
   }
 
   Future<void> _openEditSheet() async {
-    final bioController = TextEditingController(
-      text: (_profile?.bio ?? '').trim(),
-    );
     final result = await showModalBottomSheet<Map<String, String?>>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.surface,
-      builder: (sheetContext) {
-        String? cover;
-        return StatefulBuilder(
-          builder: (ctx, setSheetState) => Padding(
-            padding: EdgeInsets.only(
-              left: AppSpace.lg,
-              right: AppSpace.lg,
-              top: AppSpace.lg,
-              bottom: MediaQuery.viewInsetsOf(ctx).bottom + AppSpace.lg,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text('Edit profile', style: AppText.title),
-                const SizedBox(height: AppSpace.md),
-                TextField(
-                  key: const ValueKey('profile-bio-field'),
-                  controller: bioController,
-                  maxLength: 300,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Bio',
-                    filled: true,
-                    fillColor: AppColors.surfaceHigh,
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: AppSpace.sm),
-                FilledButton.icon(
-                  key: const ValueKey('profile-cover-pick'),
-                  onPressed: () async {
-                    final url = await (widget.onPickCover ?? _pickCover)();
-                    if (url.isNotEmpty && ctx.mounted) {
-                      setSheetState(() => cover = url);
-                    }
-                  },
-                  icon: const Icon(Icons.image_outlined),
-                  label: Text(cover == null ? 'Change cover' : 'Cover updated'),
-                ),
-                const SizedBox(height: AppSpace.sm),
-                FilledButton(
-                  key: const ValueKey('profile-save'),
-                  onPressed: () => Navigator.pop(ctx, {
-                    'bio': bioController.text.trim(),
-                    if (cover != null) 'cover': cover,
-                  }),
-                  child: const Text('Save'),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+      builder: (_) => _ProfileEditSheet(
+        bio: (_profile?.bio ?? '').trim(),
+        onPickCover: widget.onPickCover ?? _pickCover,
+      ),
     );
     if (result == null || !mounted) return;
-    await (widget.onSaveBio ?? Backend.updateBio)(result['bio'] ?? '');
-    if (mounted) await _loadProfile();
+    try {
+      final save = widget.onSaveProfile ??
+          ({required String bio, String? cover}) async {
+            await Backend.updateBio(bio, cover: cover);
+          };
+      await save(bio: result['bio'] ?? '', cover: result['cover']);
+      if (mounted) await _loadProfile();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not save profile: $e')),
+        );
+      }
+    }
   }
 
   Widget _header(String? avatar, String initial, String? coverUrl) => Stack(
@@ -515,5 +475,83 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
       ),
       Text(label, style: AppText.caption.copyWith(color: AppColors.textDim)),
     ],
+  );
+}
+
+class _ProfileEditSheet extends StatefulWidget {
+  const _ProfileEditSheet({required this.bio, required this.onPickCover});
+
+  final String bio;
+  final Future<String> Function() onPickCover;
+
+  @override
+  State<_ProfileEditSheet> createState() => _ProfileEditSheetState();
+}
+
+class _ProfileEditSheetState extends State<_ProfileEditSheet> {
+  late final TextEditingController _bio = TextEditingController(text: widget.bio);
+  String? _cover;
+
+  @override
+  void dispose() {
+    _bio.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.only(
+      left: AppSpace.lg,
+      right: AppSpace.lg,
+      top: AppSpace.lg,
+      bottom: MediaQuery.viewInsetsOf(context).bottom + AppSpace.lg,
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Edit profile', style: AppText.title),
+        const SizedBox(height: AppSpace.md),
+        TextField(
+          key: const ValueKey('profile-bio-field'),
+          controller: _bio,
+          maxLength: 300,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            labelText: 'Bio',
+            filled: true,
+            fillColor: AppColors.surfaceHigh,
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: AppSpace.sm),
+        FilledButton.icon(
+          key: const ValueKey('profile-cover-pick'),
+          onPressed: () async {
+            try {
+              final url = await widget.onPickCover();
+              if (url.isNotEmpty && mounted) setState(() => _cover = url);
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Could not upload cover: $e')),
+                );
+              }
+            }
+          },
+          icon: const Icon(Icons.image_outlined),
+          label: Text(_cover == null ? 'Change cover' : 'Cover updated'),
+        ),
+        const SizedBox(height: AppSpace.sm),
+        FilledButton(
+          key: const ValueKey('profile-save'),
+          onPressed: () => Navigator.pop(context, {
+            'bio': _bio.text.trim(),
+            if (_cover != null) 'cover': _cover,
+          }),
+          child: const Text('Save'),
+        ),
+      ],
+    ),
   );
 }

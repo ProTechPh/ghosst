@@ -47,6 +47,7 @@ class _InboxScreenState extends State<InboxScreen> {
   bool _loading = true;
   bool _failed = false;
   List<Announcement> _notifications = const [];
+  String _notificationsSeenAt = '';
   bool _notificationsUnread = false;
 
   @override
@@ -66,6 +67,7 @@ class _InboxScreenState extends State<InboxScreen> {
         final seen = (await Backend.reads())?.announcementsSeenAt ?? '';
         if (mounted) {
           setState(() {
+            _notificationsSeenAt = seen;
             _notificationsUnread =
                 items.any((a) => a.createdAt.compareTo(seen) > 0);
           });
@@ -238,62 +240,85 @@ class _InboxScreenState extends State<InboxScreen> {
               AppSpace.lg,
               AppSpace.sm,
             ),
-            child: GlowCard(
+            child: Column(
               key: const ValueKey('inbox-notifications'),
-              onTap: () => unawaited(_openNotification(_notifications.first)),
-              child: Row(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(AppRadius.input),
-                    ),
-                    child: const Icon(
-                      Icons.notifications_outlined,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(width: AppSpace.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Notifications',
-                          style: AppText.caption.copyWith(
-                            color: AppColors.primary,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'NOTIFICATIONS',
+                  style: AppText.caption.copyWith(color: AppColors.primary),
+                ),
+                const SizedBox(height: AppSpace.xs),
+                for (final item in _notifications)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpace.xs),
+                    child: GlowCard(
+                      key: ValueKey('inbox-notification-${item.id}'),
+                      onTap: () => unawaited(_openNotification(item)),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.input,
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.campaign_outlined,
+                              color: AppColors.primary,
+                              size: 20,
+                            ),
                           ),
-                        ),
-                        Text(
-                          _notifications.first.title,
-                          style: AppText.subtitle.copyWith(fontSize: 15),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          _notifications.first.body,
-                          style: AppText.caption,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (_notificationsUnread)
-                    Container(
-                      width: 8,
-                      height: 8,
-                      margin: const EdgeInsets.only(right: AppSpace.sm),
-                      decoration: const BoxDecoration(
-                        color: AppColors.primary,
-                        shape: BoxShape.circle,
+                          const SizedBox(width: AppSpace.md),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.title,
+                                  style: AppText.subtitle.copyWith(
+                                    fontSize: 14,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  item.body,
+                                  style: AppText.caption,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (_notificationsUnread &&
+                              item.createdAt.compareTo(
+                                    _notificationsSeenAt,
+                                  ) >
+                                  0)
+                            Container(
+                              width: 8,
+                              height: 8,
+                              margin: const EdgeInsets.only(
+                                right: AppSpace.sm,
+                              ),
+                              decoration: const BoxDecoration(
+                                color: AppColors.primary,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          const Icon(
+                            Icons.chevron_right,
+                            color: AppColors.textDim,
+                          ),
+                        ],
                       ),
                     ),
-                  const Icon(Icons.chevron_right, color: AppColors.textDim),
-                ],
-              ),
+                  ),
+              ],
             ),
           ),
         Padding(

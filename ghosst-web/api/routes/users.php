@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/../lib/uploads.php';
+
 function users_search(array $ctx): array
 {
     $q = trim((string) ($ctx['query']['q'] ?? ''));
@@ -10,6 +12,7 @@ function users_search(array $ctx): array
     $like = '%' . $q . '%';
     $rows = all_rows(
         'SELECT id, username, display_name, ' . social_avatar_select() . ',
+                ' . social_profile_select() . ',
                 is_admin, is_moderator, deleted_at, is_banned
            FROM ' . T_USERS . '
           WHERE deleted_at IS NULL AND is_banned = 0
@@ -93,17 +96,44 @@ function users_reels(array $ctx): array
     ];
 }
 
-/** Plain-text bio sa sariling profile. */
+/** Plain-text bio at/o FTP cover URL sa sariling profile. */
 function users_update_bio(array $ctx): array
 {
     $uid = (string) $ctx['user']['id'];
     $body = read_json();
-    $bio = trim((string) ($body['bio'] ?? ''));
-    $invalid = profile_bio_validate($bio);
-    if ($invalid !== null) throw new ApiError(400, 'invalid_bio', $invalid);
-    if (!social_column_exists(T_USERS, 'bio')) {
-        throw new ApiError(503, 'server_schema', 'Profile fields are not set up yet.');
+    $bio = array_key_exists('bio', $body) ? trim((string) $body['bio']) : null;
+    $cover = array_key_exists('cover', $body) ? trim((string) $body['cover']) : null;
+    if ($bio === null && $cover === null) {
+        throw new ApiError(400, 'nothing_to_update', 'Send a bio or cover.');
     }
-    run_sql('UPDATE ' . T_USERS . ' SET bio = ? WHERE id = ?', [$bio, $uid]);
-    return ['ok' => true, 'bio' => $bio];
+    if ($bio !== null) {
+        $invalid = profile_bio_validate($bio);
+        if ($invalid !== null) throw new ApiError(400, 'invalid_bio', $invalid);
+        if (!social_column_exists(T_USERS, 'bio')) {
+            throw new ApiError(503, 'server_schema', 'Bio is not set up yet.');
+        }
+    }
+    if ($cover !== null) {
+        if ($cover !== '' && !preg_match('#^(https?://|uploads/covers/)#i', $cover)) {
+            throw new ApiError(400, 'invalid_cover', 'Invalid cover URL.');
+        }
+        if (!social_column_exists(T_USERS, 'cover_url')) {
+            throw new ApiError(503, 'server_schema', 'Cover is not set up yet.');
+        }
+    }
+
+    $sets = [];
+    $params = [];
+    if ($bio !== null) { $sets[] = 'bio = ?'; $params[] = $bio; }
+    if ($cover !== null) {
+        $sets[] = 'cover_url = ?';
+        $params[] = $cover === '' ? null : cover_image_url($cover);
+    }
+    $params[] = $uid;
+    run_sql('UPDATE ' . T_USERS . ' SET ' . implode(', ', $sets) . ' WHERE id = ?', $params);
+
+    $result = ['ok' => true];
+    if ($bio !== null) $result['bio'] = $bio;
+    if ($cover !== null) $result['coverUrl'] = cover_image_url($cover);
+    return $result;
 }
