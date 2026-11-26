@@ -79,6 +79,7 @@ Future<void> _pump(
   bool embedded = false,
   VoidCallback? onOpenWorldChat,
   ValueChanged<int>? onUnreadChanged,
+  Future<List<Announcement>> Function()? loadAnnouncements,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -101,6 +102,8 @@ Future<void> _pump(
           embedded: embedded,
           onOpenWorldChat: onOpenWorldChat,
           onUnreadChanged: onUnreadChanged,
+          loadAnnouncements:
+              loadAnnouncements ?? () async => const <Announcement>[],
         ),
       ),
     ),
@@ -109,6 +112,33 @@ Future<void> _pump(
 }
 
 void main() {
+  testWidgets('inbox shows the latest announcement as a notification', (
+    tester,
+  ) async {
+    final client = _FakeDirectChatClient();
+    await _pump(
+      tester,
+      client,
+      embedded: true,
+      loadAnnouncements: () async => [
+        const Announcement(
+          id: 'a1',
+          title: 'New drop',
+          body: 'Fresh keys are live in the shop.',
+          createdAt: '2026-11-26T10:00:00.000Z',
+        ),
+      ],
+    );
+    client.emit(const []);
+    await tester.pumpAndSettle();
+
+    expect(find.text('New drop'), findsOneWidget);
+    expect(find.text('Fresh keys are live in the shop.'), findsOneWidget);
+    await tester.tap(find.text('New drop'));
+    await tester.pumpAndSettle();
+    expect(find.text('Fresh keys are live in the shop.'), findsWidgets);
+  });
+
   testWidgets('sorts newest first and marks only peer messages unread', (
     tester,
   ) async {

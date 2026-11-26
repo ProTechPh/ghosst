@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../announcement_banner.dart';
 import '../services/direct_chat_service.dart';
 import '../services/worker_backend.dart';
 import '../social_shell.dart';
@@ -19,7 +20,11 @@ class InboxScreen extends StatefulWidget {
     this.embedded = false,
     this.onOpenWorldChat,
     this.onUnreadChanged,
+    this.loadAnnouncements,
   });
+
+  /// Latest app announcements, shown as the Inbox notification card.
+  final Future<List<Announcement>> Function()? loadAnnouncements;
 
   final DirectChatClient? client;
   final Future<List<ChatUserSummary>> Function(List<String> ids)? loadUsers;
@@ -41,11 +46,44 @@ class _InboxScreenState extends State<InboxScreen> {
   String? _myId;
   bool _loading = true;
   bool _failed = false;
+  List<Announcement> _notifications = const [];
+  bool _notificationsUnread = false;
 
   @override
   void initState() {
     super.initState();
     _subscribe();
+    unawaited(_loadNotifications());
+  }
+
+  Future<void> _loadNotifications() async {
+    try {
+      final items = await (widget.loadAnnouncements ?? Backend.announcements)();
+      if (!mounted) return;
+      setState(() => _notifications = items);
+      if (items.isEmpty) return;
+      try {
+        final seen = (await Backend.reads())?.announcementsSeenAt ?? '';
+        if (mounted) {
+          setState(() {
+            _notificationsUnread =
+                items.any((a) => a.createdAt.compareTo(seen) > 0);
+          });
+        }
+      } catch (_) {
+        if (mounted) setState(() => _notificationsUnread = true);
+      }
+    } catch (_) {
+      // Notifications are optional — never block the inbox.
+    }
+  }
+
+  Future<void> _openNotification(Announcement item) async {
+    if (mounted) setState(() => _notificationsUnread = false);
+    await showAnnouncementSheet(context, item);
+    await Backend.markReads(
+      announcementsSeenAt: DateTime.now().toUtc().toIso8601String(),
+    ).catchError((Object _) {});
   }
 
   @override
@@ -192,6 +230,72 @@ class _InboxScreenState extends State<InboxScreen> {
   Widget build(BuildContext context) {
     final body = Column(
       children: [
+        if (_notifications.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpace.lg,
+              AppSpace.md,
+              AppSpace.lg,
+              AppSpace.sm,
+            ),
+            child: GlowCard(
+              key: const ValueKey('inbox-notifications'),
+              onTap: () => unawaited(_openNotification(_notifications.first)),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(AppRadius.input),
+                    ),
+                    child: const Icon(
+                      Icons.notifications_outlined,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpace.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Notifications',
+                          style: AppText.caption.copyWith(
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        Text(
+                          _notifications.first.title,
+                          style: AppText.subtitle.copyWith(fontSize: 15),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          _notifications.first.body,
+                          style: AppText.caption,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_notificationsUnread)
+                    Container(
+                      width: 8,
+                      height: 8,
+                      margin: const EdgeInsets.only(right: AppSpace.sm),
+                      decoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  const Icon(Icons.chevron_right, color: AppColors.textDim),
+                ],
+              ),
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(
             AppSpace.lg,
