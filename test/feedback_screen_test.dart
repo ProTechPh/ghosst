@@ -119,6 +119,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Please improve this'), findsOneWidget);
+    expect(find.textContaining('offline'), findsOneWidget);
     fail = false;
     await tester.drag(find.byType(ListView), const Offset(0, -400));
     await tester.pumpAndSettle();

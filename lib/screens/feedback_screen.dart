@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../api/api_exception.dart';
@@ -111,11 +112,14 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           _submitError = e.code == 'rate_limited' ? e.message : e.userMessage;
         });
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Feedback] submit failed: $e');
       if (mounted) {
         setState(() {
           _submitting = false;
-          _submitError = 'Could not send feedback. Your message is still here.';
+          _submitError = kDebugMode
+              ? 'Could not send feedback: $e'
+              : 'Could not send feedback. Your message is still here.';
         });
       }
     }
