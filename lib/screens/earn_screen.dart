@@ -7,6 +7,7 @@ import '../arcade.dart';
 import '../premium.dart';
 import '../services/ad_service.dart';
 import '../services/worker_backend.dart';
+import '../social_shell.dart';
 import '../theme.dart';
 
 /// One rewarded ad pays `coinsPerReward` from `/ads/status` (the SSV handler
@@ -404,68 +405,80 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
     final shownStatus = atCap && !busy && !verifying
         ? 'Daily limit reached (${_rewardStatus!.limit} ads / 24h). Coins unlock again as older rewards expire.'
         : status;
-    final success = (status == 'Coins added!' || _lastActionSucceeded) && !atCap;
+    final success =
+        (status == 'Coins added!' || _lastActionSucceeded) && !atCap;
     final statusColor = success ? AppColors.green : AppColors.cyan;
     final inCooldown = _remainingCooldown > 0;
     final cooldownFill = _cooldownSpan <= 0
         ? 0.0
         : (_remainingCooldown / _cooldownSpan).clamp(0.0, 1.0);
 
-    return Stack(
-      children: [
-        const Positioned.fill(child: IgnorePointer(child: TableSurface())),
-        ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(
-            AppSpace.lg,
-            AppSpace.sm,
-            AppSpace.lg,
-            AppSpace.huge,
-          ),
-          children: [
-            _hero(inCooldown),
-            const SizedBox(height: AppSpace.lg),
-            _statsGrid(inCooldown),
-            const SizedBox(height: AppSpace.lg),
-            if (shownStatus.isNotEmpty) ...[
-              _statusPanel(shownStatus, statusColor, success),
-              const SizedBox(height: AppSpace.md),
-            ],
-            KeyedSubtree(
-              key: _ctaKey,
-              child: _primaryAction(inCooldown, cooldownFill, atCap),
-            ),
-            const SizedBox(height: AppSpace.md),
-            if (inCooldown) ...[
-              _cooldownProgress(cooldownFill),
-              const SizedBox(height: 6),
-              Text(
-                'Cooldown: ${_remainingCooldown}s remaining',
-                textAlign: TextAlign.center,
-                style: AppText.caption.copyWith(
-                  fontSize: 10,
-                  color: AppColors.textDim,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ],
-            const SizedBox(height: AppSpace.lg),
-            Text(
-              inCooldown
-                  ? 'Short cooldown between ads protects your reward eligibility and prevents traffic limits.'
-                  : 'Rewards are verified before crediting. During beta, a small once-daily server bonus is used only when both ad formats have no inventory.',
-              textAlign: TextAlign.center,
-              style: AppText.caption.copyWith(height: 1.55),
-            ),
-            const SizedBox(height: AppSpace.xxl),
-            const SectionHeader(title: 'How it works'),
-            const SizedBox(height: AppSpace.sm),
-            _stepRow('1', 'Watch an ad', 'One rewarded ad pays $_rewardCoins coins.'),
-            _stepRow('2', 'Earn coins', 'Verified before they land in your balance.'),
-            _stepRow('3', 'Claim keys', 'Spend them in the store on a key or app.'),
-          ],
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      appBar: const SocialAppBar(title: 'Earn coins'),
+      body: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpace.lg,
+          AppSpace.sm,
+          AppSpace.lg,
+          AppSpace.huge,
         ),
-      ],
+        children: [
+          _hero(inCooldown),
+          const SizedBox(height: AppSpace.lg),
+          _statsGrid(inCooldown),
+          const SizedBox(height: AppSpace.lg),
+          if (shownStatus.isNotEmpty) ...[
+            _statusPanel(shownStatus, statusColor, success),
+            const SizedBox(height: AppSpace.md),
+          ],
+          KeyedSubtree(
+            key: _ctaKey,
+            child: _primaryAction(inCooldown, cooldownFill, atCap),
+          ),
+          const SizedBox(height: AppSpace.md),
+          if (inCooldown) ...[
+            _cooldownProgress(cooldownFill),
+            const SizedBox(height: 6),
+            Text(
+              'Cooldown: ${_remainingCooldown}s remaining',
+              textAlign: TextAlign.center,
+              style: AppText.caption.copyWith(
+                fontSize: 10,
+                color: AppColors.textDim,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
+          const SizedBox(height: AppSpace.lg),
+          Text(
+            inCooldown
+                ? 'Short cooldown between ads protects your reward eligibility and prevents traffic limits.'
+                : 'Rewards are verified before crediting. During beta, a small once-daily server bonus is used only when both ad formats have no inventory.',
+            textAlign: TextAlign.center,
+            style: AppText.caption.copyWith(height: 1.55),
+          ),
+          const SizedBox(height: AppSpace.xxl),
+          const SectionHeader(title: 'How it works'),
+          const SizedBox(height: AppSpace.sm),
+          _stepRow(
+            '1',
+            'Watch an ad',
+            'One rewarded ad pays $_rewardCoins coins.',
+          ),
+          _stepRow(
+            '2',
+            'Earn coins',
+            'Verified before they land in your balance.',
+          ),
+          _stepRow(
+            '3',
+            'Claim keys',
+            'Spend them in the store on a key or app.',
+          ),
+        ],
+      ),
     );
   }
 
@@ -492,7 +505,9 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
                 decoration: BoxDecoration(
                   color: AppColors.green.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: AppColors.green.withValues(alpha: 0.6)),
+                  border: Border.all(
+                    color: AppColors.green.withValues(alpha: 0.6),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -608,7 +623,9 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
   Widget _statsGrid(bool inCooldown) {
     return Row(
       children: [
-        Expanded(child: _statCard(value: '$_rewardCoins', label: 'PER AD')),
+        Expanded(
+          child: _statCard(value: '$_rewardCoins', label: 'PER AD'),
+        ),
         const SizedBox(width: 10),
         Expanded(
           child: _statCard(
@@ -686,7 +703,10 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(
-        AppSpace.lg, AppSpace.md, AppSpace.lg, AppSpace.md,
+        AppSpace.lg,
+        AppSpace.md,
+        AppSpace.lg,
+        AppSpace.md,
       ),
       decoration: BoxDecoration(
         color: statusColor.withValues(alpha: 0.07),
@@ -703,7 +723,9 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
                 Icon(
                   success
                       ? Icons.check_circle_rounded
-                      : (busy ? Icons.hourglass_top_rounded : Icons.info_outline_rounded),
+                      : (busy
+                            ? Icons.hourglass_top_rounded
+                            : Icons.info_outline_rounded),
                   size: 17,
                   color: statusColor,
                 ),
@@ -721,7 +743,9 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
               ),
             ],
           ),
-          if (_verifyTimedOut && !verifying && !(_rewardStatus?.atCap ?? false)) ...[
+          if (_verifyTimedOut &&
+              !verifying &&
+              !(_rewardStatus?.atCap ?? false)) ...[
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
@@ -760,7 +784,10 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
                 Expanded(
                   child: Text(
                     'Your coins will be added automatically once your reward is confirmed.',
-                    style: AppText.caption.copyWith(fontSize: 11.5, height: 1.45),
+                    style: AppText.caption.copyWith(
+                      fontSize: 11.5,
+                      height: 1.45,
+                    ),
                   ),
                 ),
                 const SizedBox(width: AppSpace.sm),
@@ -792,11 +819,17 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(
-                  width: 16, height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.2,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: AppSpace.sm + 2),
-                Text(status == 'Loading ad…' ? 'Loading ad…' : 'Verifying reward…'),
+                Text(
+                  status == 'Loading ad…' ? 'Loading ad…' : 'Verifying reward…',
+                ),
               ],
             )
           : inCooldown
@@ -804,11 +837,18 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.timer_outlined, size: 17, color: AppColors.textDim),
+                const Icon(
+                  Icons.timer_outlined,
+                  size: 17,
+                  color: AppColors.textDim,
+                ),
                 const SizedBox(width: AppSpace.sm),
                 const Text('Next ad in'),
                 const SizedBox(width: AppSpace.xs + 2),
-                Text('${_remainingCooldown}s', style: monoStyle(fontWeight: FontWeight.w800)),
+                Text(
+                  '${_remainingCooldown}s',
+                  style: monoStyle(fontWeight: FontWeight.w800),
+                ),
               ],
             )
           : atCap
@@ -827,11 +867,18 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.play_circle_fill_rounded, size: 19, color: AppColors.bg),
+                  const Icon(
+                    Icons.play_circle_fill_rounded,
+                    size: 19,
+                    color: AppColors.bg,
+                  ),
                   const SizedBox(width: AppSpace.sm),
                   const Text('Watch ad'),
                   const SizedBox(width: AppSpace.xs + 2),
-                  Text('· +$_rewardCoins coins', style: monoStyle(fontWeight: FontWeight.w800)),
+                  Text(
+                    '· +$_rewardCoins coins',
+                    style: monoStyle(fontWeight: FontWeight.w800),
+                  ),
                 ],
               ),
             ),
@@ -845,22 +892,39 @@ class _EarnScreenState extends State<EarnScreen> with WidgetsBindingObserver {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
-            width: 24, height: 24,
+            width: 24,
+            height: 24,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: AppColors.primary.withValues(alpha: 0.1),
               border: Border.all(color: AppColors.cyan.withValues(alpha: 0.6)),
             ),
             alignment: Alignment.center,
-            child: Text(n, style: AppText.label.copyWith(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.cyan)),
+            child: Text(
+              n,
+              style: AppText.label.copyWith(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: AppColors.cyan,
+              ),
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: AppText.subtitle.copyWith(fontSize: 12, fontWeight: FontWeight.w600)),
-                Text(caption, style: AppText.caption.copyWith(fontSize: 10, height: 1.4)),
+                Text(
+                  title,
+                  style: AppText.subtitle.copyWith(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  caption,
+                  style: AppText.caption.copyWith(fontSize: 10, height: 1.4),
+                ),
               ],
             ),
           ),

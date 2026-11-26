@@ -11,6 +11,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../services/ad_service.dart';
 import '../services/worker_backend.dart';
 import '../services/distribution.dart';
+import '../social_shell.dart';
 import '../theme.dart';
 import 'premium_game_screen.dart';
 import 'product_detail.dart';
@@ -252,12 +253,13 @@ class _StoreScreenState extends State<StoreScreen> {
   }
 
   void _openTutorials() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const TutorialsScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const TutorialsScreen()));
   }
 
-  Future<void> _loadPremium() async {    try {
+  Future<void> _loadPremium() async {
+    try {
       final games = await Backend.premiumShop();
       if (mounted) {
         setState(() {
@@ -472,25 +474,33 @@ class _StoreScreenState extends State<StoreScreen> {
     if (mounted) _load(silent: true);
   }
 
+  Widget _scaffold(Widget body) => Scaffold(
+    backgroundColor: AppColors.bg,
+    appBar: const SocialAppBar(title: 'Store'),
+    body: body,
+  );
+
   @override
   Widget build(BuildContext context) {
-    if (loading) return _skeleton();
+    if (loading) return _scaffold(_skeleton());
     if (error.isNotEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpace.xl),
-          child: EmptyState(
-            icon: Icons.cloud_off_rounded,
-            title: 'Could not load store',
-            message: error,
-            action: IslandButton(
-              expand: false,
-              dense: true,
-              outline: true,
-              glow: false,
-              label: 'Retry',
-              icon: CupertinoIcons.arrow_clockwise,
-              onPressed: _load,
+      return _scaffold(
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpace.xl),
+            child: EmptyState(
+              icon: Icons.cloud_off_rounded,
+              title: 'Could not load store',
+              message: error,
+              action: IslandButton(
+                expand: false,
+                dense: true,
+                outline: true,
+                glow: false,
+                label: 'Retry',
+                icon: CupertinoIcons.arrow_clockwise,
+                onPressed: _load,
+              ),
             ),
           ),
         ),
@@ -501,350 +511,357 @@ class _StoreScreenState extends State<StoreScreen> {
     final rest = shelf.length > 1 ? shelf.sublist(1) : const <Product>[];
     final isPremium = _tab == 'premium';
 
-    return Stack(
-      children: [
-        const Positioned.fill(child: IgnorePointer(child: TableSurface())),
-        ScrollDownCue(
-          child: RefreshIndicator(
-            onRefresh: _load,
-            child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(
-              AppSpace.xl,
-              AppSpace.md,
-              AppSpace.xl,
-              // Clears the floating nav pill so the last row is never covered.
-              AppSpace.huge + AppSpace.xxl,
-            ),
-            children: [
-              // ---- compact header (Magazine Cover) -------------------------
-              ScrollReveal(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Eyebrow(
-                            text: switch (_tab) {
-                              'key' => 'License store',
-                              'app' => 'App store',
-                              _ => 'Premium store',
-                            },
-                          ),
-                          const SizedBox(height: AppSpace.xs),
-                          Text(
-                            switch (_tab) {
-                              'key' => 'Products',
-                              'app' => 'Apps & files',
-                              _ => 'Game keys',
-                            },
-                            style: AppText.headline,
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (!isPremium)
-                      Text(
-                        '${widget.coins} coins',
-                        style: AppText.figure.copyWith(
-                          fontSize: 13,
-                          color: AppColors.gold,
-                        ),
-                      ),
-                  ],
+    return _scaffold(
+      Stack(
+        children: [
+          ScrollDownCue(
+            child: RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpace.xl,
+                  AppSpace.md,
+                  AppSpace.xl,
+                  // Clears the floating nav pill so the last row is never covered.
+                  AppSpace.huge + AppSpace.xxl,
                 ),
-              ),
-              const SizedBox(height: AppSpace.md),
-
-              // ---- shelf switch (Keys | Apps) -------------------------------
-              if (Distribution.showsDownloadStore) ...[
-                ScrollReveal(
-                  delay: const Duration(milliseconds: 60),
-                  child: _segment(),
-                ),
-                const SizedBox(height: AppSpace.xl),
-              ],
-
-              // ---- balance strip (coin shelves only) -----------------------
-              if (!isPremium)
-                ScrollReveal(
-                delay: const Duration(milliseconds: 110),
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF1A1508), Color(0xFF0C1C22)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(AppRadius.hero),
-                    border: Border.all(
-                      color: AppColors.gold.withValues(alpha: .3),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.gold.withValues(alpha: .25),
-                        blurRadius: 32,
-                        spreadRadius: -4,
-                        offset: const Offset(0, 12),
-                      ),
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: .4),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      Pressable(
-                        semanticLabel: 'Open wallet',
-                        onTap: widget.onOpenWallet,
-                        child: Padding(
-                          padding: const EdgeInsets.all(AppSpace.lg),
-                          child: Row(
+                children: [
+                  // ---- compact header (Magazine Cover) -------------------------
+                  ScrollReveal(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const CoinMedallion(size: 56),
-                              const SizedBox(width: AppSpace.md + 2),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                              Eyebrow(
+                                text: switch (_tab) {
+                                  'key' => 'License store',
+                                  'app' => 'App store',
+                                  _ => 'Premium store',
+                                },
+                              ),
+                              const SizedBox(height: AppSpace.xs),
+                              Text(switch (_tab) {
+                                'key' => 'Products',
+                                'app' => 'Apps & files',
+                                _ => 'Game keys',
+                              }, style: AppText.headline),
+                            ],
+                          ),
+                        ),
+                        if (!isPremium)
+                          Text(
+                            '${widget.coins} coins',
+                            style: AppText.figure.copyWith(
+                              fontSize: 13,
+                              color: AppColors.gold,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: AppSpace.md),
+
+                  // ---- shelf switch (Keys | Apps) -------------------------------
+                  if (Distribution.showsDownloadStore) ...[
+                    ScrollReveal(
+                      delay: const Duration(milliseconds: 60),
+                      child: _segment(),
+                    ),
+                    const SizedBox(height: AppSpace.xl),
+                  ],
+
+                  // ---- balance strip (coin shelves only) -----------------------
+                  if (!isPremium)
+                    ScrollReveal(
+                      delay: const Duration(milliseconds: 110),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF1A1508), Color(0xFF0C1C22)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(AppRadius.hero),
+                          border: Border.all(
+                            color: AppColors.gold.withValues(alpha: .3),
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.gold.withValues(alpha: .25),
+                              blurRadius: 32,
+                              spreadRadius: -4,
+                              offset: const Offset(0, 12),
+                            ),
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: .4),
+                              blurRadius: 20,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            Pressable(
+                              semanticLabel: 'Open wallet',
+                              onTap: widget.onOpenWallet,
+                              child: Padding(
+                                padding: const EdgeInsets.all(AppSpace.lg),
+                                child: Row(
                                   children: [
-                                    Text(
-                                      'YOUR BALANCE',
-                                      style: AppText.caption.copyWith(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: 2.2,
+                                    const CoinMedallion(size: 56),
+                                    const SizedBox(width: AppSpace.md + 2),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'YOUR BALANCE',
+                                            style: AppText.caption.copyWith(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w700,
+                                              letterSpacing: 2.2,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.baseline,
+                                            textBaseline:
+                                                TextBaseline.alphabetic,
+                                            children: [
+                                              AnimatedCounter(
+                                                value: widget.coins,
+                                                style: monoStyle(
+                                                  fontSize: 34,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: AppColors.gold,
+                                                  height: 1.05,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                'coins',
+                                                style: AppText.caption,
+                                              ),
+                                            ],
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                    const SizedBox(height: 2),
-                                    Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.baseline,
-                                      textBaseline: TextBaseline.alphabetic,
-                                      children: [
-                                        AnimatedCounter(
-                                          value: widget.coins,
-                                          style: monoStyle(
-                                            fontSize: 34,
-                                            fontWeight: FontWeight.w800,
-                                            color: AppColors.gold,
-                                            height: 1.05,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text('coins', style: AppText.caption),
-                                      ],
+                                    Icon(
+                                      Icons.chevron_right_rounded,
+                                      size: 20,
+                                      color: AppColors.textDim.withValues(
+                                        alpha: 0.7,
+                                      ),
                                     ),
                                   ],
                                 ),
                               ),
-                              Icon(
-                                Icons.chevron_right_rounded,
-                                size: 20,
-                                color: AppColors.textDim.withValues(alpha: 0.7),
+                            ),
+                            // Top-up lives inside the balance card: one object, two taps.
+                            if (widget.onGoToEarn != null) ...[
+                              Container(
+                                height: 1,
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: AppSpace.lg,
+                                ),
+                                color: Colors.white.withValues(alpha: 0.06),
+                              ),
+                              Pressable(
+                                semanticLabel: 'Go to earn coins',
+                                onTap: widget.onGoToEarn,
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    AppSpace.lg,
+                                    AppSpace.md,
+                                    AppSpace.lg,
+                                    AppSpace.md,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.play_circle_outline_rounded,
+                                        size: 16,
+                                        color: AppColors.primary,
+                                      ),
+                                      const SizedBox(width: AppSpace.sm),
+                                      Text(
+                                        'Watch an ad to top up',
+                                        style: AppText.caption.copyWith(
+                                          color: AppColors.text,
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      Text(
+                                        'EARN',
+                                        style: AppText.label.copyWith(
+                                          fontSize: 9.5,
+                                          letterSpacing: 2,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: AppSpace.xxl),
+
+                  // ---- products -------------------------------------------------
+                  if (!isPremium && shelf.isEmpty)
+                    ScrollReveal(
+                      child: EmptyState(
+                        icon: _tab == 'key'
+                            ? Icons.storefront_outlined
+                            : Icons.apps_outlined,
+                        title: _tab == 'key'
+                            ? 'No products yet'
+                            : 'No apps yet',
+                        message: _tab == 'key'
+                            ? 'Check back soon — new keys drop regularly.'
+                            : 'Apps and files you buy with coins show up here.',
+                        action: widget.onGoToEarn == null
+                            ? null
+                            : IslandButton(
+                                expand: false,
+                                dense: true,
+                                label: 'Earn coins',
+                                icon: CupertinoIcons.play_rectangle,
+                                onPressed: widget.onGoToEarn,
+                              ),
+                      ),
+                    )
+                  else if (!isPremium) ...[
+                    ScrollReveal(
+                      child: SectionHeader(
+                        title: 'Featured',
+                        trailing: Text(
+                          _tab == 'key' ? 'LICENSE' : 'DOWNLOAD',
+                          style: AppText.label.copyWith(
+                            fontSize: 10,
+                            color: AppColors.textDim,
                           ),
                         ),
                       ),
-                      // Top-up lives inside the balance card: one object, two taps.
-                      if (widget.onGoToEarn != null) ...[
-                        Container(
-                          height: 1,
-                          margin: const EdgeInsets.symmetric(
-                            horizontal: AppSpace.lg,
-                          ),
-                          color: Colors.white.withValues(alpha: 0.06),
-                        ),
-                        Pressable(
-                          semanticLabel: 'Go to earn coins',
-                          onTap: widget.onGoToEarn,
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(
-                              AppSpace.lg,
-                              AppSpace.md,
-                              AppSpace.lg,
-                              AppSpace.md,
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.play_circle_outline_rounded,
-                                  size: 16,
-                                  color: AppColors.primary,
-                                ),
-                                const SizedBox(width: AppSpace.sm),
-                                Text(
-                                  'Watch an ad to top up',
-                                  style: AppText.caption.copyWith(
-                                    color: AppColors.text,
-                                  ),
-                                ),
-                                const Spacer(),
-                                Text(
-                                  'EARN',
-                                  style: AppText.label.copyWith(
-                                    fontSize: 9.5,
-                                    letterSpacing: 2,
-                                    color: AppColors.primary,
-                                  ),
-                                ),
-                              ],
-                            ),
+                    ),
+                    const SizedBox(height: AppSpace.xs),
+                    ScrollReveal(
+                      delay: const Duration(milliseconds: 60),
+                      child: _featuredCard(shelf.first),
+                    ),
+                    if (rest.isNotEmpty) ...[
+                      const SizedBox(height: AppSpace.xl),
+                      SectionHeader(
+                        title: 'More inside',
+                        trailing: Text(
+                          '${rest.length}',
+                          style: AppText.figure.copyWith(
+                            fontSize: 12,
+                            color: AppColors.textDim,
                           ),
                         ),
-                      ],
+                      ),
+                      _switchedShelf
+                          ? _cardShelf(rest)
+                          : ScrollReveal(
+                              delay: const Duration(milliseconds: 120),
+                              child: _cardShelf(rest),
+                            ),
                     ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: AppSpace.xxl),
+                  ],
+                  const SizedBox(height: AppSpace.xl),
 
-              // ---- products -------------------------------------------------
-              if (!isPremium && shelf.isEmpty)
-                ScrollReveal(
-                  child: EmptyState(
-                    icon: _tab == 'key'
-                        ? Icons.storefront_outlined
-                        : Icons.apps_outlined,
-                    title: _tab == 'key' ? 'No products yet' : 'No apps yet',
-                    message: _tab == 'key'
-                        ? 'Check back soon — new keys drop regularly.'
-                        : 'Apps and files you buy with coins show up here.',
-                    action: widget.onGoToEarn == null
-                        ? null
-                        : IslandButton(
-                            expand: false,
-                            dense: true,
-                            label: 'Earn coins',
-                            icon: CupertinoIcons.play_rectangle,
-                            onPressed: widget.onGoToEarn,
+                  // ---- tutorials (website CMS) — keys first, guides after ------
+                  if (!isPremium && _tutorials.isNotEmpty) ...[
+                    ScrollReveal(
+                      delay: const Duration(milliseconds: 20),
+                      child: SectionHeader(
+                        title: 'Tutorials',
+                        trailing: TextButton(
+                          onPressed: _openTutorials,
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.cyan,
+                            visualDensity: VisualDensity.compact,
                           ),
-                  ),
-                )
-              else if (!isPremium) ...[
-                ScrollReveal(
-                  child: SectionHeader(
-                    title: 'Featured',
-                    trailing: Text(
-                      _tab == 'key' ? 'LICENSE' : 'DOWNLOAD',
+                          child: const Text('See all'),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpace.sm),
+                    SizedBox(
+                      height: 240,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        clipBehavior: Clip.none,
+                        itemCount: _tutorials.length,
+                        separatorBuilder: (_, _) =>
+                            const SizedBox(width: AppSpace.md),
+                        itemBuilder: (_, i) =>
+                            TutorialCard(tutorial: _tutorials[i], width: 230),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpace.xl),
+                  ],
+
+                  // ---- top coin holders leaderboard ----------------------------
+                  if (!isPremium) _leaderboardSection(),
+
+                  // ---- premium shelf (website games, pay on site) ---------------
+                  if (isPremium) ..._premiumBody(),
+
+                  // ---- sponsored native ad ------------------------------------
+                  if (!isPremium &&
+                      shelf.isNotEmpty &&
+                      _nativeLoaded &&
+                      _nativeAd != null) ...[
+                    const SectionHeader(title: 'Sponsored'),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        minHeight: 350,
+                        maxHeight: 400,
+                      ),
+                      // Stable key: the shelf above adds/removes siblings on tab
+                      // switch and reload, and a re-matched AdWidget element would
+                      // mount the same ad twice ("already in the Widget tree").
+                      child: AdWidget(
+                        key: const ValueKey('store-native-ad'),
+                        ad: _nativeAd!,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpace.xl),
+                  ],
+
+                  Center(
+                    child: Text(
+                      _tab == 'key'
+                          ? 'FRESH DROPS · DELIVERED INSTANTLY'
+                          : _tab == 'app'
+                          ? 'MEDIAFIRE BACKED · DOWNLOADS ANY TIME'
+                          : 'PRICES IN ₱ · CHECKOUT ON GHOSSTHUB.COM',
                       style: AppText.label.copyWith(
                         fontSize: 10,
+                        letterSpacing: 2.4,
                         color: AppColors.textDim,
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: AppSpace.xs),
-                ScrollReveal(
-                  delay: const Duration(milliseconds: 60),
-                  child: _featuredCard(shelf.first),
-                ),
-                if (rest.isNotEmpty) ...[
-                  const SizedBox(height: AppSpace.xl),
-                  SectionHeader(
-                    title: 'More inside',
-                    trailing: Text(
-                      '${rest.length}',
-                      style: AppText.figure.copyWith(
-                        fontSize: 12,
-                        color: AppColors.textDim,
-                      ),
-                    ),
-                  ),
-                  _switchedShelf
-                      ? _cardShelf(rest)
-                      : ScrollReveal(
-                          delay: const Duration(milliseconds: 120),
-                          child: _cardShelf(rest),
-                        ),
                 ],
-              ],
-              const SizedBox(height: AppSpace.xl),
-
-              // ---- tutorials (website CMS) — keys first, guides after ------
-              if (!isPremium && _tutorials.isNotEmpty) ...[
-                ScrollReveal(
-                  delay: const Duration(milliseconds: 20),
-                  child: SectionHeader(
-                    title: 'Tutorials',
-                    trailing: TextButton(
-                      onPressed: _openTutorials,
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.cyan,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      child: const Text('See all'),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: AppSpace.sm),
-                SizedBox(
-                  height: 240,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    clipBehavior: Clip.none,
-                    itemCount: _tutorials.length,
-                    separatorBuilder: (_, _) =>
-                        const SizedBox(width: AppSpace.md),
-                    itemBuilder: (_, i) =>
-                        TutorialCard(tutorial: _tutorials[i], width: 230),
-                  ),
-                ),
-                const SizedBox(height: AppSpace.xl),
-              ],
-
-              // ---- top coin holders leaderboard ----------------------------
-              if (!isPremium) _leaderboardSection(),
-
-              // ---- premium shelf (website games, pay on site) ---------------
-              if (isPremium) ..._premiumBody(),
-
-              // ---- sponsored native ad ------------------------------------
-              if (!isPremium &&
-                  shelf.isNotEmpty &&
-                  _nativeLoaded &&
-                  _nativeAd != null) ...[
-                const SectionHeader(title: 'Sponsored'),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    minHeight: 350,
-                    maxHeight: 400,
-                  ),
-                  // Stable key: the shelf above adds/removes siblings on tab
-                  // switch and reload, and a re-matched AdWidget element would
-                  // mount the same ad twice ("already in the Widget tree").
-                  child: AdWidget(
-                    key: const ValueKey('store-native-ad'),
-                    ad: _nativeAd!,
-                  ),
-                ),
-                const SizedBox(height: AppSpace.xl),
-              ],
-
-              Center(
-                child: Text(
-                  _tab == 'key'
-                      ? 'FRESH DROPS · DELIVERED INSTANTLY'
-                      : _tab == 'app'
-                      ? 'MEDIAFIRE BACKED · DOWNLOADS ANY TIME'
-                      : 'PRICES IN ₱ · CHECKOUT ON GHOSSTHUB.COM',
-                  style: AppText.label.copyWith(
-                    fontSize: 10,
-                    letterSpacing: 2.4,
-                    color: AppColors.textDim,
-                  ),
-                ),
               ),
-            ],
+            ),
           ),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -1427,10 +1444,7 @@ class _StoreScreenState extends State<StoreScreen> {
           ),
         ),
         const SizedBox(height: AppSpace.xs),
-        Text(
-          'Top members with the most earned coins',
-          style: AppText.caption,
-        ),
+        Text('Top members with the most earned coins', style: AppText.caption),
         const SizedBox(height: AppSpace.md),
         if (_leaderboardLoading)
           const Skeleton(height: 140, radius: AppRadius.card)
@@ -1458,10 +1472,10 @@ class _StoreScreenState extends State<StoreScreen> {
                 final rankColor = isTop1
                     ? AppColors.gold
                     : isTop2
-                        ? const Color(0xFFC0C0C0)
-                        : isTop3
-                            ? const Color(0xFFCD7F32)
-                            : AppColors.textDim;
+                    ? const Color(0xFFC0C0C0)
+                    : isTop3
+                    ? const Color(0xFFCD7F32)
+                    : AppColors.textDim;
 
                 return Padding(
                   padding: const EdgeInsets.symmetric(

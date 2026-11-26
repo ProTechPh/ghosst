@@ -5,6 +5,7 @@ import '../arcade.dart';
 import '../premium.dart';
 import '../services/worker_backend.dart';
 import '../services/distribution.dart';
+import '../social_shell.dart';
 import '../theme.dart';
 import 'download_screen.dart';
 
@@ -245,67 +246,76 @@ class _MyKeysScreenState extends State<MyKeysScreen> {
     );
   }
 
+  Widget _scaffold(Widget body) => Scaffold(
+    backgroundColor: AppColors.bg,
+    appBar: const SocialAppBar(title: 'Purchases'),
+    body: body,
+  );
+
   @override
   Widget build(BuildContext context) {
-    if (loading) return _skeleton();
+    if (loading) return _scaffold(_skeleton());
     if (error.isNotEmpty) {
-      return EmptyState(
-        icon: Icons.cloud_off_rounded,
-        title: 'Could not load purchases',
-        message: error,
-        action: NeonButton(
-          dense: true,
-          onPressed: _load,
-          child: const Text('Retry'),
+      return _scaffold(
+        EmptyState(
+          icon: Icons.cloud_off_rounded,
+          title: 'Could not load purchases',
+          message: error,
+          action: NeonButton(
+            dense: true,
+            onPressed: _load,
+            child: const Text('Retry'),
+          ),
         ),
       );
     }
 
-    return Stack(
-      children: [
-        const Positioned.fill(child: IgnorePointer(child: TableSurface())),
-        RefreshIndicator(
-          onRefresh: _load,
-          child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(
-              AppSpace.lg,
-              AppSpace.md,
-              AppSpace.lg,
-              AppSpace.huge,
-            ),
-            children: [
-              const Eyebrow(text: 'Collection'),
-              const SizedBox(height: AppSpace.sm),
-              const Text('My purchases', style: AppText.headline),
-              const SizedBox(height: AppSpace.xs + 2),
-              Text(
-                claims.length == 1
-                    ? '1 purchase in your collection'
-                    : '${claims.length} purchases in your collection',
-                style: AppText.caption,
+    return _scaffold(
+      Stack(
+        children: [
+          RefreshIndicator(
+            onRefresh: _load,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.lg,
+                AppSpace.md,
+                AppSpace.lg,
+                AppSpace.huge,
               ),
-              const SizedBox(height: AppSpace.xl),
-              if (claims.isEmpty)
-                EmptyState(
-                  icon: Icons.shopping_bag_outlined,
-                  title: 'No purchases yet',
-                  message:
-                      'Watch ads to earn coins, then claim your first key or app in the Store.',
-                  action: widget.onGoToStore == null
-                      ? null
-                      : NeonButton(
-                          dense: true,
-                          onPressed: widget.onGoToStore,
-                          child: const Text('Browse the Store'),
-                        ),
-                )
-              else
-                for (final c in claims) _row(c),
-            ],
+              children: [
+                const Eyebrow(text: 'Collection'),
+                const SizedBox(height: AppSpace.sm),
+                const Text('My purchases', style: AppText.headline),
+                const SizedBox(height: AppSpace.xs + 2),
+                Text(
+                  claims.length == 1
+                      ? '1 purchase in your collection'
+                      : '${claims.length} purchases in your collection',
+                  style: AppText.caption,
+                ),
+                const SizedBox(height: AppSpace.xl),
+                if (claims.isEmpty)
+                  EmptyState(
+                    icon: Icons.shopping_bag_outlined,
+                    title: 'No purchases yet',
+                    message:
+                        'Watch ads to earn coins, then claim your first key or app in the Store.',
+                    action: widget.onGoToStore == null
+                        ? null
+                        : NeonButton(
+                            dense: true,
+                            onPressed: widget.onGoToStore,
+                            child: const Text('Browse the Store'),
+                          ),
+                  )
+                else
+                  for (final c in claims) _row(c),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
