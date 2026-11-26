@@ -91,11 +91,15 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
       _submitError = '';
     });
     try {
-      await (widget.submit ?? Backend.submitFeedback)(
-        _comment.text.trim(),
-        _rating,
-        key,
-      );
+      if (widget.submit != null) {
+        await widget.submit!(_comment.text.trim(), _rating, key);
+      } else {
+        await Backend.submitFeedback(
+          comment: _comment.text.trim(),
+          rating: _rating,
+          idempotencyKey: key,
+        );
+      }
       if (!mounted) return;
       _comment.clear();
       setState(() {
