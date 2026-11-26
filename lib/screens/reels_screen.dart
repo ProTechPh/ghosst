@@ -25,6 +25,8 @@ class ReelsScreen extends StatefulWidget {
     this.initialCreatorId,
     this.active = true,
     this.embedded = true,
+    this.coins = 0,
+    this.onOpenWallet,
   });
 
   final Future<ReelFeedPage> Function(String feed, int offset)? load;
@@ -41,6 +43,8 @@ class ReelsScreen extends StatefulWidget {
   final String? initialCreatorId;
   final bool active;
   final bool embedded;
+  final int coins;
+  final VoidCallback? onOpenWallet;
 
   @override
   State<ReelsScreen> createState() => _ReelsScreenState();
@@ -236,7 +240,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: title,
-      floatingActionButton: widget.onOpenUpload == null
+      floatingActionButton: widget.embedded || widget.onOpenUpload == null
           ? null
           : FloatingActionButton(
               heroTag: 'reels-upload',
@@ -272,6 +276,9 @@ class _ReelsScreenState extends State<ReelsScreen> {
                         unawaited(_load(reset: true));
                       },
                     ),
+                    const Spacer(),
+                    if (widget.onOpenWallet != null)
+                      CoinPill(coins: widget.coins, onTap: widget.onOpenWallet),
                   ],
                 ),
               ),
@@ -369,7 +376,10 @@ class _ReelPageState extends State<_ReelPage> {
         children: [
           if (images.isEmpty)
             const Center(
-              child: Icon(Icons.image_not_supported_outlined, color: Colors.white54),
+              child: Icon(
+                Icons.image_not_supported_outlined,
+                color: Colors.white54,
+              ),
             )
           else
             PageView.builder(
@@ -377,18 +387,22 @@ class _ReelPageState extends State<_ReelPage> {
               itemCount: images.length,
               onPageChanged: (i) => setState(() => _index = i),
               itemBuilder: (_, i) => CachedNetworkImage(
-                key: ValueKey('reel-image-${widget.reel.id}-${images[i].position}'),
+                key: ValueKey(
+                  'reel-image-${widget.reel.id}-${images[i].position}',
+                ),
                 imageUrl: images[i].url,
                 fit: BoxFit.cover,
-                placeholder: (_, __) => const Center(child: CircularProgressIndicator()),
+                placeholder: (_, __) =>
+                    const Center(child: CircularProgressIndicator()),
                 errorWidget: (_, __, ___) => const Center(
-                  child: Icon(Icons.broken_image_outlined, color: Colors.white54),
+                  child: Icon(
+                    Icons.broken_image_outlined,
+                    color: Colors.white54,
+                  ),
                 ),
               ),
             ),
-          const IgnorePointer(
-            child: ColoredBox(color: Color(0x22000000)),
-          ),
+          const IgnorePointer(child: ColoredBox(color: Color(0x22000000))),
           if (images.length > 1)
             Positioned(
               top: 16,
@@ -398,14 +412,19 @@ class _ReelPageState extends State<_ReelPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   for (var i = 0; i < images.length; i++)
-                    Container(
-                      key: ValueKey('reel-dot-${widget.reel.id}-$i'),
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: i == _index ? Colors.white : Colors.white38,
+                    Semantics(
+                      key: ValueKey('reel-dot-semantics-${widget.reel.id}-$i'),
+                      label: 'Image ${images[i].position} of ${images.length}',
+                      selected: i == _index,
+                      child: Container(
+                        key: ValueKey('reel-dot-${widget.reel.id}-$i'),
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: i == _index ? Colors.white : Colors.white38,
+                        ),
                       ),
                     ),
                 ],
@@ -417,7 +436,9 @@ class _ReelPageState extends State<_ReelPage> {
             child: Column(
               children: [
                 GestureDetector(
-                  key: ValueKey('reel-profile-${widget.reel.creator.displayName}'),
+                  key: ValueKey(
+                    'reel-profile-${widget.reel.creator.displayName}',
+                  ),
                   onTap: widget.onProfile == null
                       ? null
                       : () => widget.onProfile!(widget.reel.creator.id),
@@ -425,7 +446,9 @@ class _ReelPageState extends State<_ReelPage> {
                     radius: 24,
                     backgroundImage: widget.reel.creator.avatarUrl == null
                         ? null
-                        : CachedNetworkImageProvider(widget.reel.creator.avatarUrl!),
+                        : CachedNetworkImageProvider(
+                            widget.reel.creator.avatarUrl!,
+                          ),
                     child: widget.reel.creator.avatarUrl == null
                         ? Text(widget.reel.creator.initial)
                         : null,
@@ -442,7 +465,10 @@ class _ReelPageState extends State<_ReelPage> {
                 IconButton(
                   key: ValueKey('reel-comments-${widget.reel.id}'),
                   onPressed: widget.onComments,
-                  icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+                  icon: const Icon(
+                    Icons.chat_bubble_outline,
+                    color: Colors.white,
+                  ),
                 ),
                 if (widget.reel.isMine)
                   IconButton(
@@ -533,10 +559,19 @@ class _ReportDialogState extends State<_ReportDialog> {
             items: const [
               DropdownMenuItem(value: 'spam', child: Text('Spam')),
               DropdownMenuItem(value: 'harassment', child: Text('Harassment')),
-              DropdownMenuItem(value: 'hate_speech', child: Text('Hate speech')),
-              DropdownMenuItem(value: 'sexual_content', child: Text('Sexual content')),
+              DropdownMenuItem(
+                value: 'hate_speech',
+                child: Text('Hate speech'),
+              ),
+              DropdownMenuItem(
+                value: 'sexual_content',
+                child: Text('Sexual content'),
+              ),
               DropdownMenuItem(value: 'violence', child: Text('Violence')),
-              DropdownMenuItem(value: 'illegal_content', child: Text('Illegal content')),
+              DropdownMenuItem(
+                value: 'illegal_content',
+                child: Text('Illegal content'),
+              ),
               DropdownMenuItem(value: 'other', child: Text('Other')),
             ],
             onChanged: (v) => setState(() => _reason = v ?? 'spam'),
@@ -548,7 +583,10 @@ class _ReportDialogState extends State<_ReportDialog> {
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
           onPressed: () => Navigator.pop(context, {
             'reason': _reason,

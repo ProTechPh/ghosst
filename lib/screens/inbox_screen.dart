@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../services/direct_chat_service.dart';
 import '../services/worker_backend.dart';
+import '../social_shell.dart';
 import '../theme.dart';
 import 'direct_chat_screen.dart';
 
@@ -15,12 +16,18 @@ class InboxScreen extends StatefulWidget {
     this.loadUsers,
     this.searchUsers,
     this.onOpenThread,
+    this.embedded = false,
+    this.onOpenWorldChat,
+    this.onUnreadChanged,
   });
 
   final DirectChatClient? client;
   final Future<List<ChatUserSummary>> Function(List<String> ids)? loadUsers;
   final Future<List<ChatUserSummary>> Function(String query)? searchUsers;
   final void Function(DirectThread thread, ChatUserSummary peer)? onOpenThread;
+  final bool embedded;
+  final VoidCallback? onOpenWorldChat;
+  final ValueChanged<int>? onUnreadChanged;
 
   @override
   State<InboxScreen> createState() => _InboxScreenState();
@@ -62,6 +69,7 @@ class _InboxScreenState extends State<InboxScreen> {
               _loading = false;
               _failed = true;
             });
+            widget.onUnreadChanged?.call(0);
             return;
           }
           setState(() => _myId = id);
@@ -75,6 +83,9 @@ class _InboxScreenState extends State<InboxScreen> {
                 _loading = false;
                 _failed = false;
               });
+              widget.onUnreadChanged?.call(
+                sorted.where((thread) => thread.isUnread(id)).length,
+              );
               _loadPeers(sorted);
             },
             onError: (Object _) {
@@ -83,6 +94,7 @@ class _InboxScreenState extends State<InboxScreen> {
                 _loading = false;
                 _failed = true;
               });
+              widget.onUnreadChanged?.call(0);
             },
           );
         })
@@ -92,6 +104,7 @@ class _InboxScreenState extends State<InboxScreen> {
               _loading = false;
               _failed = true;
             });
+            widget.onUnreadChanged?.call(0);
           }
         });
   }
@@ -177,10 +190,55 @@ class _InboxScreenState extends State<InboxScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final body = Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpace.lg,
+            AppSpace.md,
+            AppSpace.lg,
+            AppSpace.sm,
+          ),
+          child: GlowCard(
+            onTap: widget.onOpenWorldChat,
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(AppRadius.input),
+                  ),
+                  child: const Icon(Icons.public, color: AppColors.primary),
+                ),
+                const SizedBox(width: AppSpace.md),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('World chat', style: AppText.subtitle),
+                      SizedBox(height: 2),
+                      Text(
+                        'Join the public community room',
+                        style: AppText.caption,
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: AppColors.textDim),
+              ],
+            ),
+          ),
+        ),
+        Expanded(child: _threadContent()),
+      ],
+    );
+    if (widget.embedded) return body;
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        title: const Text('Inbox'),
+      appBar: SocialAppBar(
+        title: 'Inbox',
         actions: [
           IconButton(
             tooltip: 'New message',
@@ -189,40 +247,44 @@ class _InboxScreenState extends State<InboxScreen> {
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _failed
-          ? EmptyState(
-              icon: Icons.cloud_off_outlined,
-              title: 'Could not load messages',
-              message: 'Check your connection and try again.',
-              action: TextButton(
-                onPressed: _subscribe,
-                child: const Text('Retry'),
-              ),
-            )
-          : _threads.isEmpty
-          ? EmptyState(
-              icon: Icons.forum_outlined,
-              title: 'No private messages yet',
-              message: 'Start a conversation with another Ghosst member.',
-              action: TextButton(
-                onPressed: _newMessage,
-                child: const Text('New message'),
-              ),
-            )
-          : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpace.lg,
-                AppSpace.md,
-                AppSpace.lg,
-                AppSpace.xxl,
-              ),
-              itemCount: _threads.length,
-              separatorBuilder: (_, _) => const SizedBox(height: AppSpace.sm),
-              itemBuilder: (_, i) => _row(_threads[i]),
-            ),
+      body: body,
     );
+  }
+
+  Widget _threadContent() {
+    return _loading
+        ? const Center(child: CircularProgressIndicator())
+        : _failed
+        ? EmptyState(
+            icon: Icons.cloud_off_outlined,
+            title: 'Could not load messages',
+            message: 'Check your connection and try again.',
+            action: TextButton(
+              onPressed: _subscribe,
+              child: const Text('Retry'),
+            ),
+          )
+        : _threads.isEmpty
+        ? EmptyState(
+            icon: Icons.forum_outlined,
+            title: 'No private messages yet',
+            message: 'Start a conversation with another Ghosst member.',
+            action: TextButton(
+              onPressed: _newMessage,
+              child: const Text('New message'),
+            ),
+          )
+        : ListView.separated(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpace.lg,
+              AppSpace.md,
+              AppSpace.lg,
+              AppSpace.xxl,
+            ),
+            itemCount: _threads.length,
+            separatorBuilder: (_, _) => const SizedBox(height: AppSpace.sm),
+            itemBuilder: (_, i) => _row(_threads[i]),
+          );
   }
 
   Widget _row(DirectThread thread) {

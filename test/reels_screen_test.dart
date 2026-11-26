@@ -48,6 +48,8 @@ Future<void> _pump(
   VoidCallback? onOpenUpload,
   Future<void> Function(String)? onDeleteReel,
   bool active = true,
+  int coins = 0,
+  VoidCallback? onOpenWallet,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -63,6 +65,8 @@ Future<void> _pump(
           onOpenUpload: onOpenUpload,
           onDeleteReel: onDeleteReel,
           active: active,
+          coins: coins,
+          onOpenWallet: onOpenWallet,
           loadComments: (_, __) async => const [],
           submitComment: (_, __) async {},
         ),
@@ -89,7 +93,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.dark,
-        home: Scaffold(body: ReelsScreen(key: key, active: false, load: loader)),
+        home: Scaffold(
+          body: ReelsScreen(key: key, active: false, load: loader),
+        ),
       ),
     );
     await tester.pump();
@@ -98,7 +104,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.dark,
-        home: Scaffold(body: ReelsScreen(key: key, active: true, load: loader)),
+        home: Scaffold(
+          body: ReelsScreen(key: key, active: true, load: loader),
+        ),
       ),
     );
     await tester.pump();
@@ -167,7 +175,8 @@ void main() {
     String? report;
     await _pump(
       tester,
-      load: (_, __) async => ReelFeedPage(reels: [_reel('r1', 'One')], nextOffset: 1),
+      load: (_, __) async =>
+          ReelFeedPage(reels: [_reel('r1', 'One')], nextOffset: 1),
       onLike: (id) async => liked = id,
       onUnlike: (id) async => unliked = id,
       onOpenProfile: (id) => profile = id,
@@ -228,10 +237,26 @@ void main() {
     expect(find.byKey(const ValueKey('reel-dot-r1-0')), findsOneWidget);
     expect(find.byKey(const ValueKey('reel-dot-r1-1')), findsOneWidget);
     expect(find.byKey(const ValueKey('reel-dot-r1-2')), findsOneWidget);
+    final firstDot = tester.widget<Semantics>(
+      find.byKey(const ValueKey('reel-dot-semantics-r1-0')),
+    );
+    final secondDot = tester.widget<Semantics>(
+      find.byKey(const ValueKey('reel-dot-semantics-r1-1')),
+    );
+    expect(firstDot.properties.label, 'Image 1 of 3');
+    expect(firstDot.properties.selected, isTrue);
+    expect(secondDot.properties.selected, isFalse);
 
-    await tester.drag(find.byKey(const ValueKey('reel-carousel-r1')), const Offset(-400, 0));
+    await tester.drag(
+      find.byKey(const ValueKey('reel-carousel-r1')),
+      const Offset(-400, 0),
+    );
     await _settle(tester);
     expect(find.byKey(const ValueKey('reel-image-r1-2')), findsOneWidget);
+    final selectedDot = tester.widget<Semantics>(
+      find.byKey(const ValueKey('reel-dot-semantics-r1-1')),
+    );
+    expect(selectedDot.properties.selected, isTrue);
   });
 
   testWidgets('empty and error states support Retry', (tester) async {
@@ -258,7 +283,31 @@ void main() {
     expect(find.text('Caption r1'), findsOneWidget);
   });
 
-  testWidgets('unconfigured feed shows unavailable and upload', (tester) async {
+  testWidgets('embedded home shows wallet balance without an upload FAB', (
+    tester,
+  ) async {
+    String? wallet;
+    var uploadCalls = 0;
+    await _pump(
+      tester,
+      load: (_, __) async =>
+          ReelFeedPage(reels: [_reel('r1', 'One')], nextOffset: 1),
+      coins: 250,
+      onOpenWallet: () => wallet = 'opened',
+      onOpenUpload: () => uploadCalls++,
+    );
+    await _settle(tester);
+
+    expect(find.text('250'), findsOneWidget);
+    await tester.tap(find.text('250'));
+    expect(wallet, 'opened');
+    expect(find.byTooltip('Upload reel'), findsNothing);
+    expect(uploadCalls, 0);
+  });
+
+  testWidgets('unconfigured feed shows unavailable without upload', (
+    tester,
+  ) async {
     await _pump(
       tester,
       load: (_, __) async => throw const ApiException(
@@ -270,7 +319,7 @@ void main() {
     );
     await _settle(tester);
     expect(find.text('Reels unavailable'), findsOneWidget);
-    expect(find.byTooltip('Upload reel'), findsOneWidget);
+    expect(find.byTooltip('Upload reel'), findsNothing);
   });
 
   testWidgets('initial reel from a later page is prepended and selected', (

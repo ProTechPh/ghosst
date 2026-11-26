@@ -290,7 +290,7 @@ git commit -m "feat(ui): build shop dashboard hub"
 **Interfaces:**
 - Produces:
   - `ReelsScreen` gains `int coins = 0` and `VoidCallback? onOpenWallet`; embedded Home shows a top-right `CoinPill` and no floating upload FAB.
-  - `InboxScreen` gains `bool embedded = false` and `VoidCallback? onOpenWorldChat`; embedded mode hides its outer AppBar chrome and shows a pinned World chat card.
+  - `InboxScreen` gains `bool embedded = false`, `VoidCallback? onOpenWorldChat`, and `ValueChanged<int>? onUnreadChanged`; embedded mode hides its outer AppBar chrome and shows a pinned World chat card.
 
 - [ ] **Step 1: Write failing Reels tests**
 
@@ -305,14 +305,14 @@ Add the coin pill to the embedded top row. Remove the floating upload button fro
 
 - [ ] **Step 3: Write failing Inbox tests**
 
-Assert a visible `World chat` card appears above the DM list, calls `onOpenWorldChat`, and embedded mode has no duplicate Inbox AppBar. Assert DM rows still open private threads.
+Assert a visible `World chat` card appears above the DM list, calls `onOpenWorldChat`, and embedded mode has no duplicate Inbox AppBar. Assert DM rows still open private threads and `onUnreadChanged` receives the number of unread threads.
 
 Run: `flutter test test/direct_chat_inbox_test.dart`
 Expected: FAIL on missing World chat card/embedded mode.
 
 - [ ] **Step 4: Implement unified Inbox**
 
-Add the World chat card and embedded flag. Keep DMs and unread state unchanged. Do not add activity notifications. In `HomeShell`, pass `embedded: true`, `coins`, and `onOpenWallet` to Reels; pass `embedded: true` and `onOpenWorldChat` to Inbox.
+Add the World chat card and embedded flag. Keep DMs and unread state unchanged. Report the unread-thread total through `onUnreadChanged`. Do not add activity notifications. In `HomeShell`, pass `embedded: true`, `coins`, and `onOpenWallet` to Reels; pass `embedded: true`, `onOpenWorldChat`, and `onUnreadChanged` to Inbox.
 
 - [ ] **Step 5: Run both suites**
 

@@ -1012,6 +1012,8 @@ class _HomeShellState extends State<HomeShell> {
         active: tab == SocialTab.home,
         onOpenProfile: _openUserProfile,
         onDeleteReel: Backend.deleteReel,
+        coins: coins,
+        onOpenWallet: _openWallet,
       ),
       ShopHubScreen(
         coins: coins,
@@ -1023,6 +1025,11 @@ class _HomeShellState extends State<HomeShell> {
         onOpenWallet: _openWallet,
       ),
       InboxScreen(
+        embedded: true,
+        onOpenWorldChat: _openWorldChat,
+        onUnreadChanged: (count) {
+          if (_chatUnread != count) setState(() => _chatUnread = count);
+        },
         onOpenThread: (thread, peer) => _openDirectChat(
           peerId: peer.id,
           peerName: peer.name,

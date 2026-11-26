@@ -76,6 +76,9 @@ Future<void> _pump(
   void Function(DirectThread, ChatUserSummary)? onOpenThread,
   Future<List<ChatUserSummary>> Function(List<String>)? loadUsers,
   Future<List<ChatUserSummary>> Function(String)? searchUsers,
+  bool embedded = false,
+  VoidCallback? onOpenWorldChat,
+  ValueChanged<int>? onUnreadChanged,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -95,6 +98,9 @@ Future<void> _pump(
               ],
           searchUsers: searchUsers,
           onOpenThread: onOpenThread,
+          embedded: embedded,
+          onOpenWorldChat: onOpenWorldChat,
+          onUnreadChanged: onUnreadChanged,
         ),
       ),
     ),
@@ -108,9 +114,11 @@ void main() {
   ) async {
     final client = _FakeDirectChatClient();
     final loaded = <String>[];
+    final unreadTotals = <int>[];
     await _pump(
       tester,
       client,
+      onUnreadChanged: unreadTotals.add,
       loadUsers: (ids) async {
         loaded.addAll(ids);
         return [
@@ -148,6 +156,38 @@ void main() {
       lessThan(tester.getTopLeft(find.text('Old peer')).dy),
     );
     expect(loaded, containsAll(['new', 'old']));
+    expect(unreadTotals, contains(1));
+  });
+
+  testWidgets('embedded inbox pins World chat above private threads', (
+    tester,
+  ) async {
+    final client = _FakeDirectChatClient();
+    var worldChatOpens = 0;
+    await _pump(
+      tester,
+      client,
+      embedded: true,
+      onOpenWorldChat: () => worldChatOpens++,
+    );
+    client.emit([
+      _thread(
+        id: 'me__new',
+        lastSenderId: 'new',
+        lastMessageAt: 2000,
+        lastReadAt: {'me': 1500},
+      ),
+    ]);
+    await tester.pumpAndSettle();
+
+    expect(find.text('World chat'), findsOneWidget);
+    expect(find.byType(AppBar), findsNothing);
+    expect(
+      tester.getTopLeft(find.text('World chat')).dy,
+      lessThan(tester.getTopLeft(find.text('New peer')).dy),
+    );
+    await tester.tap(find.text('World chat'));
+    expect(worldChatOpens, 1);
   });
 
   testWidgets('shows an empty state and retries a failed stream', (
