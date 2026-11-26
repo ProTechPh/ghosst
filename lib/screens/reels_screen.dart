@@ -414,7 +414,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
                 onPointerDown: _onSwipeDown,
                 onPointerUp: _onSwipeUp,
                 child: SizedBox(
-                  height: kTouchMin * 2 + AppSpace.lg,
+                  height: kTouchMin + AppSpace.xl,
                   child: Stack(
                     children: [
                       const Positioned.fill(
@@ -447,7 +447,8 @@ class _ReelsScreenState extends State<ReelsScreen> {
                                 right: AppSpace.sm,
                                 top: 0,
                                 bottom: 0,
-                                child: Center(
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
                                   child: SizedBox(
                                     height: kTouchMin,
                                     child: SingleChildScrollView(
@@ -461,7 +462,6 @@ class _ReelsScreenState extends State<ReelsScreen> {
                                           _FeedTab(
                                             feedKey: 'tutorials',
                                             label: 'Tutorials',
-                                            width: 76,
                                             selected: _section == 'tutorials',
                                             onTap: () =>
                                                 _switchSection('tutorials'),
@@ -469,7 +469,6 @@ class _ReelsScreenState extends State<ReelsScreen> {
                                           _FeedTab(
                                             feedKey: 'feedback',
                                             label: 'Feedback',
-                                            width: 76,
                                             selected: _section == 'feedback',
                                             onTap: () =>
                                                 _switchSection('feedback'),
@@ -477,7 +476,6 @@ class _ReelsScreenState extends State<ReelsScreen> {
                                           _FeedTab(
                                             feedKey: 'following',
                                             label: 'Following',
-                                            width: 76,
                                             selected: _section == 'following',
                                             onTap: () {
                                               if (_section == 'following')
@@ -492,7 +490,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
                                           _FeedTab(
                                             feedKey: 'for-you',
                                             label: 'For You',
-                                            width: 76,
+                                            showChevron: true,
                                             selected: _section == 'for-you',
                                             onTap: () {
                                               if (_section == 'for-you') return;
@@ -627,57 +625,19 @@ class _ReelsScreenState extends State<ReelsScreen> {
         child: Text('Nothing here yet', style: TextStyle(color: Colors.white)),
       );
     }
-    return PageView.builder(
-      scrollDirection: Axis.vertical,
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.lg,
+        76,
+        AppSpace.lg,
+        AppSpace.xxl,
+      ),
       itemCount: _siteFeedback.length,
-      itemBuilder: (_, i) => _feedbackPage(_siteFeedback[i]),
+      separatorBuilder: (_, _) =>
+          const Divider(height: 1, color: AppColors.border),
+      itemBuilder: (_, i) => _FeedbackPostCard(item: _siteFeedback[i]),
     );
   }
-
-  Widget _feedbackPage(WebsiteFeedback item) => Stack(
-    fit: StackFit.expand,
-    children: [
-      if (item.imageUrl != null)
-        CachedNetworkImage(
-          imageUrl: item.imageUrl!,
-          fit: BoxFit.contain,
-          fadeInDuration: Duration.zero,
-          fadeOutDuration: Duration.zero,
-          memCacheWidth: 1000,
-          placeholder: (_, _) => const ColoredBox(color: AppColors.bgSoft),
-          errorWidget: (_, _, _) =>
-              const ColoredBox(color: AppColors.surfaceHigh),
-        )
-      else
-        const ColoredBox(color: AppColors.bgSoft),
-      const IgnorePointer(child: ColoredBox(color: Color(0x33000000))),
-      Positioned(
-        left: AppSpace.lg,
-        right: AppSpace.lg,
-        bottom: AppSpace.xl,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              item.username.isEmpty ? 'Member' : '@${item.username}',
-              style: AppText.subtitle.copyWith(color: Colors.white),
-            ),
-            const SizedBox(height: AppSpace.xs),
-            Text(
-              item.comment,
-              style: AppText.body.copyWith(color: Colors.white),
-            ),
-            const SizedBox(height: AppSpace.xs),
-            Text(
-              '★' * item.rating,
-              style: const TextStyle(color: AppColors.gold, fontSize: 16),
-            ),
-          ],
-        ),
-      ),
-    ],
-  );
 
   Widget _buildBody() {
     if (_section == 'tutorials' || _section == 'feedback') {
@@ -715,27 +675,100 @@ class _ReelsScreenState extends State<ReelsScreen> {
       controller: _feedScroll,
       padding: const EdgeInsets.fromLTRB(
         AppSpace.lg,
-        AppSpace.md,
+        76,
         AppSpace.lg,
         AppSpace.xxl,
       ),
       itemCount: _reels.length,
       separatorBuilder: (_, _) =>
           const Divider(height: 1, color: AppColors.border),
-      itemBuilder: (_, i) {
-        return _PostCard(
-          reel: _reels[i],
-          liked: _liked[_reels[i].id] ?? _reels[i].isLiked,
-          likeCount: _likeCounts[_reels[i].id] ?? _reels[i].likeCount,
-          following: _following[_reels[i].id] ?? _reels[i].isFollowing,
-          onLike: () => unawaited(_toggleLike(_reels[i])),
-          onFollow: () => unawaited(_toggleFollow(_reels[i])),
-          onComments: () => unawaited(_openComments(_reels[i])),
-          onDelete: () => unawaited(_deleteReel(_reels[i])),
-          onProfile: widget.onOpenProfile,
-          onReport: () => unawaited(_report(_reels[i].id)),
-        );
-      },
+      itemBuilder: (_, i) => _PostCard(
+        reel: _reels[i],
+        liked: _liked[_reels[i].id] ?? _reels[i].isLiked,
+        likeCount: _likeCounts[_reels[i].id] ?? _reels[i].likeCount,
+        following: _following[_reels[i].id] ?? _reels[i].isFollowing,
+        onLike: () => unawaited(_toggleLike(_reels[i])),
+        onFollow: () => unawaited(_toggleFollow(_reels[i])),
+        onComments: () => unawaited(_openComments(_reels[i])),
+        onDelete: () => unawaited(_deleteReel(_reels[i])),
+        onProfile: widget.onOpenProfile,
+        onReport: () => unawaited(_report(_reels[i].id)),
+      ),
+    );
+  }
+}
+
+class _FeedbackPostCard extends StatelessWidget {
+  const _FeedbackPostCard({required this.item});
+
+  final WebsiteFeedback item;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = item.username.isEmpty ? 'Member' : item.username;
+    return Padding(
+      key: ValueKey('feedback-post-${item.id}'),
+      padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: AppColors.surfaceHigh,
+            child: Text(name[0].toUpperCase(), style: AppText.caption),
+          ),
+          const SizedBox(width: AppSpace.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        name,
+                        style: AppText.subtitle.copyWith(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '@${name.toLowerCase()}',
+                      style: AppText.caption.copyWith(color: AppColors.textDim),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpace.xs),
+                Text(item.comment, style: AppText.body.copyWith(fontSize: 13)),
+                const SizedBox(height: AppSpace.xs),
+                Text(
+                  '★' * item.rating,
+                  style: const TextStyle(color: AppColors.gold, fontSize: 14),
+                ),
+                if (item.imageUrl != null) ...[
+                  const SizedBox(height: AppSpace.sm),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadius.card),
+                    child: AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: CachedNetworkImage(
+                        imageUrl: item.imageUrl!,
+                        fit: BoxFit.contain,
+                        fadeInDuration: Duration.zero,
+                        placeholder: (_, _) =>
+                            const ColoredBox(color: AppColors.bgSoft),
+                        errorWidget: (_, _, _) =>
+                            const ColoredBox(color: AppColors.surfaceHigh),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -758,8 +791,8 @@ class _PostCarouselState extends State<_PostCarousel> {
     final images = reel.images;
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppRadius.card),
-      child: SizedBox(
-        height: 300,
+      child: AspectRatio(
+        aspectRatio: 16 / 9,
         child: Stack(
           alignment: Alignment.bottomCenter,
           children: [
@@ -770,7 +803,7 @@ class _PostCarouselState extends State<_PostCarousel> {
               itemBuilder: (_, i) => CachedNetworkImage(
                 key: ValueKey('reel-image-${reel.id}-${images[i].position}'),
                 imageUrl: images[i].url,
-                fit: BoxFit.contain,
+                fit: BoxFit.cover,
                 errorWidget: (_, _, _) => const Center(
                   child: Icon(
                     Icons.broken_image_outlined,
@@ -788,7 +821,8 @@ class _PostCarouselState extends State<_PostCarousel> {
                     for (var i = 0; i < images.length; i++)
                       Semantics(
                         key: ValueKey('reel-dot-semantics-${reel.id}-$i'),
-                        label: 'Image ${images[i].position} of ${images.length}',
+                        label:
+                            'Image ${images[i].position} of ${images.length}',
                         selected: i == _index,
                         child: Container(
                           key: ValueKey('reel-dot-${reel.id}-$i'),
@@ -797,9 +831,7 @@ class _PostCarouselState extends State<_PostCarousel> {
                           margin: const EdgeInsets.symmetric(horizontal: 3),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: i == _index
-                                ? Colors.white
-                                : Colors.white38,
+                            color: i == _index ? Colors.white : Colors.white38,
                           ),
                         ),
                       ),
@@ -1024,14 +1056,14 @@ class _FeedTab extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
-    this.width = 72,
+    this.showChevron = false,
   });
 
   final String feedKey;
   final String label;
   final bool selected;
   final VoidCallback onTap;
-  final double width;
+  final bool showChevron;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -1041,33 +1073,52 @@ class _FeedTab extends StatelessWidget {
     child: GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      child: SizedBox(
-        width: width,
-        height: kTouchMin,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppText.subtitle.copyWith(
-                fontSize: 15,
-                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                color: selected ? Colors.white : AppColors.textDim,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpace.md),
+        child: SizedBox(
+          height: kTouchMin,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.subtitle.copyWith(
+                      fontSize: 15,
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                      color: selected ? Colors.white : AppColors.textDim,
+                    ),
+                  ),
+                  if (showChevron) ...[
+                    const SizedBox(width: 2),
+                    Icon(
+                      Icons.keyboard_arrow_down,
+                      size: 16,
+                      color: selected ? Colors.white : AppColors.textDim,
+                    ),
+                  ],
+                ],
               ),
-            ),
-            const SizedBox(height: AppSpace.xs),
-            if (selected)
-              Container(
-                key: ValueKey('reel-feed-underline-$feedKey'),
-                width: 24,
-                height: 2,
-                color: Colors.white,
-              )
-            else
-              const SizedBox(width: 24, height: 2),
-          ],
+              const SizedBox(height: AppSpace.xs),
+              if (selected)
+                Container(
+                  key: ValueKey('reel-feed-underline-$feedKey'),
+                  width: 36,
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                )
+              else
+                const SizedBox(width: 36, height: 3),
+            ],
+          ),
         ),
       ),
     ),

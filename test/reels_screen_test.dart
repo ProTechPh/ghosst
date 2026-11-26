@@ -304,7 +304,7 @@ void main() {
     final image = tester.widget<CachedNetworkImage>(
       find.byKey(const ValueKey('reel-image-r1-1')),
     );
-    expect(image.fit, BoxFit.contain);
+    expect(image.fit, BoxFit.cover);
     expect(find.text('1.2K'), findsOneWidget);
     expect(find.text('34'), findsOneWidget);
     expect(find.byKey(const ValueKey('reel-follow-badge-r1')), findsOneWidget);
@@ -666,8 +666,13 @@ void main() {
       final forYouUnderline = find.byKey(
         const ValueKey('reel-feed-underline-for-you'),
       );
-      expect(tester.getSize(forYouUnderline).height, 2);
+      expect(tester.getSize(forYouUnderline).height, 3);
 
+      await tester.drag(
+        find.byKey(const ValueKey('reels-tabs-scroll')),
+        const Offset(-200, 0),
+      );
+      await _settle(tester);
       await tester.tap(find.byKey(following));
       await _settle(tester);
       expect(
@@ -681,7 +686,7 @@ void main() {
               find.byKey(const ValueKey('reel-feed-underline-following')),
             )
             .height,
-        2,
+        3,
       );
 
       expect(find.byType(CoinPill), findsNothing);
