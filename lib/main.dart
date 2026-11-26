@@ -881,6 +881,10 @@ class _HomeShellState extends State<HomeShell> {
           body: ReelsScreen(
             embedded: false,
             onFollow: Backend.followUser,
+            onDeleteReel: (id) async {
+              await Backend.deleteReel(id);
+              if (context.mounted) setState(() => _reelRefresh++);
+            },
             onOpenTutorials: _openTutorials,
             onOpenFeedback: _openWebsiteFeedback,
             initialReelId: reel.id,

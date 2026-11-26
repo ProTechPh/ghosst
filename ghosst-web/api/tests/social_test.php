@@ -110,6 +110,7 @@ function all_rows(string $sql, array $params = []): array
 {
     social_query($sql, $params);
     if (str_contains($sql, 'FROM app_reel_media')) return $GLOBALS['social_reel_media_rows'] ?? [];
+    if (str_contains($sql, 'FROM app_reel_comments')) return $GLOBALS['social_comment_rows'] ?? [];
     return str_contains($sql, 'FROM app_reels') ? $GLOBALS['social_reel_rows'] : [];
 }
 
@@ -591,5 +592,19 @@ $apiAuth = (string) file_get_contents(__DIR__ . '/../lib/auth.php');
 check(str_contains($apiAuth, "strtolower((string) (\$row['role'] ?? '')) === 'admin'"), 'API treats website admins as app admins');
 $deleteHost = (string) file_get_contents(__DIR__ . '/../../reels/delete.php');
 check(str_contains($deleteHost, "claims['reelId']") && str_contains($deleteHost, '$ids[0]'), 'delete ticket is bound to its manifest');
+
+$GLOBALS['social_comment_rows'] = [[
+    'id' => 'c1',
+    'text' => 'Nice',
+    'created_at' => '2026-11-26 10:00:00',
+    'user_id' => 651,
+    'username' => 'cankillyou',
+    'display_name' => 'Can Kill You',
+]];
+$commentList = reels_comments_list(['params' => ['id' => 'r1'], 'query' => []]);
+check(
+    ($commentList['comments'][0]['user']['id'] ?? '') === '651',
+    'comment payload carries the commenter id'
+);
 
 echo "ok\n";
