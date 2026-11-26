@@ -61,6 +61,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
   @override
   void initState() {
     super.initState();
+    _loading = widget.active;
     if (widget.active) unawaited(_load(reset: true));
   }
 
@@ -97,17 +98,10 @@ class _ReelsScreenState extends State<ReelsScreen> {
         _nextOffset = page.nextOffset;
         final items = reset ? <Reel>[] : [..._reels];
         if (reset && widget.initialReelId != null) {
-          items.addAll(
-            page.reels.where((r) => r.id != widget.initialReelId),
-          );
+          items.addAll(page.reels.where((r) => r.id == widget.initialReelId));
+          items.addAll(page.reels.where((r) => r.id != widget.initialReelId));
         } else {
           items.addAll(page.reels);
-        }
-        if (reset &&
-            widget.initialReelId != null &&
-            page.reels.every((r) => r.id != widget.initialReelId)) {
-          final selected = page.reels.where((r) => r.id == widget.initialReelId);
-          items.insertAll(0, selected);
         }
         _reels = items;
         for (final reel in page.reels) {
@@ -392,7 +386,9 @@ class _ReelPageState extends State<_ReelPage> {
                 ),
               ),
             ),
-          const ColoredBox(color: Color(0x22000000)),
+          const IgnorePointer(
+            child: ColoredBox(color: Color(0x22000000)),
+          ),
           if (images.length > 1)
             Positioned(
               top: 16,

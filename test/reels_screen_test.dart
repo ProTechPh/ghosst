@@ -54,6 +54,7 @@ Future<void> _pump(
       theme: AppTheme.dark,
       home: Scaffold(
         body: ReelsScreen(
+          key: UniqueKey(),
           load: load,
           onLike: onLike,
           onUnlike: onUnlike,
@@ -69,6 +70,11 @@ Future<void> _pump(
     ),
   );
   await tester.pump();
+}
+
+Future<void> _settle(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
 }
 
 void main() {
@@ -119,12 +125,12 @@ void main() {
     second.complete(
       ReelFeedPage(reels: [_reel('following', 'Followed')], nextOffset: 1),
     );
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.text('Caption following'), findsOneWidget);
     first.complete(
       ReelFeedPage(reels: [_reel('stale', 'Stale')], nextOffset: 1),
     );
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(calls, 2);
     expect(find.text('Caption following'), findsOneWidget);
     expect(find.text('Caption stale'), findsNothing);
@@ -143,11 +149,11 @@ void main() {
       },
       onDeleteReel: (id) async => deleted = id,
     );
-    await tester.pumpAndSettle();
+    await _settle(tester);
     await tester.tap(find.byKey(const ValueKey('reel-delete-mine')));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     await tester.tap(find.text('Delete'));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(deleted, 'mine');
     expect(find.text('No reels yet'), findsOneWidget);
   });
@@ -177,7 +183,7 @@ void main() {
             report = '$targetType:$targetId';
           },
     );
-    await tester.pumpAndSettle();
+    await _settle(tester);
 
     expect(find.text('For You'), findsOneWidget);
     expect(find.text('Following'), findsOneWidget);
@@ -194,16 +200,16 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Comments'), findsOneWidget);
     await tester.pageBack();
-    await tester.pumpAndSettle();
+    await _settle(tester);
 
     await tester.tap(find.byKey(const ValueKey('reel-profile-One')));
     expect(profile, 'One');
 
     await tester.tap(find.byKey(const ValueKey('reel-report-r1')));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.text('Report reel'), findsOneWidget);
     await tester.tap(find.text('Submit report'));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(report, 'reel:r1');
   });
 
@@ -217,14 +223,14 @@ void main() {
         nextOffset: 1,
       ),
     );
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.byKey(const ValueKey('reel-image-r1-1')), findsOneWidget);
     expect(find.byKey(const ValueKey('reel-dot-r1-0')), findsOneWidget);
     expect(find.byKey(const ValueKey('reel-dot-r1-1')), findsOneWidget);
     expect(find.byKey(const ValueKey('reel-dot-r1-2')), findsOneWidget);
 
     await tester.drag(find.byKey(const ValueKey('reel-carousel-r1')), const Offset(-400, 0));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.byKey(const ValueKey('reel-image-r1-2')), findsOneWidget);
   });
 
@@ -233,7 +239,7 @@ void main() {
       tester,
       load: (_, __) async => const ReelFeedPage(reels: [], nextOffset: 0),
     );
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.text('No reels yet'), findsOneWidget);
 
     var fail = true;
@@ -244,11 +250,11 @@ void main() {
         return ReelFeedPage(reels: [_reel('r1', 'One')], nextOffset: 1);
       },
     );
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.text('Could not load reels'), findsOneWidget);
     fail = false;
     await tester.tap(find.text('Retry'));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.text('Caption r1'), findsOneWidget);
   });
 
@@ -262,7 +268,7 @@ void main() {
       ),
       onOpenUpload: () {},
     );
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.text('Reels unavailable'), findsOneWidget);
     expect(find.byTooltip('Upload reel'), findsOneWidget);
   });
@@ -286,7 +292,7 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.text('Caption selected'), findsOneWidget);
   });
 }

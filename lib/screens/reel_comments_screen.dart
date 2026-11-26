@@ -24,7 +24,7 @@ class _ReelCommentsScreenState extends State<ReelCommentsScreen> {
   final _scroll = ScrollController();
   List<ReelComment> _comments = [];
   int _offset = 0;
-  bool _loading = true;
+  bool _loading = false;
   bool _failed = false;
   bool _hasMore = true;
   bool _sending = false;
