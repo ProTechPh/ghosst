@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../../includes/image_upload.php';
+require_once __DIR__ . '/../lib/uploads.php';
 
 /** Admin product images go to the site's FTP storage (uploads/products). */
 function uploads_product_image(array $ctx): array
@@ -19,7 +20,7 @@ function uploads_product_image(array $ctx): array
     if ($path === null) {
         throw new ApiError(400, 'image_required', 'Choose an image first.');
     }
-    return ['ok' => true, 'path' => $path];
+    return ['ok' => true, 'path' => $path, 'url' => product_image_url($path)];
 }
 
 /**

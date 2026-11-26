@@ -45,8 +45,17 @@ api_error(
     'forbidden'
 );
 
-require __DIR__ . '/../lib/uploads.php';
+if (!defined('PUBLIC_CDN')) define('PUBLIC_CDN', 'https://ghossthub.com');
+require_once __DIR__ . '/../lib/uploads.php';
 
+check(
+    product_image_url('uploads/products/a.jpg') === 'https://ghossthub.com/uploads/products/a.jpg',
+    'relative key becomes an absolute preview URL'
+);
+check(
+    product_image_url('https://cdn.example/a.jpg') === 'https://cdn.example/a.jpg',
+    'absolute URL passes through'
+);
 check(
     delete_stored_image('https://res.cloudinary.com/zp6uwlrj/image/upload/a.jpg') === false,
     'foreign URL is not deleted'

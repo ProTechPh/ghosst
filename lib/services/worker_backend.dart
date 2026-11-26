@@ -164,7 +164,8 @@ class Backend {
   static Future<String> uploadProductImage(String path) async {
     final form = FormData.fromMap({'image': MultipartFile.fromFileSync(path)});
     final res = await _api.post('/uploads/product-image', data: form);
-    return res['path'] as String;
+    final url = res['url'] as String?;
+    return (url != null && url.isNotEmpty ? url : res['path']) as String;
   }
 
   static Future<void> deleteAccount() async {
