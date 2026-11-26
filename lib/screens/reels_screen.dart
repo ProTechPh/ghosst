@@ -31,6 +31,8 @@ class ReelsScreen extends StatefulWidget {
     this.onOpenWallet,
     this.onOpenTutorials,
     this.onOpenFeedback,
+    this.loadTutorials,
+    this.loadSiteFeedback,
   });
 
   final Future<ReelFeedPage> Function(String feed, int offset)? load;
@@ -53,6 +55,8 @@ class ReelsScreen extends StatefulWidget {
   final VoidCallback? onOpenWallet;
   final VoidCallback? onOpenTutorials;
   final VoidCallback? onOpenFeedback;
+  final Future<List<Tutorial>> Function()? loadTutorials;
+  final Future<List<WebsiteFeedback>> Function()? loadSiteFeedback;
 
   @override
   State<ReelsScreen> createState() => _ReelsScreenState();
@@ -60,6 +64,11 @@ class ReelsScreen extends StatefulWidget {
 
 class _ReelsScreenState extends State<ReelsScreen> {
   String _feed = 'for-you';
+  String _section = 'for-you';
+  List<Tutorial> _tutorials = const [];
+  List<WebsiteFeedback> _siteFeedback = const [];
+  bool _extraLoading = false;
+  String? _extraError;
   int _requestId = 0;
   List<Reel> _reels = [];
   int _nextOffset = 0;
@@ -142,6 +151,47 @@ class _ReelsScreenState extends State<ReelsScreen> {
         _loadingMore = false;
         _error = 'Could not load reels';
       });
+    }
+  }
+
+  void _switchSection(String section) {
+    if (_section == section) return;
+    setState(() {
+      _section = section;
+      _extraError = null;
+    });
+    if (section == 'tutorials' || section == 'feedback') {
+      unawaited(_loadExtra(section));
+    } else if (_reels.isEmpty && !_loading) {
+      unawaited(_load(reset: true));
+    }
+  }
+
+  Future<void> _loadExtra(String section) async {
+    setState(() {
+      _extraLoading = true;
+      _extraError = null;
+    });
+    try {
+      final rows = section == 'tutorials'
+          ? await (widget.loadTutorials ?? Backend.tutorials)()
+          : await (widget.loadSiteFeedback ?? Backend.publicFeedback)();
+      if (!mounted) return;
+      setState(() {
+        if (section == 'tutorials') {
+          _tutorials = rows as List<Tutorial>;
+        } else {
+          _siteFeedback = rows as List<WebsiteFeedback>;
+        }
+        _extraLoading = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _extraLoading = false;
+          _extraError = 'Could not load $section.';
+        });
+      }
     }
   }
 
@@ -332,62 +382,58 @@ class _ReelsScreenState extends State<ReelsScreen> {
                         height: kTouchMin + AppSpace.md,
                         child: Stack(
                           children: [
-                            if (widget.onOpenTutorials != null ||
-                                widget.onOpenFeedback != null)
-                              Positioned(
-                                left: AppSpace.sm,
-                                top: 0,
-                                bottom: 0,
-                                child: Center(
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (widget.onOpenTutorials != null)
-                                        _TopShortcut(
-                                          key: const ValueKey(
-                                            'reel-shortcut-tutorials',
-                                          ),
-                                          label: 'Tutorials',
-                                          onTap: widget.onOpenTutorials!,
-                                        ),
-                                      if (widget.onOpenFeedback != null)
-                                        _TopShortcut(
-                                          key: const ValueKey(
-                                            'reel-shortcut-feedback',
-                                          ),
-                                          label: 'Feedback',
-                                          onTap: widget.onOpenFeedback!,
-                                        ),
-                                    ],
-                                  ),
+                            Positioned(
+                              left: AppSpace.sm,
+                              top: 0,
+                              bottom: 0,
+                              child: Center(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _FeedTab(
+                                      feedKey: 'tutorials',
+                                      label: 'Tutorials',
+                                      width: 56,
+                                      selected: _section == 'tutorials',
+                                      onTap: () => _switchSection('tutorials'),
+                                    ),
+                                    _FeedTab(
+                                      feedKey: 'feedback',
+                                      label: 'Feedback',
+                                      width: 56,
+                                      selected: _section == 'feedback',
+                                      onTap: () => _switchSection('feedback'),
+                                    ),
+                                    _FeedTab(
+                                      feedKey: 'following',
+                                      label: 'Following',
+                                      width: 56,
+                                      selected: _section == 'following',
+                                      onTap: () {
+                                        if (_section == 'following') return;
+                                        setState(() {
+                                          _section = 'following';
+                                          _feed = 'following';
+                                        });
+                                        unawaited(_load(reset: true));
+                                      },
+                                    ),
+                                    _FeedTab(
+                                      feedKey: 'for-you',
+                                      label: 'For You',
+                                      width: 56,
+                                      selected: _section == 'for-you',
+                                      onTap: () {
+                                        if (_section == 'for-you') return;
+                                        setState(() {
+                                          _section = 'for-you';
+                                          _feed = 'for-you';
+                                        });
+                                        unawaited(_load(reset: true));
+                                      },
+                                    ),
+                                  ],
                                 ),
-                              ),
-                            Center(
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _FeedTab(
-                                    feedKey: 'following',
-                                    label: 'Following',
-                                    selected: _feed == 'following',
-                                    onTap: () {
-                                      if (_feed == 'following') return;
-                                      setState(() => _feed = 'following');
-                                      unawaited(_load(reset: true));
-                                    },
-                                  ),
-                                  const SizedBox(width: AppSpace.lg),
-                                  _FeedTab(
-                                    feedKey: 'for-you',
-                                    label: 'For You',
-                                    selected: _feed == 'for-you',
-                                    onTap: () {
-                                      if (_feed == 'for-you') return;
-                                      setState(() => _feed = 'for-you');
-                                      unawaited(_load(reset: true));
-                                    },
-                                  ),
-                                ],
                               ),
                             ),
                             if (widget.onOpenWallet != null)
@@ -416,7 +462,93 @@ class _ReelsScreenState extends State<ReelsScreen> {
     );
   }
 
+  Widget _extraContent() {
+    if (_extraLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_extraError != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(_extraError!, style: const TextStyle(color: Colors.white)),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: () => unawaited(_loadExtra(_section)),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+    final isTutorials = _section == 'tutorials';
+    final count = isTutorials ? _tutorials.length : _siteFeedback.length;
+    if (count == 0) {
+      return const Center(
+        child: Text('Nothing here yet', style: TextStyle(color: Colors.white)),
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.all(AppSpace.lg),
+      itemCount: count,
+      separatorBuilder: (_, _) => const SizedBox(height: AppSpace.sm),
+      itemBuilder: (_, i) {
+        if (isTutorials) {
+          final t = _tutorials[i];
+          return _extraCard(
+            key: ValueKey('reel-tutorial-${t.id}'),
+            title: t.title,
+            subtitle: t.category,
+            body: t.content,
+          );
+        }
+        final f = _siteFeedback[i];
+        return _extraCard(
+          key: ValueKey('reel-feedback-${f.id}'),
+          title: f.username.isEmpty ? 'Member' : f.username,
+          subtitle: '★' * f.rating,
+          body: f.comment,
+        );
+      },
+    );
+  }
+
+  Widget _extraCard({
+    required Key key,
+    required String title,
+    required String subtitle,
+    required String body,
+  }) => GlowCard(
+    key: key,
+    padding: const EdgeInsets.all(AppSpace.md),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: AppText.subtitle.copyWith(fontSize: 15)),
+        if (subtitle.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: AppText.caption.copyWith(color: AppColors.gold),
+          ),
+        ],
+        if (body.isNotEmpty) ...[
+          const SizedBox(height: AppSpace.xs),
+          Text(
+            body,
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
+            style: AppText.body.copyWith(fontSize: 13),
+          ),
+        ],
+      ],
+    ),
+  );
+
   Widget _buildBody() {
+    if (_section == 'tutorials' || _section == 'feedback') {
+      return _extraContent();
+    }
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -772,12 +904,14 @@ class _FeedTab extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.width = 72,
   });
 
   final String feedKey;
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final double width;
 
   @override
   Widget build(BuildContext context) {
@@ -789,7 +923,7 @@ class _FeedTab extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: SizedBox(
-          width: 72,
+          width: width,
           height: kTouchMin,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -820,38 +954,6 @@ class _FeedTab extends StatelessWidget {
       ),
     );
   }
-}
-
-class _TopShortcut extends StatelessWidget {
-  const _TopShortcut({super.key, required this.label, required this.onTap});
-
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-    button: true,
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: SizedBox(
-        width: 58,
-        height: kTouchMin,
-        child: Center(
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppText.subtitle.copyWith(
-              fontSize: 12,
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
 }
 
 class _ReportDialog extends StatefulWidget {

@@ -63,6 +63,8 @@ Future<void> _pump(
   VoidCallback? onOpenWallet,
   VoidCallback? onOpenTutorials,
   VoidCallback? onOpenFeedback,
+  Future<List<Tutorial>> Function()? loadTutorials,
+  Future<List<WebsiteFeedback>> Function()? loadSiteFeedback,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -84,6 +86,8 @@ Future<void> _pump(
           onOpenWallet: onOpenWallet,
           onOpenTutorials: onOpenTutorials,
           onOpenFeedback: onOpenFeedback,
+          loadTutorials: loadTutorials,
+          loadSiteFeedback: loadSiteFeedback,
           loadComments: (_, _) async => const [],
           submitComment: (_, _) async {},
         ),
@@ -384,31 +388,64 @@ void main() {
     expect(find.byKey(const ValueKey('reel-follow-badge-r2')), findsOneWidget);
   });
 
-  testWidgets('top bar shortcuts open tutorials and feedback', (tester) async {
-    final opened = <String>[];
+  testWidgets('tutorials and feedback are tabs in the same feed', (
+    tester,
+  ) async {
     await _pump(
       tester,
       load: (_, _) async => ReelFeedPage(
         reels: [_reel('r1', 'One')],
         nextOffset: 1,
       ),
-      onOpenTutorials: () => opened.add('tutorials'),
-      onOpenFeedback: () => opened.add('feedback'),
+      loadTutorials: () async => [
+        const Tutorial(
+          id: 1,
+          title: 'How to claim keys',
+          slug: 'claim',
+          category: 'Guide',
+          videoUrl: '',
+          content: 'Watch the ad then open your keys.',
+          views: 0,
+          createdAt: '',
+        ),
+      ],
+      loadSiteFeedback: () async => [
+        const WebsiteFeedback(
+          id: '1',
+          username: 'juan',
+          comment: 'Nice app',
+          rating: 5,
+          createdAt: '',
+        ),
+      ],
     );
     await _settle(tester);
 
-    expect(
-      find.byKey(const ValueKey('reel-shortcut-tutorials')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('reel-shortcut-feedback')),
-      findsOneWidget,
-    );
-    await tester.tap(find.byKey(const ValueKey('reel-shortcut-tutorials')));
-    await tester.tap(find.byKey(const ValueKey('reel-shortcut-feedback')));
-    await tester.pump();
-    expect(opened, ['tutorials', 'feedback']);
+    final tabs = [
+      const ValueKey('reel-feed-tutorials'),
+      const ValueKey('reel-feed-feedback'),
+      const ValueKey('reel-feed-following'),
+      const ValueKey('reel-feed-for-you'),
+    ];
+    final centers = <double>[];
+    for (final key in tabs) {
+      expect(find.byKey(key), findsOneWidget);
+      centers.add(tester.getCenter(find.byKey(key)).dy);
+    }
+    expect(centers.every((dy) => (dy - centers.first).abs() < 1), isTrue);
+
+    await tester.tap(find.byKey(const ValueKey('reel-feed-tutorials')));
+    await _settle(tester);
+    expect(find.text('How to claim keys'), findsOneWidget);
+    expect(find.byKey(const ValueKey('reel-feed-for-you')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('reel-feed-feedback')));
+    await _settle(tester);
+    expect(find.text('Nice app'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('reel-feed-for-you')));
+    await _settle(tester);
+    expect(find.text('Caption r1'), findsOneWidget);
   });
 
   testWidgets('plus badge follows the creator', (tester) async {
@@ -526,11 +563,18 @@ void main() {
           greaterThanOrEqualTo(48),
         );
       }
-      final tabsCenter =
-          (tester.getCenter(find.byKey(forYou)).dx +
-              tester.getCenter(find.byKey(following)).dx) /
-          2;
-      expect(tabsCenter, closeTo(160, 1));
+      for (final key in [
+        const ValueKey('reel-feed-tutorials'),
+        const ValueKey('reel-feed-feedback'),
+        forYou,
+        following,
+      ]) {
+        expect(find.byKey(key), findsOneWidget);
+      }
+      expect(
+        tester.getCenter(find.byKey(forYou)).dy,
+        closeTo(tester.getCenter(find.byKey(following)).dy, 1),
+      );
 
       final forYouSemantics = tester.widget<Semantics>(find.byKey(forYou));
       final followingSemantics = tester.widget<Semantics>(
