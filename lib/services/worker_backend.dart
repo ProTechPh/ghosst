@@ -161,6 +161,18 @@ class Backend {
       (await _api.get('/firebase/token'))['token'] as String;
 
   /// Admin product image → the site's FTP storage (uploads/products).
+  static Future<String> updateBio(String bio) async {
+    final res = await _api.post('/me/profile', data: {'bio': bio.trim()});
+    return (res['bio'] ?? '').toString();
+  }
+
+  static Future<String> uploadCover(String path) async {
+    final form = FormData.fromMap({'image': MultipartFile.fromFileSync(path)});
+    final res = await _api.post('/uploads/cover', data: form);
+    final url = res['url'] as String?;
+    return (url != null && url.isNotEmpty ? url : res['path']) as String;
+  }
+
   static Future<String> uploadProductImage(String path) async {
     final form = FormData.fromMap({'image': MultipartFile.fromFileSync(path)});
     final res = await _api.post('/uploads/product-image', data: form);

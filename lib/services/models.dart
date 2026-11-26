@@ -57,6 +57,8 @@ class PublicUser {
     required this.followingCount,
     required this.reelCount,
     this.avatarUrl,
+    this.bio = '',
+    this.coverUrl,
     this.isAdmin = false,
     this.isModerator = false,
     this.isFollowing = false,
@@ -68,6 +70,8 @@ class PublicUser {
   final String username;
   final String createdAt;
   final String? avatarUrl;
+  final String bio;
+  final String? coverUrl;
   final bool isAdmin;
   final bool isModerator;
   final int followerCount;
@@ -91,6 +95,7 @@ class PublicUser {
     final username = json['username'] as String? ?? '';
     final displayName = (json['displayName'] as String? ?? '').trim();
     final avatar = (json['avatarUrl'] as String? ?? '').trim();
+    final cover = (json['coverUrl'] as String? ?? '').trim();
     return PublicUser(
       id: id,
       displayName: displayName.isNotEmpty
@@ -99,6 +104,8 @@ class PublicUser {
       username: username,
       createdAt: json['createdAt'] as String? ?? '',
       avatarUrl: avatar.isEmpty ? null : avatar,
+      bio: (json['bio'] as String? ?? '').trim(),
+      coverUrl: cover.isEmpty ? null : cover,
       isAdmin: json['isAdmin'] == true,
       isModerator: json['isModerator'] == true,
       followerCount: count('followerCount'),

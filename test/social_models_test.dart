@@ -2,6 +2,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/services/models.dart';
 
 void main() {
+  test('PublicUser parses bio and cover from a profile payload', () {
+    final user = PublicUser.fromJson({
+      'id': 42,
+      'bio': 'Official drops and updates.',
+      'coverUrl': 'https://ghossthub.com/uploads/covers/a.jpg',
+    });
+
+    expect(user.bio, 'Official drops and updates.');
+    expect(user.coverUrl, 'https://ghossthub.com/uploads/covers/a.jpg');
+  });
+
   test('PublicUser parses a complete safe profile', () {
     final user = PublicUser.fromJson({
       'id': 42,
@@ -42,6 +53,8 @@ void main() {
     expect(user.displayName, 'Member #42');
     expect(user.username, '');
     expect(user.avatarUrl, isNull);
+    expect(user.bio, '');
+    expect(user.coverUrl, isNull);
     expect(user.createdAt, '');
     expect(user.followerCount, 0);
     expect(user.followingCount, 0);
