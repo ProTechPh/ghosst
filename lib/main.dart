@@ -872,6 +872,8 @@ class _HomeShellState extends State<HomeShell> {
           body: ReelsScreen(
             embedded: false,
             onFollow: Backend.followUser,
+            onOpenTutorials: _openTutorials,
+            onOpenFeedback: _openFeedback,
             initialReelId: reel.id,
             initialCreatorId: reel.creator.id,
             load: (feed, offset) async {
@@ -1041,6 +1043,8 @@ class _HomeShellState extends State<HomeShell> {
       ReelsScreen(
         active: tab == SocialTab.home,
         onFollow: Backend.followUser,
+        onOpenTutorials: _openTutorials,
+        onOpenFeedback: _openFeedback,
         refreshToken: _reelRefresh,
         onOpenProfile: _openUserProfile,
         onDeleteReel: Backend.deleteReel,

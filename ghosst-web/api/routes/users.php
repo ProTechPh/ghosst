@@ -122,6 +122,12 @@ function users_update_bio(array $ctx): array
         }
     }
 
+    $oldCover = '';
+    if ($cover !== null) {
+        $row = one('SELECT cover_url FROM ' . T_USERS . ' WHERE id = ?', [$uid]);
+        $oldCover = cover_key_of((string) ($row['cover_url'] ?? ''));
+    }
+
     $sets = [];
     $params = [];
     if ($bio !== null) { $sets[] = 'bio = ?'; $params[] = $bio; }
@@ -131,6 +137,10 @@ function users_update_bio(array $ctx): array
     }
     $params[] = $uid;
     run_sql('UPDATE ' . T_USERS . ' SET ' . implode(', ', $sets) . ' WHERE id = ?', $params);
+
+    if ($cover !== null && $oldCover !== '' && $oldCover !== cover_key_of($cover)) {
+        delete_cover_image($oldCover);
+    }
 
     $result = ['ok' => true];
     if ($bio !== null) $result['bio'] = $bio;

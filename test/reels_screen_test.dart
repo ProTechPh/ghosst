@@ -61,6 +61,8 @@ Future<void> _pump(
   int refreshToken = 0,
   int coins = 0,
   VoidCallback? onOpenWallet,
+  VoidCallback? onOpenTutorials,
+  VoidCallback? onOpenFeedback,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -80,6 +82,8 @@ Future<void> _pump(
           refreshToken: refreshToken,
           coins: coins,
           onOpenWallet: onOpenWallet,
+          onOpenTutorials: onOpenTutorials,
+          onOpenFeedback: onOpenFeedback,
           loadComments: (_, _) async => const [],
           submitComment: (_, _) async {},
         ),
@@ -378,6 +382,25 @@ void main() {
     );
     await _settle(tester);
     expect(find.byKey(const ValueKey('reel-follow-badge-r2')), findsOneWidget);
+  });
+
+  testWidgets('top bar shortcuts open tutorials and feedback', (tester) async {
+    final opened = <String>[];
+    await _pump(
+      tester,
+      load: (_, _) async => ReelFeedPage(
+        reels: [_reel('r1', 'One')],
+        nextOffset: 1,
+      ),
+      onOpenTutorials: () => opened.add('tutorials'),
+      onOpenFeedback: () => opened.add('feedback'),
+    );
+    await _settle(tester);
+
+    await tester.tap(find.byTooltip('Tutorials'));
+    await tester.tap(find.byTooltip('Send feedback'));
+    await tester.pump();
+    expect(opened, ['tutorials', 'feedback']);
   });
 
   testWidgets('plus badge follows the creator', (tester) async {

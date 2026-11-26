@@ -74,4 +74,11 @@ check(
     'cover key becomes an absolute URL'
 );
 
+check(
+    cover_key_of('https://ghossthub.com/uploads/covers/a.jpg') === 'uploads/covers/a.jpg',
+    'absolute cover URL maps to its stored key'
+);
+check(delete_cover_image('../config.php') === false, 'cover delete rejects foreign paths');
+check(delete_cover_image('uploads/covers/missing.jpg') === false, 'missing cover delete is false');
+
 echo "ok\n";

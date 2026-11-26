@@ -29,6 +29,8 @@ class ReelsScreen extends StatefulWidget {
     this.refreshToken = 0,
     this.coins = 0,
     this.onOpenWallet,
+    this.onOpenTutorials,
+    this.onOpenFeedback,
   });
 
   final Future<ReelFeedPage> Function(String feed, int offset)? load;
@@ -49,6 +51,8 @@ class ReelsScreen extends StatefulWidget {
   final int refreshToken;
   final int coins;
   final VoidCallback? onOpenWallet;
+  final VoidCallback? onOpenTutorials;
+  final VoidCallback? onOpenFeedback;
 
   @override
   State<ReelsScreen> createState() => _ReelsScreenState();
@@ -328,6 +332,50 @@ class _ReelsScreenState extends State<ReelsScreen> {
                         height: kTouchMin + AppSpace.md,
                         child: Stack(
                           children: [
+                            if (widget.onOpenTutorials != null ||
+                                widget.onOpenFeedback != null)
+                              Positioned(
+                                left: AppSpace.sm,
+                                top: 0,
+                                bottom: 0,
+                                child: Center(
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (widget.onOpenTutorials != null)
+                                        IconButton(
+                                          tooltip: 'Tutorials',
+                                          onPressed: widget.onOpenTutorials,
+                                          icon: const Icon(
+                                            Icons.menu_book_outlined,
+                                            size: 18,
+                                          ),
+                                          iconSize: 18,
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints.tightFor(
+                                            width: 32,
+                                            height: 32,
+                                          ),
+                                        ),
+                                      if (widget.onOpenFeedback != null)
+                                        IconButton(
+                                          tooltip: 'Send feedback',
+                                          onPressed: widget.onOpenFeedback,
+                                          icon: const Icon(
+                                            Icons.feedback_outlined,
+                                            size: 18,
+                                          ),
+                                          iconSize: 18,
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints.tightFor(
+                                            width: 32,
+                                            height: 32,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             Center(
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
