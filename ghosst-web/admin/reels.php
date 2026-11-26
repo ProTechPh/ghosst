@@ -126,7 +126,7 @@ renderAdminSidebar($admin, 'reels');
   <div class="gs-feed-head">
     <form method="get" class="gs-filter">
       <label for="status-filter">Status</label>
-      <select id="status-filter" name="status">
+      <select id="status-filter" name="status" class="form-select" style="width:auto;min-width:140px">
         <option value="">All</option>
         <?php foreach (['pending', 'visible', 'hidden', 'deleted'] as $option): ?>
           <option value="<?= $option ?>" <?= $statusFilter === $option ? 'selected' : '' ?>><?= ucfirst($option) ?></option>
@@ -160,7 +160,7 @@ renderAdminSidebar($admin, 'reels');
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>">
             <input type="hidden" name="action" value="reel_status">
             <input type="hidden" name="id" value="<?= htmlspecialchars($reel['id']) ?>">
-            <select name="status" aria-label="New status">
+            <select name="status" class="form-select" aria-label="New status" style="width:auto;min-width:110px">
               <?php foreach (['visible', 'hidden', 'deleted'] as $option): ?>
                 <option value="<?= $option ?>" <?= $reel['status'] === $option ? 'selected' : '' ?>><?= ucfirst($option) ?></option>
               <?php endforeach; ?>
