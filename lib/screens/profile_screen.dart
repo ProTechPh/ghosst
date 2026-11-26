@@ -24,7 +24,7 @@ class ProfileScreen extends StatefulWidget {
     super.key,
     required this.onSignOut,
     required this.onAccountDeleted,
-    required this.onGoToTab,
+    required this.onOpenKeys,
   });
 
   /// Signs out of the session. The shell flips back to the landing page.
@@ -34,7 +34,7 @@ class ProfileScreen extends StatefulWidget {
   final VoidCallback onAccountDeleted;
 
   /// Pops this route and activates a bottom-bar tab (e.g. My Purchases).
-  final void Function(int tab) onGoToTab;
+  final VoidCallback onOpenKeys;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -363,7 +363,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     icon: Icons.shopping_bag_outlined,
                     label: 'My Purchases',
                     hint: '${groupDigits(_claims.length)} claimed',
-                    onTap: () => widget.onGoToTab(2),
+                    onTap: widget.onOpenKeys,
                   ),
                   if (Distribution.showsDownloadStore)
                     _row(

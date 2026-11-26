@@ -1,9 +1,6 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'dart:ui' show ImageFilter;
-import 'package:flutter/services.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -12,16 +9,16 @@ import 'api/api_exception.dart';
 import 'arcade.dart';
 import 'premium.dart';
 import 'screens/adblock_screen.dart';
-import 'screens/admin_screen.dart';
-import 'screens/announcements_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/direct_chat_screen.dart';
 import 'screens/earn_screen.dart';
+import 'screens/feedback_screen.dart';
 import 'screens/inbox_screen.dart';
 import 'screens/landing_screen.dart';
 import 'screens/my_keys_screen.dart';
 import 'screens/notice_screen.dart';
 import 'screens/profile_screen.dart';
+import 'screens/profile_hub_screen.dart';
 import 'screens/reel_upload_screen.dart';
 import 'screens/reels_screen.dart';
 import 'screens/social_list_screen.dart';
@@ -48,6 +45,7 @@ import 'services/read_store.dart';
 import 'services/reel_upload_service.dart';
 import 'services/security.dart';
 import 'sign_in.dart';
+import 'social_shell.dart';
 import 'theme.dart';
 
 Future<void> main() async {
@@ -489,7 +487,7 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
-  int tab = 0;
+  SocialTab tab = SocialTab.home;
   int coins = 0;
   bool isAdmin = false;
   bool isModerator = false;
@@ -497,9 +495,7 @@ class _HomeShellState extends State<HomeShell> {
   String display = '';
   String? photoUrl;
   int _chatUnread = 0;
-  int _announcementUnread = 0;
   final Set<String> _openingProfiles = {};
-  List<Announcement> _announcements = const [];
   Announcement? announcement;
 
   /// Passive formats (banner + interstitial) — profit only, no coins.
@@ -669,15 +665,11 @@ class _HomeShellState extends State<HomeShell> {
     balance = await coinsFuture;
     // A failed banner fetch just means no banner; it must not break the shell.
     Announcement? fresh;
-    var unreadAnnouncements = 0;
     var allAnnouncements = const <Announcement>[];
     try {
       final stored = await AnnouncementStore.dismissedId();
-      final seenAt = await ReadStore.sync();
+      await ReadStore.sync();
       allAnnouncements = await Backend.announcements();
-      unreadAnnouncements = allAnnouncements
-          .where((a) => a.createdAt.compareTo(seenAt) > 0)
-          .length;
       fresh = unreadAnnouncement(
         allAnnouncements.isNotEmpty ? allAnnouncements.first : null,
         stored,
@@ -698,8 +690,6 @@ class _HomeShellState extends State<HomeShell> {
       display = userDisplay;
       photoUrl = userPhoto;
       announcement = fresh;
-      _announcements = allAnnouncements;
-      _announcementUnread = unreadAnnouncements;
       loading = false;
     });
     if (reason.isNotEmpty && mounted) {
@@ -720,33 +710,74 @@ class _HomeShellState extends State<HomeShell> {
     if (id.isNotEmpty) await AnnouncementStore.dismiss(id);
   }
 
-  /// Opening the News tab clears its badge up to the newest item.
-  void _markAnnouncementsSeen() {
-    if (_announcements.isEmpty) return;
-    unawaited(ReadStore.markAnnouncementsSeen(_announcements.first.createdAt));
-    if (_announcementUnread != 0) setState(() => _announcementUnread = 0);
-  }
-
-  /// News page (header button): own scaffold + back button, badge cleared on
-  /// open.
-  void _openNews() {
-    _markAnnouncementsSeen();
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const AnnouncementsScreen()),
-    );
-  }
-
   void _openWallet() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => WalletScreen(
           onGoToEarn: () {
             Navigator.of(context).pop();
-            setState(() => tab = 1);
+            _openEarn();
           },
         ),
       ),
     );
+  }
+
+  void _openStore() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => StoreScreen(
+          coins: coins,
+          onRefresh: _refresh,
+          onOpenWallet: _openWallet,
+          onGoToEarn: _openEarn,
+        ),
+      ),
+    );
+  }
+
+  void _openEarn() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => EarnScreen(coins: coins, onRefresh: _refresh),
+      ),
+    );
+  }
+
+  void _openKeys() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MyKeysScreen(onGoToStore: _openStore),
+      ),
+    );
+  }
+
+  void _openTutorials() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const TutorialsScreen(embedded: false),
+      ),
+    );
+  }
+
+  void _openWorldChat() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ChatScreen(
+          embedded: false,
+          isAdmin: isAdmin,
+          isModerator: isModerator,
+          onOpenInbox: _openInbox,
+          onOpenProfile: _openUserProfile,
+        ),
+      ),
+    );
+  }
+
+  void _openFeedback() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const FeedbackScreen()));
   }
 
   void _openDirectChat({
@@ -767,20 +798,7 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   void _openInbox() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => InboxScreen(
-          onOpenThread: (thread, peer) {
-            Navigator.of(context).pop();
-            _openDirectChat(
-              peerId: peer.id,
-              peerName: peer.name,
-              peerAvatarUrl: peer.avatarUrl,
-            );
-          },
-        ),
-      ),
-    );
+    setState(() => tab = SocialTab.inbox);
   }
 
   Future<void> _openUserProfile(String id) async {
@@ -912,7 +930,7 @@ class _HomeShellState extends State<HomeShell> {
         ),
       );
       if (!mounted || uploaded == null) return;
-      setState(() => tab = 5);
+      setState(() => tab = SocialTab.home);
     } on ApiException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -946,15 +964,16 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   void _openProfile() {
+    setState(() => tab = SocialTab.profile);
+  }
+
+  void _openProfileSettings() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => ProfileScreen(
           onSignOut: widget.onSignOut,
           onAccountDeleted: widget.onSignOut,
-          onGoToTab: (t) {
-            Navigator.of(context).pop();
-            setState(() => tab = t);
-          },
+          onOpenKeys: _openKeys,
         ),
       ),
     );
@@ -988,583 +1007,85 @@ class _HomeShellState extends State<HomeShell> {
     }
 
     final pages = <Widget>[
+      ReelsScreen(
+        active: tab == SocialTab.home,
+        onOpenProfile: _openUserProfile,
+        onDeleteReel: Backend.deleteReel,
+      ),
       StoreScreen(
         coins: coins,
         onRefresh: _refresh,
-        active: tab == 0,
+        active: tab == SocialTab.shop,
         onOpenWallet: _openWallet,
-        onGoToEarn: () => setState(() => tab = 1),
+        onGoToEarn: _openEarn,
       ),
-      EarnScreen(coins: coins, onRefresh: _refresh),
-      MyKeysScreen(
-        active: tab == 2,
-        onGoToStore: () => setState(() => tab = 0),
+      InboxScreen(
+        onOpenThread: (thread, peer) => _openDirectChat(
+          peerId: peer.id,
+          peerName: peer.name,
+          peerAvatarUrl: peer.avatarUrl,
+        ),
       ),
-      TutorialsScreen(embedded: true, active: tab == 3),
-      ChatScreen(
-        embedded: true,
-        active: tab == 4,
+      ProfileHubScreen(
+        userId: Backend.cachedUser?.id ?? '',
+        displayName: display,
+        avatarUrl: photoUrl,
         isAdmin: isAdmin,
-        isModerator: isModerator,
-        onUnreadChanged: (count) {
-          if (_chatUnread != count) setState(() => _chatUnread = count);
+        onOpenKeys: _openKeys,
+        onOpenWallet: _openWallet,
+        onOpenFeedback: _openFeedback,
+        onOpenAdmin: () {},
+        onOpenSettings: _openProfileSettings,
+        onOpenShare: () {},
+        onOpenReel: (reel) => unawaited(_openCreatorReel(reel)),
+      ),
+    ];
+
+    final showShellBanners = tab != SocialTab.home;
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: Column(
+        children: [
+          if (showShellBanners && announcement != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.lg,
+                AppSpace.sm,
+                AppSpace.lg,
+                0,
+              ),
+              child: AnnouncementBanner(
+                announcement: announcement!,
+                onDismiss: _dismissAnnouncement,
+              ),
+            ),
+          if (showShellBanners && _banner != null)
+            SizedBox(
+              width: _banner!.size.width.toDouble(),
+              height: _banner!.size.height.toDouble(),
+              child: ColoredBox(
+                color: AppColors.bg,
+                child: AdWidget(ad: _banner!),
+              ),
+            ),
+          Expanded(
+            child: IndexedStack(index: tab.pageIndex, children: pages),
+          ),
+        ],
+      ),
+      bottomNavigationBar: FiveTabBar(
+        selected: tab,
+        onSelected: (next) {
+          if (next == tab || next == SocialTab.create) return;
+          setState(() => tab = next);
+          _maybeShowInterstitial();
         },
-        onOpenInbox: _openInbox,
-        onOpenProfile: _openUserProfile,
+        onCreate: _openReelUpload,
+        unread: {if (_chatUnread > 0) SocialTab.inbox: _chatUnread},
       ),
-      ReelsScreen(
-        active: tab == 5,
-        onOpenProfile: _openUserProfile,
-        onOpenUpload: _openReelUpload,
-        onDeleteReel: Backend.deleteReel,
-      ),
-      if (isAdmin) AdminScreen(onAnnouncementSent: _refresh, active: tab == 6),
-    ];
-
-    final destinations = <_NavItem>[
-      _NavItem(Icons.storefront_outlined, Icons.storefront, 'Store'),
-      _NavItem(Icons.play_circle_outline, Icons.play_circle, 'Earn'),
-      _NavItem(Icons.shopping_bag_outlined, Icons.shopping_bag, 'Purchases'),
-      _NavItem(Icons.menu_book_outlined, Icons.menu_book, 'Tutorials'),
-      _NavItem(Icons.chat_bubble_outline, Icons.chat_bubble, 'Chat'),
-      _NavItem(Icons.video_library_outlined, Icons.video_library, 'Reels'),
-      if (isAdmin)
-        _NavItem(
-          Icons.admin_panel_settings_outlined,
-          Icons.admin_panel_settings,
-          'Admin',
-        ),
-    ];
-
-    final safeIndex = tab.clamp(0, pages.length - 1);
-
-    return Stack(
-      children: [
-        const ArcadeBackdrop(),
-        Scaffold(
-          backgroundColor: Colors.transparent,
-          appBar: AppBar(
-            toolbarHeight: 74,
-            titleSpacing: AppSpace.lg,
-            title: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    LogoBadge(size: 28, fontSize: 14),
-                    SizedBox(width: AppSpace.sm + 2),
-                    GradientText('Ghosst', style: AppText.title),
-                  ],
-                ),
-                // Which table you are at — the shell's own breadcrumb.
-                Padding(
-                  padding: const EdgeInsets.only(
-                    left: 28 + AppSpace.sm + 2,
-                    top: 1,
-                  ),
-                  child: Text(
-                    destinations[safeIndex].label.toUpperCase(),
-                    style: AppText.label.copyWith(
-                      fontSize: 10,
-                      letterSpacing: 2.2,
-                      color: AppColors.textDim.withValues(alpha: 0.85),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            // Fading hairline — separation without a hard 1px rule.
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(1),
-              child: Container(
-                height: 1,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.transparent,
-                      AppColors.primary.withValues(alpha: 0.22),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            actions: [
-              // News lives in the header now: reachable from any tab, and the
-              // bottom bar is back to five real destinations.
-              Padding(
-                padding: const EdgeInsets.only(right: AppSpace.xs),
-                child: _NewsButton(
-                  unread: _announcementUnread,
-                  onTap: _openNews,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(right: AppSpace.sm),
-                child: CoinPill(coins: coins, onTap: _openWallet),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(right: AppSpace.lg),
-                child: Pressable(
-                  onTap: _openProfile,
-                  scale: 0.92,
-                  semanticLabel: 'Profile',
-                  child: SizedBox(
-                    // 48dp hit area, 36dp visual.
-                    width: kTouchMin,
-                    height: kTouchMin,
-                    child: Center(
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        padding: const EdgeInsets.all(1.5),
-                        decoration: BoxDecoration(
-                          gradient: kNeonGradient,
-                          borderRadius: BorderRadius.circular(AppRadius.input),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primary.withValues(alpha: 0.22),
-                              blurRadius: 16,
-                              spreadRadius: -4,
-                            ),
-                          ],
-                        ),
-                        child: Container(
-                          alignment: Alignment.center,
-                          clipBehavior: Clip.antiAlias,
-                          decoration: BoxDecoration(
-                            color: AppColors.bg,
-                            borderRadius: BorderRadius.circular(
-                              AppRadius.input - 1.5,
-                            ),
-                          ),
-                          child: (photoUrl != null && photoUrl!.isNotEmpty)
-                              ? Image.network(
-                                  photoUrl!,
-                                  fit: BoxFit.cover,
-                                  width: double.infinity,
-                                  height: double.infinity,
-                                  errorBuilder: (_, _, _) => Text(
-                                    display.trim().isEmpty
-                                        ? 'G'
-                                        : display.trim()[0].toUpperCase(),
-                                    style: AppText.subtitle.copyWith(
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                )
-                              : Text(
-                                  display.trim().isEmpty
-                                      ? 'G'
-                                      : display.trim()[0].toUpperCase(),
-                                  style: AppText.subtitle.copyWith(
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          // IndexedStack keeps each tab's state (scroll position, loaded data).
-          body: Column(
-            children: [
-              if (announcement != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpace.lg,
-                    AppSpace.sm,
-                    AppSpace.lg,
-                    0,
-                  ),
-                  child: AnnouncementBanner(
-                    announcement: announcement!,
-                    onDismiss: _dismissAnnouncement,
-                  ),
-                ),
-              // Banner sits under the app bar, not against the bottom nav:
-              // AdMob forbids ads adjacent to navigational controls.
-              if (_banner != null)
-                SizedBox(
-                  width: _banner!.size.width.toDouble(),
-                  height: _banner!.size.height.toDouble(),
-                  child: ColoredBox(
-                    color: AppColors.bg,
-                    child: AdWidget(ad: _banner!),
-                  ),
-                ),
-              Expanded(
-                child: IndexedStack(index: safeIndex, children: pages),
-              ),
-            ],
-          ),
-          // Floating glass pill — never an edge-to-edge Material bar.
-          bottomNavigationBar: _GlassNavBar(
-            index: safeIndex,
-            items: destinations,
-            unread: {if (_chatUnread > 0) 4: _chatUnread},
-            onSelected: (i) {
-              // Re-tapping the current tab is not a tab switch — it must
-              // not count towards (or fire) the interstitial.
-              if (i == safeIndex) return;
-              setState(() => tab = i);
-              if (i == 3) _markAnnouncementsSeen();
-              _maybeShowInterstitial();
-            },
-          ),
-        ),
-      ],
     );
   }
 }
-
-class _NavItem {
-  const _NavItem(this.icon, this.selectedIcon, this.label);
-
-  final IconData icon;
-  final IconData selectedIcon;
-  final String label;
-}
-
-/// Floating, backdrop-blurred pill navigation. Active tab widens into a
-/// tinted pill with its label; inactive tabs stay icon-only.
 
 /// Header entry point for News: megaphone with a red unread count, the same
 /// badge language the bottom bar used.
-class _NewsButton extends StatelessWidget {
-  const _NewsButton({required this.unread, required this.onTap});
-
-  final int unread;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Pressable(
-      onTap: onTap,
-      scale: 0.92,
-      semanticLabel: unread > 0 ? 'News, $unread unread' : 'News',
-      child: SizedBox(
-        width: kTouchMin,
-        height: kTouchMin,
-        child: Center(
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: AppColors.surface.withValues(alpha: 0.9),
-                  borderRadius: BorderRadius.circular(AppRadius.input),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: const ExcludeSemantics(
-                  child: Icon(
-                    Icons.campaign_outlined,
-                    size: AppIcon.md,
-                    color: AppColors.textDim,
-                  ),
-                ),
-              ),
-              if (unread > 0)
-                Positioned(
-                  top: -3,
-                  right: -3,
-                  child: ExcludeSemantics(
-                    child: Container(
-                      constraints: const BoxConstraints(minWidth: 16),
-                      height: 16,
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: AppColors.red,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.bg, width: 1.5),
-                      ),
-                      child: Text(
-                        unread > 99 ? '99+' : '$unread',
-                        style: AppText.caption.copyWith(
-                          fontSize: 9.5,
-                          height: 1,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GlassNavBar extends StatefulWidget {
-  const _GlassNavBar({
-    required this.index,
-    required this.items,
-    required this.onSelected,
-    this.unread = const {},
-  });
-
-  final int index;
-  final List<_NavItem> items;
-  final ValueChanged<int> onSelected;
-
-  /// tab index → unread count. Zero/absent tabs show no badge.
-  final Map<int, int> unread;
-
-  @override
-  State<_GlassNavBar> createState() => _GlassNavBarState();
-}
-
-class _GlassNavBarState extends State<_GlassNavBar>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  int _fromIndex = 0;
-  int _toIndex = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _fromIndex = widget.index;
-    _toIndex = widget.index;
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 420),
-    );
-  }
-
-  @override
-  void didUpdateWidget(covariant _GlassNavBar oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.index != widget.index) {
-      if (MediaQuery.disableAnimationsOf(context)) {
-        _fromIndex = widget.index;
-        _toIndex = widget.index;
-        _controller.value = 1;
-      } else {
-        _fromIndex = oldWidget.index;
-        _toIndex = widget.index;
-        _controller.forward(from: 0);
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      minimum: const EdgeInsets.fromLTRB(
-        AppSpace.lg,
-        0,
-        AppSpace.lg,
-        AppSpace.lg,
-      ),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: AppSpace.xs),
-        decoration: BoxDecoration(
-          color: AppColors.bgSoft.withValues(alpha: 0.72),
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(
-            color: AppColors.primary.withValues(alpha: 0.35),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withValues(alpha: 0.30),
-              blurRadius: 28,
-              spreadRadius: -6,
-              offset: const Offset(0, 12),
-            ),
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.45),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final tabWidth = constraints.maxWidth / widget.items.length;
-                return SizedBox(
-                  height: 64,
-                  child: Stack(
-                    children: [
-                      // Morphing pill indicator.
-                      AnimatedBuilder(
-                        animation: _controller,
-                        builder: (context, _) {
-                          final t = Curves.easeInOutCubic.transform(
-                            _controller.value,
-                          );
-                          final fromLeft = _fromIndex * tabWidth;
-                          final toLeft = _toIndex * tabWidth;
-                          final left = fromLeft + (toLeft - fromLeft) * t;
-                          final distance = (_toIndex - _fromIndex).abs();
-                          final stretch =
-                              distance * tabWidth * (math.sin(math.pi * t));
-                          final width = tabWidth + stretch;
-                          return Positioned(
-                            left: left,
-                            top: 8,
-                            width: width,
-                            height: 48,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    Color(0xFF67E8F9),
-                                    Color(0xFF22D3EE),
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(
-                                  AppRadius.pill,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppColors.primary.withValues(
-                                      alpha: 0.5,
-                                    ),
-                                    blurRadius: 24,
-                                    spreadRadius: -4,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                      Row(
-                        children: [
-                          for (var i = 0; i < widget.items.length; i++)
-                            Expanded(
-                              child: Semantics(
-                                button: true,
-                                selected: i == widget.index,
-                                label:
-                                    '${widget.items[i].label}'
-                                    '${(widget.unread[i] ?? 0) > 0 ? ', ${widget.unread[i]} unread' : ''}',
-                                child: GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () {
-                                    HapticFeedback.selectionClick();
-                                    widget.onSelected(i);
-                                  },
-                                  child: SizedBox(
-                                    height: 64,
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Stack(
-                                          clipBehavior: Clip.none,
-                                          children: [
-                                            ExcludeSemantics(
-                                              child: Icon(
-                                                i == widget.index
-                                                    ? widget
-                                                          .items[i]
-                                                          .selectedIcon
-                                                    : widget.items[i].icon,
-                                                size: AppIcon.md,
-                                                color: i == widget.index
-                                                    ? const Color(0xFF04212A)
-                                                    : AppColors.textDim,
-                                              ),
-                                            ),
-                                            if ((widget.unread[i] ?? 0) > 0)
-                                              Positioned(
-                                                top: -6,
-                                                right: -12,
-                                                child: ExcludeSemantics(
-                                                  child: Container(
-                                                    constraints:
-                                                        const BoxConstraints(
-                                                          minWidth: 16,
-                                                        ),
-                                                    height: 16,
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 4,
-                                                        ),
-                                                    alignment: Alignment.center,
-                                                    decoration: BoxDecoration(
-                                                      color: AppColors.red,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            8,
-                                                          ),
-                                                      border: Border.all(
-                                                        color: AppColors.bg,
-                                                        width: 1.5,
-                                                      ),
-                                                    ),
-                                                    child: Text(
-                                                      widget.unread[i]! > 9
-                                                          ? '9+'
-                                                          : '${widget.unread[i]}',
-                                                      style: const TextStyle(
-                                                        color: Colors.white,
-                                                        fontSize: 9,
-                                                        fontWeight:
-                                                            FontWeight.w800,
-                                                        height: 1,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          widget.items[i].label,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: AppText.caption.copyWith(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w700,
-                                            color: i == widget.index
-                                                ? const Color(0xFF04212A)
-                                                : AppColors.textDim,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
