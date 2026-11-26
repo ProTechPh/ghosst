@@ -594,6 +594,20 @@ class Backend {
     },
   );
 
+  /// API read markers use `Y-m-d H:i:s` UTC, not Dart's ISO-8601 string.
+  static String readTimestamp(String value) {
+    final text = value.trim();
+    if (RegExp(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$').hasMatch(text)) {
+      return text;
+    }
+    final parsed = DateTime.tryParse(text);
+    if (parsed == null) return '';
+    final utc = parsed.toUtc();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${utc.year.toString().padLeft(4, '0')}-${two(utc.month)}-'
+        '${two(utc.day)} ${two(utc.hour)}:${two(utc.minute)}:${two(utc.second)}';
+  }
+
   /// Server-owned read markers. Null when signed out or the call fails.
   static Future<({String announcementsSeenAt, int chatSeenAtMs})?>
   reads() async {
@@ -601,7 +615,9 @@ class Backend {
       if (await _session.accessToken() == null) return null;
       final res = await _api.get('/reads');
       return (
-        announcementsSeenAt: res['announcementsSeenAt'] as String? ?? '',
+        announcementsSeenAt: readTimestamp(
+          res['announcementsSeenAt'] as String? ?? '',
+        ),
         chatSeenAtMs: (res['chatSeenAtMs'] as num?)?.toInt() ?? 0,
       );
     } catch (_) {
@@ -617,10 +633,13 @@ class Backend {
   }) async {
     try {
       if (await _session.accessToken() == null) return;
+      final seen = announcementsSeenAt == null
+          ? null
+          : readTimestamp(announcementsSeenAt);
       await _api.post(
         '/reads',
         data: {
-          'announcementsSeenAt': ?announcementsSeenAt,
+          if (seen != null && seen.isNotEmpty) 'announcementsSeenAt': seen,
           'chatSeenAtMs': ?chatSeenAtMs,
         },
       );

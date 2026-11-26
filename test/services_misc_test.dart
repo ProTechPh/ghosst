@@ -20,6 +20,17 @@ void main() {
     expect(Backend.uploadProductImage, isNotNull);
   });
 
+  test('readTimestamp matches the API Y-m-d H:i:s format', () {
+    expect(
+      Backend.readTimestamp('2026-11-26T10:00:00.000Z'),
+      '2026-11-26 10:00:00',
+    );
+    expect(
+      Backend.readTimestamp('2026-11-26 10:00:00'),
+      '2026-11-26 10:00:00',
+    );
+  });
+
   group('Push', () {
     test('canAsk requires splash done', () {
       Push.splashDone = false;

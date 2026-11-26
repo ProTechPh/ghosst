@@ -57,6 +57,12 @@ class _InboxScreenState extends State<InboxScreen> {
     unawaited(_loadNotifications());
   }
 
+  bool _announcementUnread(Announcement item, String seen) {
+    final created = Backend.readTimestamp(item.createdAt);
+    if (created.isEmpty || seen.isEmpty) return true;
+    return created.compareTo(seen) > 0;
+  }
+
   Future<void> _loadNotifications() async {
     try {
       final items = await (widget.loadAnnouncements ?? Backend.announcements)();
@@ -69,7 +75,7 @@ class _InboxScreenState extends State<InboxScreen> {
           setState(() {
             _notificationsSeenAt = seen;
             _notificationsUnread =
-                items.any((a) => a.createdAt.compareTo(seen) > 0);
+                items.any((a) => _announcementUnread(a, seen));
           });
         }
       } catch (_) {
@@ -386,11 +392,10 @@ class _InboxScreenState extends State<InboxScreen> {
                               ],
                             ),
                           ),
-                          if (_notificationsUnread &&
-                              item.createdAt.compareTo(
-                                    _notificationsSeenAt,
-                                  ) >
-                                  0)
+                          if (_announcementUnread(
+                            item,
+                            _notificationsSeenAt,
+                          ))
                             Container(
                               width: 8,
                               height: 8,
