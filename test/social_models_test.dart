@@ -207,7 +207,7 @@ void main() {
           'token': 't1',
           'expiresAt': '2026-01-01T00:15:00.000Z',
           'maxBytes': '10485760',
-          'sha256': '${'a' * 64}',
+          'sha256': 'a' * 64,
           'storageKey': 'r1-1.jpg',
         },
       ],

@@ -91,7 +91,7 @@ void main() {
         onOpenSettings: () {},
         onOpenShare: () {},
         loadProfile: (_) async => _user(),
-        loadReels: (_, __) async => [_reel('r1'), _reel('r2')],
+        loadReels: (_, _) async => [_reel('r1'), _reel('r2')],
       ),
     );
 
@@ -133,7 +133,7 @@ void main() {
         onOpenShare: () => calls.add('share'),
         onOpenReel: (reel) => opened = reel,
         loadProfile: (_) async => _user(),
-        loadReels: (_, __) async => [_reel('r1')],
+        loadReels: (_, _) async => [_reel('r1')],
       ),
     );
 
@@ -163,7 +163,7 @@ void main() {
         onOpenSettings: () {},
         onOpenShare: () {},
         loadProfile: (_) async => _user(),
-        loadReels: (_, __) async => const [],
+        loadReels: (_, _) async => const [],
       ),
     );
     expect(find.text('Admin'), findsNothing);
@@ -182,7 +182,7 @@ void main() {
         onOpenSettings: () => calls.add('settings'),
         onOpenShare: () => calls.add('share'),
         loadProfile: (_) async => _user(),
-        loadReels: (_, __) async => const [],
+        loadReels: (_, _) async => const [],
       ),
     );
     await tester.tap(find.byTooltip('Share app'));
@@ -203,7 +203,7 @@ void main() {
         onOpenSettings: () {},
         onOpenShare: () {},
         loadProfile: (_) async => throw Exception('offline'),
-        loadReels: (_, __) async => const [],
+        loadReels: (_, _) async => const [],
       ),
     );
     expect(find.text('Jeric'), findsOneWidget);

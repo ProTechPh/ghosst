@@ -1120,6 +1120,3 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 }
-
-/// Header entry point for News: megaphone with a red unread count, the same
-/// badge language the bottom bar used.

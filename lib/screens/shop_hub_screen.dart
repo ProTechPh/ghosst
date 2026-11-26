@@ -4,7 +4,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../premium.dart';
-import '../services/models.dart';
 import '../services/worker_backend.dart';
 import '../social_shell.dart';
 import '../theme.dart';
@@ -259,10 +258,9 @@ class _ShopHubScreenState extends State<ShopHubScreen> {
                                 : CachedNetworkImage(
                                     imageUrl: imageUrl,
                                     fit: BoxFit.cover,
-                                    errorWidget: (_, __, ___) =>
-                                        const ColoredBox(
-                                          color: AppColors.surfaceHigh,
-                                        ),
+                                    errorWidget: (_, _, _) => const ColoredBox(
+                                      color: AppColors.surfaceHigh,
+                                    ),
                                   ),
                           ),
                           Padding(

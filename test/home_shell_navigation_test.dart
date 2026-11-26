@@ -44,12 +44,20 @@ void main() {
     expect(selected, SocialTab.inbox);
   });
 
-  test('main shell has no legacy integer tab assignments', () {
+  test('main shell has no legacy navigation code', () {
     final source = File('lib/main.dart').readAsStringSync();
     expect(
       RegExp(r'\btab\s*=\s*\d+').hasMatch(source),
       isFalse,
       reason: 'Use SocialTab enum values instead of integer tab indexes.',
     );
+    for (final residue in [
+      '_GlassNavBar',
+      '_NavItem',
+      'FloatingActionButton',
+      'Header entry point for News',
+    ]) {
+      expect(source.contains(residue), isFalse, reason: residue);
+    }
   });
 }

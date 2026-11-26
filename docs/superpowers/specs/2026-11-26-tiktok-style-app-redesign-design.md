@@ -266,3 +266,17 @@ Rollback: restore the previous shell/theme commit. No database or backend rollba
 - **Profile editing:** Read-only. Existing display name/avatar/stats plus static tagline; no Edit profile button or update endpoint.
 - **Admin access:** Admins only, matching current authorization.
 - **Sharing:** System share of the app/website link. No new deep-link infrastructure.
+
+## Implementation Notes
+
+- The shell uses `SocialTab` plus `FiveTabBar`; the four real pages stay in an
+  `IndexedStack`, while Create opens the upload route without selecting a page.
+- `SocialAppBar` accepts optional `titleContent` so the DM header can keep its
+  tappable peer avatar/name without duplicating app-bar styling.
+- Secondary routes own their social scaffolds. Claim reveal uses a solid dark
+  surface; purchase, download, moderation, blocking, reporting, and privacy
+  logic remain in their existing services and handlers.
+- Admin is reachable from Profile only for admins. Store/Earn/Keys/Tutorials
+  remain behind Shop; Wallet/Feedback remain behind Profile.
+- Backend contracts, database migrations, Firebase rules, OAuth configuration,
+  and production deployment remain owner-controlled.

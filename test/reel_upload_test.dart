@@ -163,7 +163,7 @@ void main() {
               called = true;
               return _ticket();
             },
-            submitUpload: (_, __) async {},
+            submitUpload: (_, _) async {},
           ),
         ),
       );
@@ -177,7 +177,7 @@ void main() {
   testWidgets('successful multi-image submit calls prepare/submit once with ordered images', (
     tester,
   ) async {
-    final dir = await Directory.systemTemp.createTemp('ghosst-reel-ui-');
+    final dir = Directory.systemTemp.createTempSync('ghosst-reel-ui-');
     try {
       final f1 = File('${dir.path}/a.jpg')..writeAsBytesSync([1, 2, 3]);
       final f2 = File('${dir.path}/b.png')..writeAsBytesSync([4, 5, 6]);
@@ -225,7 +225,15 @@ void main() {
       await tester.tap(find.textContaining('Choose'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
-      await tester.pumpAndSettle();
+      var selected = false;
+      for (var i = 0; i < 50 && !selected; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)),
+        );
+        await tester.pump();
+        selected = find.text('2 image(s) selected').evaluate().isNotEmpty;
+      }
+      expect(selected, isTrue);
       await tester.tap(find.text('Post reel'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
@@ -236,7 +244,17 @@ void main() {
       expect(prepared!.images.map((i) => i.fileName), ['a.jpg', 'b.png']);
       expect(submittedDraft!.images.map((i) => i.fileName), ['a.jpg', 'b.png']);
     } finally {
-      await dir.delete(recursive: true);
+      await tester.runAsync(() async {
+        for (var i = 0; i < 20; i++) {
+          try {
+            await dir.delete(recursive: true);
+            return;
+          } on FileSystemException {
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+          }
+        }
+        await dir.delete(recursive: true);
+      });
     }
   });
 }

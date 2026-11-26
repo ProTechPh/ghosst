@@ -77,6 +77,14 @@ ang email, coins, balance, purchases, o ban reason. I-upload din ang authoritati
 `firestore.rules` at i-set up ang `api/cleanup_social.php` cron gaya ng nasa
 `ghosst-web/api/README.md`.
 
+### App navigation
+
+The bottom bar has five destinations: **Home** (Reels), **Shop**, **Create**,
+**Inbox**, and **Profile**. Store, Earn coins, Keys/Purchases, and Tutorials are
+behind Shop; Wallet, Feedback, and the admin-only Admin screen are behind
+Profile. Inbox keeps World chat and direct messages separate. Create opens the
+image-carousel upload flow without selecting another tab.
+
 ### Reels hosting, deploy order, at rollback
 
 1. SQL: `mobile_app_social.sql`, one-time columns, follow cleanup, at
@@ -90,11 +98,12 @@ ang email, coins, balance, purchases, o ban reason. I-upload din ang authoritati
 4. Publish ang `firestore.rules` kung hindi pa live (para sa chat/social cleanup).
 5. Upload ang website admin page at i-test ang Reels & Reports link gamit ang
    website admin o app `is_admin`/`is_moderator` account.
-6. I-build/upload ang app. Test muna ang play at direct flavors; v1 ay MP4 only,
-   50 MB cap, at limang upload kada rolling 24 hours.
+6. I-build/upload ang app. Test muna ang play at direct flavors; image-only
+   carousel ang Reels (1–5 JPG/PNG/WebP images, 10 MB each, 50 MB per post), at
+   limang upload kada rolling 24 hours.
 
-Rollback: i-hide ang Reels tab (o i-disable ang Reel endpoints/config) at
-mag-rollback ng app/API. Huwag burahin ang `app_reel*` tables o z.com media
+Rollback: i-restore ang previous app shell (o i-disable ang Reel endpoints/config)
+at mag-rollback ng app/API. Huwag burahin ang `app_reel*` tables o z.com media
 files; panatilihin ang uploads para hindi mawala ang existing reels.
 
 ## 2. Admin
@@ -106,8 +115,9 @@ UPDATE users SET is_admin = 1 WHERE email = 'you@example.com';
 ```
 
 Sign out and back in afterwards — the app caches `isAdmin` for the session.
-The **Admin** tab appears for admins only (`users.role` is the site's own admin
-flag; hindi ito ginagamit ng app).
+The **Admin** action appears under Profile for admins only (`users.is_admin` is
+the app admin flag; `users.role` is the site's own admin flag and is not used by
+the app).
 
 Coins are server-side only. To hand yourself some for testing:
 
@@ -153,10 +163,10 @@ Every unit ID lives in `lib/services/ad_service.dart` (`class AdUnits`).
 
 | Format | Purpose | Where it shows |
 |---|---|---|
-| Rewarded | coins (SSV) | Earn tab — "Watch ad & earn coins" |
-| Rewarded interstitial | coins (SSV) | Earn tab — "Instant ad & earn coins" |
-| Interstitial | revenue only | every other tab switch, ≥45 s cooldown |
-| Banner | revenue only | strip under the app bar (never against the nav) |
+| Rewarded | coins (SSV) | Shop → Earn coins — "Watch ad & earn coins" |
+| Rewarded interstitial | coins (SSV) | Shop → Earn coins — "Instant ad & earn coins" |
+| Interstitial | revenue only | main tab switches, ≥45 s cooldown |
+| Banner | revenue only | shell banner above content on non-Home tabs |
 | Native (medium) | revenue only | "Sponsored" card at the end of the Store |
 
 App ID (already in the manifest): `ca-app-pub-7791552060229072~1855578469`.
@@ -231,14 +241,15 @@ The API base URL defaults to production; point it at a local server with
 `--dart-define=API_BASE_URL=http://127.0.0.1:8099/v1` after starting
 `php -S 127.0.0.1:8099 -t C:\laragon\www\api C:\laragon\www\api\index.php`.
 
-1. Sign up → **Admin** appears for an admin account.
+1. Sign in with Google → **Profile** → **Admin** appears for an admin account.
 2. Admin: **New product** → name, cost, image (Cloudinary picker or URL) →
    **Add product**. Key products: paste keys, one per line → **Add keys**.
    APK/File products: paste a MediaFire page or direct URL.
-3. Earn: **Watch ad & earn coins** → the app polls your balance until the SSV
-   callback lands (usually seconds, up to a minute; coins still arrive after
-   the timeout message).
-4. Store → **Claim** → key shown + copied → **Purchases**.
+3. **Shop** → **Earn coins** → **Watch ad & earn coins** → the app polls your
+   balance until the SSV callback lands (usually seconds, up to a minute; coins
+   still arrive after the timeout message).
+4. **Shop** → **Browse store** → **Claim** → key shown + copied → **Your keys** /
+   **Purchases**.
 
 ### 4.1 MediaFire notes
 
@@ -292,7 +303,7 @@ The API base URL defaults to production; point it at a local server with
 | Every request `500 internal` | DB unreachable or a table/column missing — check `api/config.php` credentials, then the error log |
 | Coins never arrive after a real ad | No `SSV blocked` and no credit line in the error log ⇒ callback URL wrong in AdMob |
 | `401` right after opening the app | Refresh token expired/revoked — sign in again |
-| Admin tab missing | `users.is_admin = 0` for that account, or the app still holds the cached session (sign out/in) |
+| Profile → Admin missing | `users.is_admin = 0` for that account, or the app still holds the cached session (sign out/in) |
 | Store shows no products | Create one in Admin, `active = 1` |
 | Buy app → `Download not configured` | No `app_product_files` row for that product — re-save the link in the Admin edit dialog |
 | Download stuck / `Could not resolve` | MediaFire link invalid or page changed — paste a fresh share link |
@@ -351,7 +362,7 @@ and the feature is off.
 
 **What sends a notification:** a new product (`products_create`), a sold-out
 duration pool getting keys again (`keys_add`, silent on top-ups), and the
-Admin tab's announcement card (saved in `app_announcements`, shown as a
+Admin screen's announcement card (saved in `app_announcements`, shown as a
 dismissible banner for 7 days). Pushes are fire-and-forget: a failed send is
 logged (`push failed: ...` / `push skipped: host/config`) and never fails the
 admin request. The FCM token comes from the existing service account via

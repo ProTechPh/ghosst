@@ -104,6 +104,40 @@ void main() {
     expect(createCalls, 1);
   });
 
+  testWidgets('navigation still works with reduced motion enabled', (
+    tester,
+  ) async {
+    var selected = SocialTab.home;
+    var createCalls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: StatefulBuilder(
+            builder: (context, setState) => Scaffold(
+              bottomNavigationBar: FiveTabBar(
+                selected: selected,
+                onSelected: (tab) => setState(() => selected = tab),
+                onCreate: () => createCalls++,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('social-tab-create')));
+    await tester.pumpAndSettle();
+    expect(createCalls, 1);
+    expect(selected, SocialTab.home);
+
+    await tester.tap(find.byKey(const ValueKey('social-tab-inbox')));
+    await tester.pumpAndSettle();
+    expect(selected, SocialTab.inbox);
+    expect(tester.binding.hasScheduledFrame, isFalse);
+  });
+
   testWidgets('SocialAppBar is black, left-aligned, and toolbar-sized', (
     tester,
   ) async {
