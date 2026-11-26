@@ -28,6 +28,7 @@ Future<void> _pump(
   required Future<List<ReelComment>> Function(int) load,
   Future<void> Function(String)? submit,
   Size size = const Size(800, 600),
+  EdgeInsets viewInsets = EdgeInsets.zero,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -36,8 +37,11 @@ Future<void> _pump(
   await tester.pumpWidget(
     MaterialApp(
       theme: AppTheme.dark,
-      home: Scaffold(
-        body: ReelCommentsScreen(reelId: 'r1', load: load, submit: submit),
+      home: MediaQuery(
+        data: MediaQueryData(size: size, viewInsets: viewInsets),
+        child: Scaffold(
+          body: ReelCommentsScreen(reelId: 'r1', load: load, submit: submit),
+        ),
       ),
     ),
   );
@@ -135,6 +139,27 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('try again'), findsOneWidget);
-    expect(find.text('Could not post comment. Try again.'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('reel-comments-sheet')),
+        matching: find.text('Could not post comment. Try again.'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('composer stays above the keyboard', (tester) async {
+    await _pump(
+      tester,
+      size: const Size(320, 640),
+      viewInsets: const EdgeInsets.only(bottom: 200),
+      load: (_) async => [
+        for (var i = 0; i < 20; i++) _comment('Comment $i'),
+      ],
+    );
+    final composerBottom = tester.getBottomRight(
+      find.byKey(const ValueKey('reel-comments-composer')),
+    ).dy;
+    expect(composerBottom, lessThanOrEqualTo(640 - 200));
   });
 }

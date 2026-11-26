@@ -28,6 +28,7 @@ class _ReelCommentsScreenState extends State<ReelCommentsScreen> {
   bool _failed = false;
   bool _hasMore = true;
   bool _sending = false;
+  String? _error;
 
   @override
   void initState() {
@@ -97,13 +98,14 @@ class _ReelCommentsScreenState extends State<ReelCommentsScreen> {
         _offset = 0;
         _hasMore = true;
         _failed = false;
+        _error = null;
       });
       await _load();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not post comment. Try again.')),
-        );
+        setState(() {
+          _error = 'Could not post comment. Try again.';
+        });
       }
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -114,37 +116,55 @@ class _ReelCommentsScreenState extends State<ReelCommentsScreen> {
   Widget build(BuildContext context) {
     return Material(
       type: MaterialType.transparency,
-      child: Container(
-        key: const ValueKey('reel-comments-sheet'),
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.vertical(
-            top: Radius.circular(AppRadius.hero),
-          ),
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
         ),
-        clipBehavior: Clip.antiAlias,
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                key: const ValueKey('reel-comments-handle'),
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(top: AppSpace.sm),
-                decoration: BoxDecoration(
-                  color: AppColors.textDim.withValues(alpha: 0.6),
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
+        child: Container(
+          key: const ValueKey('reel-comments-sheet'),
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(AppRadius.hero),
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  key: const ValueKey('reel-comments-handle'),
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(top: AppSpace.sm),
+                  decoration: BoxDecoration(
+                    color: AppColors.textDim.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                  ),
                 ),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: AppSpace.md),
-                child: Text('Comments', style: AppText.subtitle),
-              ),
-              Expanded(child: _buildList()),
-              _composer(),
-            ],
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: AppSpace.md),
+                  child: Text('Comments', style: AppText.subtitle),
+                ),
+                Expanded(child: _buildList()),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpace.lg,
+                      AppSpace.xs,
+                      AppSpace.lg,
+                      0,
+                    ),
+                    child: Text(
+                      _error!,
+                      style: AppText.caption.copyWith(color: AppColors.red),
+                    ),
+                  ),
+                _composer(),
+              ],
+            ),
           ),
         ),
       ),
