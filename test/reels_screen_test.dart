@@ -65,6 +65,7 @@ Future<void> _pump(
   VoidCallback? onOpenFeedback,
   Future<List<Tutorial>> Function()? loadTutorials,
   Future<List<WebsiteFeedback>> Function()? loadSiteFeedback,
+  ValueChanged<Tutorial>? onOpenTutorial,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -88,6 +89,7 @@ Future<void> _pump(
           onOpenFeedback: onOpenFeedback,
           loadTutorials: loadTutorials,
           loadSiteFeedback: loadSiteFeedback,
+          onOpenTutorial: onOpenTutorial,
           loadComments: (_, _) async => const [],
           submitComment: (_, _) async {},
         ),
@@ -391,12 +393,14 @@ void main() {
   testWidgets('tutorials and feedback are tabs in the same feed', (
     tester,
   ) async {
+    String? openedTutorial;
     await _pump(
       tester,
       load: (_, _) async => ReelFeedPage(
         reels: [_reel('r1', 'One')],
         nextOffset: 1,
       ),
+      onOpenTutorial: (t) => openedTutorial = t.title,
       loadTutorials: () async => [
         const Tutorial(
           id: 1,
@@ -447,12 +451,19 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(CachedNetworkImage), findsWidgets);
+    await tester.tap(find.byKey(const ValueKey('reel-tutorial-1')));
+    await tester.pump();
+    expect(openedTutorial, 'How to claim keys');
     expect(find.byKey(const ValueKey('reel-feed-for-you')), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('reel-feed-feedback')));
     await _settle(tester);
     expect(find.text('Nice app'), findsOneWidget);
-    expect(find.byType(CachedNetworkImage), findsWidgets);
+    final feedbackImage = tester.widget<CachedNetworkImage>(
+      find.byType(CachedNetworkImage).first,
+    );
+    expect(feedbackImage.imageUrl, 'https://example.com/feedback.jpg');
+    expect(feedbackImage.fit, BoxFit.contain);
 
     await tester.tap(find.byKey(const ValueKey('reel-feed-for-you')));
     await _settle(tester);

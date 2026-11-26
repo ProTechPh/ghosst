@@ -2,13 +2,15 @@ import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../api/api_exception.dart';
 import '../services/worker_backend.dart';
+import '../services/youtube.dart';
 import '../theme.dart';
 import 'direct_chat_screen.dart' show ReportContent;
 import 'reel_comments_screen.dart';
-import 'tutorials_screen.dart' show TutorialThumb;
+import 'tutorials_screen.dart' show TutorialDetailScreen, TutorialThumb;
 
 class ReelsScreen extends StatefulWidget {
   const ReelsScreen({
@@ -34,6 +36,7 @@ class ReelsScreen extends StatefulWidget {
     this.onOpenFeedback,
     this.loadTutorials,
     this.loadSiteFeedback,
+    this.onOpenTutorial,
   });
 
   final Future<ReelFeedPage> Function(String feed, int offset)? load;
@@ -58,6 +61,7 @@ class ReelsScreen extends StatefulWidget {
   final VoidCallback? onOpenFeedback;
   final Future<List<Tutorial>> Function()? loadTutorials;
   final Future<List<WebsiteFeedback>> Function()? loadSiteFeedback;
+  final ValueChanged<Tutorial>? onOpenTutorial;
 
   @override
   State<ReelsScreen> createState() => _ReelsScreenState();
@@ -462,6 +466,23 @@ class _ReelsScreenState extends State<ReelsScreen> {
     );
   }
 
+  Future<void> _openTutorial(Tutorial item) async {
+    final id = youtubeId(item.videoUrl);
+    if (id != null) {
+      await launchUrl(
+        Uri.parse('https://www.youtube.com/watch?v=$id'),
+        mode: LaunchMode.externalApplication,
+      );
+      return;
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TutorialDetailScreen(tutorial: item),
+      ),
+    );
+  }
+
   Widget _extraContent() {
     if (_extraLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -488,13 +509,21 @@ class _ReelsScreenState extends State<ReelsScreen> {
         );
       }
       return ListView.separated(
-        padding: const EdgeInsets.all(AppSpace.lg),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpace.lg,
+          72,
+          AppSpace.lg,
+          AppSpace.lg,
+        ),
         itemCount: _tutorials.length,
         separatorBuilder: (_, _) => const SizedBox(height: AppSpace.md),
         itemBuilder: (_, i) {
           final t = _tutorials[i];
           return GlowCard(
             key: ValueKey('reel-tutorial-${t.id}'),
+            onTap: widget.onOpenTutorial != null
+                ? () => widget.onOpenTutorial!(t)
+                : () => unawaited(_openTutorial(t)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -551,7 +580,11 @@ class _ReelsScreenState extends State<ReelsScreen> {
       if (item.imageUrl != null)
         CachedNetworkImage(
           imageUrl: item.imageUrl!,
-          fit: BoxFit.cover,
+          fit: BoxFit.contain,
+          fadeInDuration: Duration.zero,
+          fadeOutDuration: Duration.zero,
+          memCacheWidth: 1000,
+          placeholder: (_, _) => const ColoredBox(color: AppColors.bgSoft),
           errorWidget: (_, _, _) =>
               const ColoredBox(color: AppColors.surfaceHigh),
         )
