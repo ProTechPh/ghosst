@@ -432,6 +432,10 @@ void main() {
       expect(find.byKey(key), findsOneWidget);
       centers.add(tester.getCenter(find.byKey(key)).dy);
     }
+    for (final label in ['Tutorials', 'Feedback', 'Following', 'For You']) {
+      expect(find.text(label), findsOneWidget);
+    }
+    expect(find.byKey(const ValueKey('reels-tabs-scroll')), findsOneWidget);
     expect(centers.every((dy) => (dy - centers.first).abs() < 1), isTrue);
 
     await tester.tap(find.byKey(const ValueKey('reel-feed-tutorials')));
@@ -627,13 +631,17 @@ void main() {
     );
     await _settle(tester);
 
-    final forYou = find.byKey(const ValueKey('reel-feed-for-you'));
+    final tabsScroll = find.byKey(const ValueKey('reels-tabs-scroll'));
     final coins = find.byType(CoinPill);
     expect(coins, findsOneWidget);
+    expect(tabsScroll, findsOneWidget);
     expect(
-      tester.getRect(forYou).right + 8,
+      tester.getRect(tabsScroll).right + 8,
       lessThanOrEqualTo(tester.getRect(coins).left),
     );
+    final forYou = find.byKey(const ValueKey('reel-feed-for-you'));
+    await tester.drag(tabsScroll, const Offset(-200, 0));
+    await tester.pump();
     await tester.tapAt(
       Offset(tester.getRect(forYou).right - 1, tester.getCenter(forYou).dy),
     );

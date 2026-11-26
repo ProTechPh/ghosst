@@ -384,30 +384,34 @@ class _ReelsScreenState extends State<ReelsScreen> {
                           children: [
                             Positioned(
                               left: AppSpace.sm,
+                              right: 80,
                               top: 0,
                               bottom: 0,
-                              child: Center(
+                              child: SingleChildScrollView(
+                                key: const ValueKey('reels-tabs-scroll'),
+                                scrollDirection: Axis.horizontal,
+                                physics: const AlwaysScrollableScrollPhysics(),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     _FeedTab(
                                       feedKey: 'tutorials',
                                       label: 'Tutorials',
-                                      width: 56,
+                                      width: 76,
                                       selected: _section == 'tutorials',
                                       onTap: () => _switchSection('tutorials'),
                                     ),
                                     _FeedTab(
                                       feedKey: 'feedback',
                                       label: 'Feedback',
-                                      width: 56,
+                                      width: 76,
                                       selected: _section == 'feedback',
                                       onTap: () => _switchSection('feedback'),
                                     ),
                                     _FeedTab(
                                       feedKey: 'following',
                                       label: 'Following',
-                                      width: 56,
+                                      width: 76,
                                       selected: _section == 'following',
                                       onTap: () {
                                         if (_section == 'following') return;
@@ -421,7 +425,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
                                     _FeedTab(
                                       feedKey: 'for-you',
                                       label: 'For You',
-                                      width: 56,
+                                      width: 76,
                                       selected: _section == 'for-you',
                                       onTap: () {
                                         if (_section == 'for-you') return;
@@ -863,7 +867,7 @@ class _RailAction extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: SizedBox(
-          width: 56,
+          width: 76,
           height: count == null ? kTouchMin : 64,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
