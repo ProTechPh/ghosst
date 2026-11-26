@@ -23,6 +23,26 @@ function uploads_product_image(array $ctx): array
     return ['ok' => true, 'path' => $path, 'url' => product_image_url($path)];
 }
 
+/** Own profile cover → site FTP storage (uploads/covers). */
+function uploads_cover_image(array $ctx): array
+{
+    $ctx['user'] ?? null;
+    if ($ctx['user'] === null) throw new ApiError(401, 'unauthorized', 'Sign in first.');
+    $file = $_FILES['image'] ?? null;
+    if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+        throw new ApiError(400, 'image_required', 'Choose an image first.');
+    }
+    try {
+        $path = uploadCoverImage('image', 'cover');
+    } catch (RuntimeException $e) {
+        throw new ApiError(400, 'invalid_image', $e->getMessage());
+    }
+    if ($path === null) {
+        throw new ApiError(400, 'image_required', 'Choose an image first.');
+    }
+    return ['ok' => true, 'path' => $path, 'url' => cover_image_url($path)];
+}
+
 /**
  * R2 presign ay hindi pa naka-port sa PHP. Hindi ito ginagamit ng app.
  * Pareho ang error code sa Worker kapag walang storage.

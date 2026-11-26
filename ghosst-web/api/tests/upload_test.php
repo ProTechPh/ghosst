@@ -1,6 +1,10 @@
 <?php
 declare(strict_types=1);
 
+if (!function_exists('mb_strlen')) {
+    function mb_strlen(string $s, ?string $encoding = null): int { return strlen($s); }
+}
+
 require __DIR__ . '/../lib/http.php';
 
 if (!function_exists('require_admin')) {
@@ -61,5 +65,13 @@ check(
     'foreign URL is not deleted'
 );
 check(delete_stored_image('../config.php') === false, 'parent path is rejected');
+
+check(profile_bio_validate('Hi there') === null, 'short plain bio is valid');
+check(profile_bio_validate(str_repeat('a', 301)) !== null, 'long bio is rejected');
+check(profile_bio_validate('Hello <b>world</b>') !== null, 'HTML in bio is rejected');
+check(
+    cover_image_url('uploads/covers/a.jpg') === 'https://ghossthub.com/uploads/covers/a.jpg',
+    'cover key becomes an absolute URL'
+);
 
 echo "ok\n";

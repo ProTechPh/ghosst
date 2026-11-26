@@ -93,6 +93,7 @@ const ROUTES = [
     ['POST',   '#^/v1/uploads/presign$#',                  'uploads_presign',         'required'],
     ['POST',   '#^/v1/uploads/complete$#',                 'uploads_complete',        'required'],
     ['POST',   '#^/v1/uploads/product-image$#',            'uploads_product_image',   'required'],
+    ['POST',   '#^/v1/uploads/cover$#',                    'uploads_cover_image',     'required'],
 
     ['GET',    '#^/v1/downloads/([\w.-]+)$#',              'downloads_ticket',        'required'],
 
@@ -110,6 +111,7 @@ const ROUTES = [
     ['GET',    '#^/v1/users/search$#',                     'users_search',            'required'],
     ['POST',   '#^/v1/users/summaries$#',                  'users_summaries',         'required'],
     ['GET',    '#^/v1/users/(\d+)$#',                      'users_show',              'required'],
+    ['POST',   '#^/v1/me/profile$#',                       'users_update_bio',        'required'],
     ['GET',    '#^/v1/users/(\d+)/reels$#',                'users_reels',             'required'],
     ['POST',   '#^/v1/users/(\d+)/follow$#',               'follows_add',             'required'],
     ['DELETE', '#^/v1/users/(\d+)/follow$#',               'follows_remove',          'required'],
