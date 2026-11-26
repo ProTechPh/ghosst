@@ -132,7 +132,7 @@ renderAdminSidebar($admin, 'reels');
           <option value="<?= $option ?>" <?= $statusFilter === $option ? 'selected' : '' ?>><?= ucfirst($option) ?></option>
         <?php endforeach; ?>
       </select>
-      <button class="btn btn-secondary" type="submit">Filter</button>
+      <button class="btn-outline btn-sm" type="submit">Filter</button>
     </form>
   </div>
 
@@ -165,7 +165,7 @@ renderAdminSidebar($admin, 'reels');
                 <option value="<?= $option ?>" <?= $reel['status'] === $option ? 'selected' : '' ?>><?= ucfirst($option) ?></option>
               <?php endforeach; ?>
             </select>
-            <button class="btn btn-secondary" type="submit">Update</button>
+            <button class="btn-outline btn-sm" type="submit">Update</button>
           </form>
         </div>
       </article>
@@ -190,16 +190,23 @@ renderAdminSidebar($admin, 'reels');
       <?php if (!empty($report['details'])): ?>
         <div class="gs-report-details"><?= nl2br(htmlspecialchars((string) $report['details'])) ?></div>
       <?php endif; ?>
-      <form method="post" class="gs-row">
-        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>">
-        <input type="hidden" name="action" value="report_status">
-        <input type="hidden" name="id" value="<?= htmlspecialchars($report['id']) ?>">
-        <button class="btn btn-secondary" name="status" value="reviewed" type="submit"><i class="bi bi-check2-circle"></i> Reviewed</button>
-        <button class="btn btn-secondary" name="status" value="dismissed" type="submit"><i class="bi bi-x-circle"></i> Dismiss</button>
-        <?php if ($report['status'] !== 'open'): ?>
-          <button class="btn btn-secondary" name="status" value="open" type="submit"><i class="bi bi-arrow-counterclockwise"></i> Reopen</button>
-        <?php endif; ?>
-      </form>
+      <?php
+      // Hiwalay na form bawat desisyon: ang admin.js ay nag-di-disable ng
+      // submit button, kaya ang button name/value ay hindi lumalabas sa POST.
+      foreach (['reviewed' => 'Reviewed', 'dismissed' => 'Dismiss', 'open' => 'Reopen'] as $decision => $label):
+        if ($decision === 'open' && $report['status'] === 'open') continue;
+      ?>
+        <form method="post" class="gs-row" style="display:inline-flex;margin-right:.4rem">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>">
+          <input type="hidden" name="action" value="report_status">
+          <input type="hidden" name="id" value="<?= htmlspecialchars($report['id']) ?>">
+          <input type="hidden" name="status" value="<?= $decision ?>">
+          <button class="<?= $decision === 'dismissed' ? 'btn-danger btn-sm' : 'btn-outline btn-sm' ?>" type="submit">
+            <i class="bi bi-<?= $decision === 'reviewed' ? 'check2-circle' : ($decision === 'dismissed' ? 'x-circle' : 'arrow-counterclockwise') ?>"></i>
+            <?= $label ?>
+          </button>
+        </form>
+      <?php endforeach; ?>
     </article>
   <?php endforeach; ?>
 
@@ -213,14 +220,17 @@ renderAdminSidebar($admin, 'reels');
         <?= htmlspecialchars($comment['created_at']) ?>
       </div>
       <div><?= nl2br(htmlspecialchars($comment['text'])) ?></div>
-      <form method="post" class="gs-row" style="margin-top:.6rem">
-        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>">
-        <input type="hidden" name="action" value="comment_status">
-        <input type="hidden" name="id" value="<?= htmlspecialchars($comment['id']) ?>">
-        <button class="btn btn-secondary" name="status" value="visible" type="submit">Show</button>
-        <button class="btn btn-secondary" name="status" value="hidden" type="submit">Hide</button>
-        <button class="btn btn-secondary" name="status" value="deleted" type="submit">Delete</button>
-      </form>
+      <div class="gs-row" style="margin-top:.6rem">
+        <?php foreach (['visible' => 'Show', 'hidden' => 'Hide', 'deleted' => 'Delete'] as $decision => $label): ?>
+          <form method="post" class="gs-row" style="display:inline-flex">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf) ?>">
+            <input type="hidden" name="action" value="comment_status">
+            <input type="hidden" name="id" value="<?= htmlspecialchars($comment['id']) ?>">
+            <input type="hidden" name="status" value="<?= $decision ?>">
+            <button class="<?= $decision === 'deleted' ? 'btn-danger btn-sm' : 'btn-outline btn-sm' ?>" type="submit"><?= $label ?></button>
+          </form>
+        <?php endforeach; ?>
+      </div>
     </div>
   <?php endforeach; ?>
 </div></main>
