@@ -353,6 +353,57 @@ void main() {
     },
   );
 
+  testWidgets('large coin balance does not overlap For You at 320px', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    String? wallet;
+    await _pump(
+      tester,
+      load: (_, _) async =>
+          ReelFeedPage(reels: [_reel('r1', 'One')], nextOffset: 1),
+      coins: 1000000,
+      onOpenWallet: () => wallet = 'opened',
+    );
+    await _settle(tester);
+
+    final forYou = find.byKey(const ValueKey('reel-feed-for-you'));
+    final coins = find.byType(CoinPill);
+    expect(coins, findsOneWidget);
+    expect(
+      tester.getRect(forYou).right + 8,
+      lessThanOrEqualTo(tester.getRect(coins).left),
+    );
+    await tester.tapAt(
+      Offset(tester.getRect(forYou).right - 1, tester.getCenter(forYou).dy),
+    );
+    expect(wallet, isNull);
+  });
+
+  testWidgets('top scrim overlays full-bleed media', (tester) async {
+    await _pump(
+      tester,
+      load: (_, _) async =>
+          ReelFeedPage(reels: [_reel('r1', 'One')], nextOffset: 1),
+    );
+    await _settle(tester);
+
+    final feed = find.byType(PageView).first;
+    expect(tester.getTopLeft(feed).dy, 0);
+    final scrim = tester.getRect(find.byKey(const ValueKey('reels-top-scrim')));
+    expect(scrim.height, greaterThan(64));
+    expect(
+      scrim.bottom,
+      greaterThan(
+        tester.getRect(find.byKey(const ValueKey('reel-feed-for-you'))).bottom,
+      ),
+    );
+  });
+
   testWidgets('embedded home shows wallet balance without an upload FAB', (
     tester,
   ) async {

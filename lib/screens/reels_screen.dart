@@ -248,78 +248,93 @@ class _ReelsScreenState extends State<ReelsScreen> {
               onPressed: widget.onOpenUpload,
               child: const Icon(Icons.add_a_photo_outlined),
             ),
-      body: Column(
+      body: Stack(
+        fit: StackFit.expand,
         children: [
+          _buildBody(),
           if (widget.embedded)
-            Stack(
-              children: [
-                const Positioned.fill(
-                  child: IgnorePointer(
-                    child: DecoratedBox(
-                      key: ValueKey('reels-top-scrim'),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Colors.black54, Colors.transparent],
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SizedBox(
+                height: kTouchMin * 2 + AppSpace.lg,
+                child: Stack(
+                  children: [
+                    const Positioned.fill(
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          key: ValueKey('reels-top-scrim'),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black54,
+                                Colors.black26,
+                                Colors.transparent,
+                              ],
+                              stops: [0, 0.55, 1],
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-                SafeArea(
-                  bottom: false,
-                  child: SizedBox(
-                    height: kTouchMin + AppSpace.md,
-                    child: Stack(
-                      children: [
-                        Center(
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _FeedTab(
-                                feedKey: 'following',
-                                label: 'Following',
-                                selected: _feed == 'following',
-                                onTap: () {
-                                  if (_feed == 'following') return;
-                                  setState(() => _feed = 'following');
-                                  unawaited(_load(reset: true));
-                                },
-                              ),
-                              const SizedBox(width: AppSpace.lg),
-                              _FeedTab(
-                                feedKey: 'for-you',
-                                label: 'For You',
-                                selected: _feed == 'for-you',
-                                onTap: () {
-                                  if (_feed == 'for-you') return;
-                                  setState(() => _feed = 'for-you');
-                                  unawaited(_load(reset: true));
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (widget.onOpenWallet != null)
-                          Positioned(
-                            right: AppSpace.sm,
-                            top: 0,
-                            bottom: 0,
-                            child: Center(
-                              child: CoinPill(
-                                coins: widget.coins,
-                                onTap: widget.onOpenWallet,
+                    SafeArea(
+                      bottom: false,
+                      child: SizedBox(
+                        height: kTouchMin + AppSpace.md,
+                        child: Stack(
+                          children: [
+                            Center(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _FeedTab(
+                                    feedKey: 'following',
+                                    label: 'Following',
+                                    selected: _feed == 'following',
+                                    onTap: () {
+                                      if (_feed == 'following') return;
+                                      setState(() => _feed = 'following');
+                                      unawaited(_load(reset: true));
+                                    },
+                                  ),
+                                  const SizedBox(width: AppSpace.lg),
+                                  _FeedTab(
+                                    feedKey: 'for-you',
+                                    label: 'For You',
+                                    selected: _feed == 'for-you',
+                                    onTap: () {
+                                      if (_feed == 'for-you') return;
+                                      setState(() => _feed = 'for-you');
+                                      unawaited(_load(reset: true));
+                                    },
+                                  ),
+                                ],
                               ),
                             ),
-                          ),
-                      ],
+                            if (widget.onOpenWallet != null)
+                              Positioned(
+                                right: AppSpace.sm,
+                                top: 0,
+                                bottom: 0,
+                                child: Center(
+                                  child: CoinPill(
+                                    coins: widget.coins,
+                                    onTap: widget.onOpenWallet,
+                                    compact: true,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          Expanded(child: _buildBody()),
         ],
       ),
     );

@@ -670,50 +670,78 @@ class NeonPill extends StatelessWidget {
 
 /// Gold gradient coin balance pill (app bar).
 class CoinPill extends StatelessWidget {
-  const CoinPill({super.key, required this.coins, this.onTap});
+  const CoinPill({
+    super.key,
+    required this.coins,
+    this.onTap,
+    this.compact = false,
+  });
 
   final int coins;
   final VoidCallback? onTap;
+  final bool compact;
+
+  String get _label {
+    if (!compact || coins < 1000) return '$coins';
+    if (coins >= 1000000000) {
+      return '${(coins / 1000000000).toStringAsFixed(coins < 10000000000 ? 1 : 0)}B';
+    }
+    if (coins >= 1000000) {
+      return '${(coins / 1000000).toStringAsFixed(coins < 10000000 ? 1 : 0)}M';
+    }
+    return '${(coins / 1000).toStringAsFixed(coins < 10000 ? 1 : 0)}K';
+  }
 
   @override
   Widget build(BuildContext context) {
     final pill = Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpace.md,
+      constraints: compact ? const BoxConstraints(maxWidth: 64) : null,
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? AppSpace.sm : AppSpace.md,
         vertical: AppSpace.sm - 1,
       ),
       decoration: BoxDecoration(
-        color: AppColors.surfaceHigh,
-        border: Border.all(color: AppColors.gold.withValues(alpha: 0.35)),
+        color: compact
+            ? Colors.black.withValues(alpha: 0.42)
+            : AppColors.surfaceHigh,
+        border: Border.all(
+          color: AppColors.gold.withValues(alpha: compact ? 0.24 : 0.35),
+        ),
         borderRadius: BorderRadius.circular(AppRadius.pill),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.gold.withValues(alpha: 0.08),
-            blurRadius: 10,
-            spreadRadius: -4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: compact
+            ? null
+            : [
+                BoxShadow(
+                  color: AppColors.gold.withValues(alpha: 0.08),
+                  blurRadius: 10,
+                  spreadRadius: -4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const ExcludeSemantics(
+          ExcludeSemantics(
             child: Icon(
               Icons.monetization_on_rounded,
-              size: AppIcon.sm,
-              color: Color(0xFF422006),
+              size: compact ? 14 : AppIcon.sm,
+              color: compact ? AppColors.gold : const Color(0xFF422006),
             ),
           ),
-          const SizedBox(width: AppSpace.xs + 2),
-          Text(
-            '$coins',
-            // Tabular mono digits — the balance never wiggles as it counts.
-            style: AppText.figure.copyWith(
-              color: AppColors.gold,
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.3,
+          const SizedBox(width: AppSpace.xs),
+          Flexible(
+            child: Text(
+              _label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              // Tabular mono digits — the balance never wiggles as it counts.
+              style: AppText.figure.copyWith(
+                color: AppColors.gold,
+                fontSize: compact ? 12 : 14,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.3,
+              ),
             ),
           ),
         ],
