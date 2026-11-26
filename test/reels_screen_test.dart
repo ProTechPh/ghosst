@@ -403,7 +403,7 @@ void main() {
           title: 'How to claim keys',
           slug: 'claim',
           category: 'Guide',
-          videoUrl: '',
+          videoUrl: 'https://youtu.be/abc123',
           content: 'Watch the ad then open your keys.',
           views: 0,
           createdAt: '',
@@ -416,6 +416,7 @@ void main() {
           comment: 'Nice app',
           rating: 5,
           createdAt: '',
+          imageUrl: 'https://example.com/feedback.jpg',
         ),
       ],
     );
@@ -441,11 +442,17 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('reel-feed-tutorials')));
     await _settle(tester);
     expect(find.text('How to claim keys'), findsOneWidget);
+    expect(
+      find.text('Watch the ad then open your keys.'),
+      findsOneWidget,
+    );
+    expect(find.byType(CachedNetworkImage), findsWidgets);
     expect(find.byKey(const ValueKey('reel-feed-for-you')), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('reel-feed-feedback')));
     await _settle(tester);
     expect(find.text('Nice app'), findsOneWidget);
+    expect(find.byType(CachedNetworkImage), findsWidgets);
 
     await tester.tap(find.byKey(const ValueKey('reel-feed-for-you')));
     await _settle(tester);
@@ -544,13 +551,10 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      String? wallet;
       await _pump(
         tester,
         load: (_, _) async =>
             ReelFeedPage(reels: [_reel('r1', 'One')], nextOffset: 1),
-        coins: 160,
-        onOpenWallet: () => wallet = 'opened',
       );
       await _settle(tester);
 
@@ -607,45 +611,33 @@ void main() {
         2,
       );
 
-      expect(find.text('160'), findsOneWidget);
-      await tester.tap(find.text('160'));
-      expect(wallet, 'opened');
+      expect(find.byType(CoinPill), findsNothing);
     },
   );
 
-  testWidgets('large coin balance does not overlap For You at 320px', (
-    tester,
-  ) async {
+  testWidgets('tabs scroll without coin pill at 320px', (tester) async {
     tester.view.physicalSize = const Size(320, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    String? wallet;
     await _pump(
       tester,
       load: (_, _) async =>
           ReelFeedPage(reels: [_reel('r1', 'One')], nextOffset: 1),
-      coins: 1000000,
-      onOpenWallet: () => wallet = 'opened',
     );
     await _settle(tester);
 
     final tabsScroll = find.byKey(const ValueKey('reels-tabs-scroll'));
-    final coins = find.byType(CoinPill);
-    expect(coins, findsOneWidget);
+    expect(find.byType(CoinPill), findsNothing);
     expect(tabsScroll, findsOneWidget);
-    expect(
-      tester.getRect(tabsScroll).right + 8,
-      lessThanOrEqualTo(tester.getRect(coins).left),
-    );
+    expect(tester.getRect(tabsScroll).right, lessThanOrEqualTo(320));
     final forYou = find.byKey(const ValueKey('reel-feed-for-you'));
     await tester.drag(tabsScroll, const Offset(-200, 0));
     await tester.pump();
     await tester.tapAt(
       Offset(tester.getRect(forYou).right - 1, tester.getCenter(forYou).dy),
     );
-    expect(wallet, isNull);
   });
 
   testWidgets('top scrim overlays full-bleed media', (tester) async {
@@ -668,24 +660,16 @@ void main() {
     );
   });
 
-  testWidgets('embedded home shows wallet balance without an upload FAB', (
-    tester,
-  ) async {
-    String? wallet;
+  testWidgets('embedded home hides the upload FAB', (tester) async {
     var uploadCalls = 0;
     await _pump(
       tester,
       load: (_, _) async =>
           ReelFeedPage(reels: [_reel('r1', 'One')], nextOffset: 1),
-      coins: 250,
-      onOpenWallet: () => wallet = 'opened',
       onOpenUpload: () => uploadCalls++,
     );
     await _settle(tester);
 
-    expect(find.text('250'), findsOneWidget);
-    await tester.tap(find.text('250'));
-    expect(wallet, 'opened');
     expect(find.byTooltip('Upload reel'), findsNothing);
     expect(uploadCalls, 0);
   });

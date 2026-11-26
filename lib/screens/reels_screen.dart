@@ -8,6 +8,7 @@ import '../services/worker_backend.dart';
 import '../theme.dart';
 import 'direct_chat_screen.dart' show ReportContent;
 import 'reel_comments_screen.dart';
+import 'tutorials_screen.dart' show TutorialThumb;
 
 class ReelsScreen extends StatefulWidget {
   const ReelsScreen({
@@ -384,75 +385,70 @@ class _ReelsScreenState extends State<ReelsScreen> {
                           children: [
                             Positioned(
                               left: AppSpace.sm,
-                              right: 80,
+                              right: AppSpace.sm,
                               top: 0,
                               bottom: 0,
-                              child: SingleChildScrollView(
-                                key: const ValueKey('reels-tabs-scroll'),
-                                scrollDirection: Axis.horizontal,
-                                physics: const AlwaysScrollableScrollPhysics(),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _FeedTab(
-                                      feedKey: 'tutorials',
-                                      label: 'Tutorials',
-                                      width: 76,
-                                      selected: _section == 'tutorials',
-                                      onTap: () => _switchSection('tutorials'),
+                              child: Center(
+                                child: SizedBox(
+                                  height: kTouchMin,
+                                  child: SingleChildScrollView(
+                                    key: const ValueKey('reels-tabs-scroll'),
+                                    scrollDirection: Axis.horizontal,
+                                    physics:
+                                        const AlwaysScrollableScrollPhysics(),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        _FeedTab(
+                                          feedKey: 'tutorials',
+                                          label: 'Tutorials',
+                                          width: 76,
+                                          selected: _section == 'tutorials',
+                                          onTap: () =>
+                                              _switchSection('tutorials'),
+                                        ),
+                                        _FeedTab(
+                                          feedKey: 'feedback',
+                                          label: 'Feedback',
+                                          width: 76,
+                                          selected: _section == 'feedback',
+                                          onTap: () =>
+                                              _switchSection('feedback'),
+                                        ),
+                                        _FeedTab(
+                                          feedKey: 'following',
+                                          label: 'Following',
+                                          width: 76,
+                                          selected: _section == 'following',
+                                          onTap: () {
+                                            if (_section == 'following') return;
+                                            setState(() {
+                                              _section = 'following';
+                                              _feed = 'following';
+                                            });
+                                            unawaited(_load(reset: true));
+                                          },
+                                        ),
+                                        _FeedTab(
+                                          feedKey: 'for-you',
+                                          label: 'For You',
+                                          width: 76,
+                                          selected: _section == 'for-you',
+                                          onTap: () {
+                                            if (_section == 'for-you') return;
+                                            setState(() {
+                                              _section = 'for-you';
+                                              _feed = 'for-you';
+                                            });
+                                            unawaited(_load(reset: true));
+                                          },
+                                        ),
+                                      ],
                                     ),
-                                    _FeedTab(
-                                      feedKey: 'feedback',
-                                      label: 'Feedback',
-                                      width: 76,
-                                      selected: _section == 'feedback',
-                                      onTap: () => _switchSection('feedback'),
-                                    ),
-                                    _FeedTab(
-                                      feedKey: 'following',
-                                      label: 'Following',
-                                      width: 76,
-                                      selected: _section == 'following',
-                                      onTap: () {
-                                        if (_section == 'following') return;
-                                        setState(() {
-                                          _section = 'following';
-                                          _feed = 'following';
-                                        });
-                                        unawaited(_load(reset: true));
-                                      },
-                                    ),
-                                    _FeedTab(
-                                      feedKey: 'for-you',
-                                      label: 'For You',
-                                      width: 76,
-                                      selected: _section == 'for-you',
-                                      onTap: () {
-                                        if (_section == 'for-you') return;
-                                        setState(() {
-                                          _section = 'for-you';
-                                          _feed = 'for-you';
-                                        });
-                                        unawaited(_load(reset: true));
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            if (widget.onOpenWallet != null)
-                              Positioned(
-                                right: AppSpace.sm,
-                                top: 0,
-                                bottom: 0,
-                                child: Center(
-                                  child: CoinPill(
-                                    coins: widget.coins,
-                                    onTap: widget.onOpenWallet,
-                                    compact: true,
                                   ),
                                 ),
                               ),
+                            ),
                           ],
                         ),
                       ),
@@ -485,68 +481,106 @@ class _ReelsScreenState extends State<ReelsScreen> {
         ),
       );
     }
-    final isTutorials = _section == 'tutorials';
-    final count = isTutorials ? _tutorials.length : _siteFeedback.length;
-    if (count == 0) {
+    if (_section == 'tutorials') {
+      if (_tutorials.isEmpty) {
+        return const Center(
+          child: Text('Nothing here yet', style: TextStyle(color: Colors.white)),
+        );
+      }
+      return ListView.separated(
+        padding: const EdgeInsets.all(AppSpace.lg),
+        itemCount: _tutorials.length,
+        separatorBuilder: (_, _) => const SizedBox(height: AppSpace.md),
+        itemBuilder: (_, i) {
+          final t = _tutorials[i];
+          return GlowCard(
+            key: ValueKey('reel-tutorial-${t.id}'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TutorialThumb(videoUrl: t.videoUrl),
+                Padding(
+                  padding: const EdgeInsets.all(AppSpace.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (t.category.isNotEmpty)
+                        Text(
+                          t.category.toUpperCase(),
+                          style: AppText.label.copyWith(
+                            fontSize: 10,
+                            color: AppColors.cyan,
+                          ),
+                        ),
+                      const SizedBox(height: AppSpace.xs),
+                      Text(
+                        t.title,
+                        style: AppText.subtitle.copyWith(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (t.content.isNotEmpty) ...[
+                        const SizedBox(height: AppSpace.sm),
+                        Text(t.content, style: AppText.body),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    }
+    if (_siteFeedback.isEmpty) {
       return const Center(
         child: Text('Nothing here yet', style: TextStyle(color: Colors.white)),
       );
     }
-    return ListView.separated(
-      padding: const EdgeInsets.all(AppSpace.lg),
-      itemCount: count,
-      separatorBuilder: (_, _) => const SizedBox(height: AppSpace.sm),
-      itemBuilder: (_, i) {
-        if (isTutorials) {
-          final t = _tutorials[i];
-          return _extraCard(
-            key: ValueKey('reel-tutorial-${t.id}'),
-            title: t.title,
-            subtitle: t.category,
-            body: t.content,
-          );
-        }
-        final f = _siteFeedback[i];
-        return _extraCard(
-          key: ValueKey('reel-feedback-${f.id}'),
-          title: f.username.isEmpty ? 'Member' : f.username,
-          subtitle: '★' * f.rating,
-          body: f.comment,
-        );
-      },
+    return PageView.builder(
+      scrollDirection: Axis.vertical,
+      itemCount: _siteFeedback.length,
+      itemBuilder: (_, i) => _feedbackPage(_siteFeedback[i]),
     );
   }
 
-  Widget _extraCard({
-    required Key key,
-    required String title,
-    required String subtitle,
-    required String body,
-  }) => GlowCard(
-    key: key,
-    padding: const EdgeInsets.all(AppSpace.md),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: AppText.subtitle.copyWith(fontSize: 15)),
-        if (subtitle.isNotEmpty) ...[
-          const SizedBox(height: 2),
-          Text(
-            subtitle,
-            style: AppText.caption.copyWith(color: AppColors.gold),
-          ),
-        ],
-        if (body.isNotEmpty) ...[
-          const SizedBox(height: AppSpace.xs),
-          Text(
-            body,
-            maxLines: 4,
-            overflow: TextOverflow.ellipsis,
-            style: AppText.body.copyWith(fontSize: 13),
-          ),
-        ],
-      ],
-    ),
+  Widget _feedbackPage(WebsiteFeedback item) => Stack(
+    fit: StackFit.expand,
+    children: [
+      if (item.imageUrl != null)
+        CachedNetworkImage(
+          imageUrl: item.imageUrl!,
+          fit: BoxFit.cover,
+          errorWidget: (_, _, _) =>
+              const ColoredBox(color: AppColors.surfaceHigh),
+        )
+      else
+        const ColoredBox(color: AppColors.bgSoft),
+      const IgnorePointer(child: ColoredBox(color: Color(0x33000000))),
+      Positioned(
+        left: AppSpace.lg,
+        right: AppSpace.lg,
+        bottom: AppSpace.xl,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              item.username.isEmpty ? 'Member' : '@${item.username}',
+              style: AppText.subtitle.copyWith(color: Colors.white),
+            ),
+            const SizedBox(height: AppSpace.xs),
+            Text(item.comment, style: AppText.body.copyWith(color: Colors.white)),
+            const SizedBox(height: AppSpace.xs),
+            Text(
+              '★' * item.rating,
+              style: const TextStyle(color: AppColors.gold, fontSize: 16),
+            ),
+          ],
+        ),
+      ),
+    ],
   );
 
   Widget _buildBody() {
