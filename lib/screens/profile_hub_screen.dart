@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../app_menu.dart';
 import '../premium.dart';
 import '../services/worker_backend.dart';
 import '../social_shell.dart';
@@ -159,9 +160,36 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
             onPressed: widget.onOpenShare,
             icon: const Icon(Icons.share_outlined),
           ),
-          PopupMenuButton<String>(
+          AppMenuButton<String>(
             key: const ValueKey('profile-menu'),
-            icon: const Icon(Icons.more_vert),
+            items: [
+              const AppMenuItem(
+                value: 'settings',
+                label: 'Settings',
+                icon: Icons.settings_outlined,
+              ),
+              const AppMenuItem(
+                value: 'keys',
+                label: 'Keys',
+                icon: Icons.key_outlined,
+              ),
+              const AppMenuItem(
+                value: 'wallet',
+                label: 'Wallet',
+                icon: Icons.account_balance_wallet_outlined,
+              ),
+              const AppMenuItem(
+                value: 'feedback',
+                label: 'Feedback',
+                icon: Icons.feedback_outlined,
+              ),
+              if (widget.isAdmin)
+                const AppMenuItem(
+                  value: 'admin',
+                  label: 'Admin',
+                  icon: Icons.admin_panel_settings_outlined,
+                ),
+            ],
             onSelected: (value) {
               switch (value) {
                 case 'settings':
@@ -176,14 +204,6 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
                   widget.onOpenAdmin();
               }
             },
-            itemBuilder: (_) => [
-              const PopupMenuItem(value: 'settings', child: Text('Settings')),
-              const PopupMenuItem(value: 'keys', child: Text('Keys')),
-              const PopupMenuItem(value: 'wallet', child: Text('Wallet')),
-              const PopupMenuItem(value: 'feedback', child: Text('Feedback')),
-              if (widget.isAdmin)
-                const PopupMenuItem(value: 'admin', child: Text('Admin')),
-            ],
           ),
         ],
       ),

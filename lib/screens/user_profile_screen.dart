@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../api/api_exception.dart';
+import '../app_menu.dart';
 import '../premium.dart';
 import '../services/direct_chat_service.dart';
 import '../services/worker_backend.dart';
@@ -277,23 +278,28 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       appBar: AppBar(
         title: const Text('Profile'),
         actions: [
-          PopupMenuButton<String>(
+          AppMenuButton<String>(
             tooltip: 'More actions',
-            icon: const Icon(Icons.more_vert),
+            items: [
+              const AppMenuItem(
+                value: 'report',
+                label: 'Report user',
+                icon: Icons.flag_outlined,
+              ),
+              if (widget.onBlock != null || widget.onUnblock != null)
+                AppMenuItem(
+                  value: _blocked ? 'unblock' : 'block',
+                  label: _blocked ? 'Unblock user' : 'Block user',
+                  icon: _blocked ? Icons.check_circle_outline : Icons.block,
+                  enabled: !_blocking,
+                  destructive: !_blocked,
+                ),
+            ],
             onSelected: (value) {
               if (value == 'report') widget.onReport();
               if (value == 'block') unawaited(_block());
               if (value == 'unblock') _unblock();
             },
-            itemBuilder: (_) => [
-              const PopupMenuItem(value: 'report', child: Text('Report user')),
-              if (widget.onBlock != null || widget.onUnblock != null)
-                PopupMenuItem(
-                  value: _blocked ? 'unblock' : 'block',
-                  enabled: !_blocking,
-                  child: Text(_blocked ? 'Unblock user' : 'Block user'),
-                ),
-            ],
           ),
         ],
       ),

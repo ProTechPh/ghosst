@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../app_menu.dart';
 import '../services/direct_chat_service.dart';
 import '../services/worker_backend.dart';
 import '../social_shell.dart';
@@ -371,8 +372,21 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
           ),
         ),
         actions: [
-          PopupMenuButton<String>(
+          AppMenuButton<String>(
             tooltip: 'More actions',
+            items: [
+              AppMenuItem(
+                value: _blocked ? 'unblock' : 'block',
+                label: _blocked ? 'Unblock user' : 'Block user',
+                icon: _blocked ? Icons.check_circle_outline : Icons.block,
+                destructive: !_blocked,
+              ),
+              const AppMenuItem(
+                value: 'report_user',
+                label: 'Report user',
+                icon: Icons.flag_outlined,
+              ),
+            ],
             onSelected: (value) {
               if (value == 'block') unawaited(_block());
               if (value == 'unblock') unawaited(_unblock());
@@ -390,16 +404,6 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                 );
               }
             },
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                value: _blocked ? 'unblock' : 'block',
-                child: Text(_blocked ? 'Unblock user' : 'Block user'),
-              ),
-              const PopupMenuItem(
-                value: 'report_user',
-                child: Text('Report user'),
-              ),
-            ],
           ),
         ],
       ),
