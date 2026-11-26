@@ -45,4 +45,12 @@ api_error(
     'forbidden'
 );
 
+require __DIR__ . '/../lib/uploads.php';
+
+check(
+    delete_stored_image('https://res.cloudinary.com/zp6uwlrj/image/upload/a.jpg') === false,
+    'foreign URL is not deleted'
+);
+check(delete_stored_image('../config.php') === false, 'parent path is rejected');
+
 echo "ok\n";
