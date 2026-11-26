@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/screens/chat_screen.dart';
 import 'package:ghosst/services/chat_service.dart';
 import 'package:ghosst/services/worker_backend.dart';
+import 'package:ghosst/social_shell.dart';
 import 'package:ghosst/theme.dart';
 
 class _FakeClient implements ChatClient {
@@ -116,6 +117,7 @@ Future<void> _pump(
   WidgetTester tester,
   ChatClient client, {
   bool active = true,
+  bool embedded = true,
   bool isAdmin = false,
   VoidCallback? onOpenInbox,
   ValueChanged<String>? onOpenProfile,
@@ -123,15 +125,25 @@ Future<void> _pump(
   await tester.pumpWidget(
     MaterialApp(
       theme: AppTheme.dark,
-      home: Scaffold(
-        body: ChatScreen(
-          client: client,
-          active: active,
-          isAdmin: isAdmin,
-          onOpenInbox: onOpenInbox,
-          onOpenProfile: onOpenProfile,
-        ),
-      ),
+      home: embedded
+          ? Scaffold(
+              body: ChatScreen(
+                client: client,
+                active: active,
+                embedded: embedded,
+                isAdmin: isAdmin,
+                onOpenInbox: onOpenInbox,
+                onOpenProfile: onOpenProfile,
+              ),
+            )
+          : ChatScreen(
+              client: client,
+              active: active,
+              embedded: embedded,
+              isAdmin: isAdmin,
+              onOpenInbox: onOpenInbox,
+              onOpenProfile: onOpenProfile,
+            ),
     ),
   );
   await tester.pump();
@@ -168,6 +180,23 @@ void main() {
     expect(find.byTooltip('Inbox'), findsOneWidget);
     await tester.tap(find.byTooltip('Inbox'));
     expect(opened, isTrue);
+  });
+
+  testWidgets('World chat route uses a white social app bar and 48dp send', (
+    tester,
+  ) async {
+    await _pump(tester, _FakeClient(), embedded: false);
+    await tester.pumpAndSettle();
+
+    expect(find.text('World chat'), findsOneWidget);
+    expect(find.byType(SocialAppBar), findsOneWidget);
+    final appBar = tester.widget<AppBar>(find.byType(AppBar));
+    expect(appBar.backgroundColor, Colors.black);
+    expect(appBar.foregroundColor, AppColors.text);
+    expect(
+      tester.getSize(find.widgetWithIcon(IconButton, Icons.send)).height,
+      greaterThanOrEqualTo(kTouchMin),
+    );
   });
 
   testWidgets('shows the fallback when Firebase is not ready', (tester) async {

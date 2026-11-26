@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../services/direct_chat_service.dart';
 import '../services/worker_backend.dart';
+import '../social_shell.dart';
 import '../theme.dart';
 
 typedef ReportContent =
@@ -257,6 +258,11 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                     ),
                   ),
                   FilledButton(
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(0, kTouchMin),
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: const Color(0xFF04212A),
+                    ),
                     onPressed: () => Navigator.pop(sheetContext, {
                       'reason': reason,
                       'details': details.text.trim(),
@@ -299,8 +305,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        title: GestureDetector(
+      appBar: SocialAppBar(
+        title: widget.peerName,
+        titleContent: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.onOpenProfile == null
               ? null
@@ -371,9 +378,21 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                     width: double.infinity,
                     color: AppColors.red.withValues(alpha: 0.10),
                     padding: const EdgeInsets.all(AppSpace.md),
-                    child: const Text(
-                      'You blocked this user.',
-                      style: TextStyle(color: AppColors.red),
+                    child: const Row(
+                      children: [
+                        Icon(
+                          Icons.block_rounded,
+                          size: 18,
+                          color: AppColors.red,
+                        ),
+                        SizedBox(width: AppSpace.sm),
+                        Expanded(
+                          child: Text(
+                            'You blocked this user.',
+                            style: TextStyle(color: AppColors.red),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 Expanded(
@@ -477,11 +496,6 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                 children: [
                   IconButton(
                     tooltip: 'Report message',
-                    visualDensity: VisualDensity.compact,
-                    constraints: const BoxConstraints.tightFor(
-                      width: 40,
-                      height: 40,
-                    ),
                     onPressed: () => unawaited(_report(message)),
                     icon: const Icon(Icons.flag_outlined, size: 18),
                   ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/arcade.dart';
+import 'package:ghosst/premium.dart';
 import 'package:ghosst/screens/claim_reveal.dart';
 import 'package:ghosst/services/models.dart';
 import 'package:ghosst/theme.dart';
@@ -41,7 +42,8 @@ void main() {
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
       (call) async {
-        if (call.method == 'HapticFeedback.vibrate') haptics.add(call.arguments);
+        if (call.method == 'HapticFeedback.vibrate')
+          haptics.add(call.arguments);
         return null;
       },
     );
@@ -63,6 +65,9 @@ void main() {
     expect(find.byType(CardFlip), findsOneWidget);
     expect(_keyText(), findsOneWidget);
     expect(haptics.length, 1);
+    expect(find.byType(MeshBackground), findsNothing);
+    final done = find.widgetWithText(IslandButton, 'Done');
+    expect(tester.getSize(done).height, greaterThanOrEqualTo(kTouchMin));
     await tester.pump(const Duration(seconds: 2));
     expect(haptics.length, 1); // no double fire
   });
@@ -74,7 +79,8 @@ void main() {
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
       (call) async {
-        if (call.method == 'HapticFeedback.vibrate') haptics.add(call.arguments);
+        if (call.method == 'HapticFeedback.vibrate')
+          haptics.add(call.arguments);
         return null;
       },
     );

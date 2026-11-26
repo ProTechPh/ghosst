@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/screens/direct_chat_screen.dart';
 import 'package:ghosst/services/direct_chat_service.dart';
+import 'package:ghosst/social_shell.dart';
 import 'package:ghosst/theme.dart';
 
 class _FakeDirectChatClient implements DirectChatClient {
@@ -77,14 +78,12 @@ Future<void> _pump(
   await tester.pumpWidget(
     MaterialApp(
       theme: AppTheme.dark,
-      home: Scaffold(
-        body: DirectChatScreen(
-          peerId: 'peer',
-          peerName: 'Peer name',
-          client: client,
-          onReport: onReport,
-          onOpenProfile: onOpenProfile,
-        ),
+      home: DirectChatScreen(
+        peerId: 'peer',
+        peerName: 'Peer name',
+        client: client,
+        onReport: onReport,
+        onOpenProfile: onOpenProfile,
       ),
     ),
   );
@@ -92,6 +91,33 @@ Future<void> _pump(
 }
 
 void main() {
+  testWidgets('DM route uses a white social app bar and 48dp actions', (
+    tester,
+  ) async {
+    final client = _FakeDirectChatClient();
+    await _pump(tester, client);
+    client.emit([_message('m1', 'peer', 'Hello', 1000)]);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Peer name'), findsOneWidget);
+    expect(find.byType(SocialAppBar), findsOneWidget);
+    final appBar = tester.widget<AppBar>(find.byType(AppBar));
+    expect(appBar.backgroundColor, Colors.black);
+    expect(appBar.foregroundColor, AppColors.text);
+    final actions = <String, Finder>{
+      'Send message': find.widgetWithIcon(IconButton, Icons.send_rounded),
+      'More actions': find.byType(PopupMenuButton<String>),
+      'Report message': find.widgetWithIcon(IconButton, Icons.flag_outlined),
+    };
+    for (final entry in actions.entries) {
+      expect(
+        tester.getSize(entry.value).height,
+        greaterThanOrEqualTo(kTouchMin),
+        reason: entry.key,
+      );
+    }
+  });
+
   testWidgets('peer header opens the public profile', (tester) async {
     String? opened;
     final client = _FakeDirectChatClient();

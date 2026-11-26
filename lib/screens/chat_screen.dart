@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/chat_service.dart';
 import '../services/read_store.dart';
 import '../services/worker_backend.dart';
+import '../social_shell.dart';
 import '../theme.dart';
 import 'direct_chat_screen.dart';
 import 'inbox_screen.dart';
@@ -474,7 +475,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(title: const Text('World chat')),
+      appBar: const SocialAppBar(title: 'World chat'),
       body: body,
     );
   }
@@ -741,19 +742,9 @@ class _ChatScreenState extends State<ChatScreen> {
       alignment: Alignment.center,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        gradient: mine ? kNeonGradient : null,
-        color: mine ? null : AppColors.surfaceHigh,
+        color: mine ? AppColors.primary : AppColors.surfaceHigh,
         shape: BoxShape.circle,
         border: Border.all(color: mine ? Colors.transparent : AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: (mine ? AppColors.primary : Colors.black).withValues(
-              alpha: 0.25,
-            ),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
       ),
       child: (photo != null && photo.isNotEmpty)
           ? Image.network(
@@ -783,7 +774,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final hour12 = at.hour % 12 == 0 ? 12 : at.hour % 12;
     final period = at.hour >= 12 ? 'PM' : 'AM';
     final clock = '$hour12:${at.minute.toString().padLeft(2, '0')} $period';
-    // Sariling bubble: cyan gradient + dark text (tulad ng NeonButton).
+    // Own messages use solid cyan; peer messages stay on the dark surface.
     final ink = mine ? const Color(0xFF04212A) : AppColors.text;
     final dim = mine ? const Color(0xB304212A) : AppColors.textDim;
 
@@ -793,17 +784,9 @@ class _ChatScreenState extends State<ChatScreen> {
         vertical: AppSpace.sm,
       ),
       decoration: BoxDecoration(
-        gradient: mine ? kNeonGradient : null,
-        color: mine ? null : AppColors.surface,
+        color: mine ? AppColors.primary : AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadius.button),
         border: mine ? null : Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

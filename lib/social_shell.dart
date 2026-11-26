@@ -165,9 +165,15 @@ class _TabItem extends StatelessWidget {
 }
 
 class SocialAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const SocialAppBar({super.key, required this.title, this.actions = const []});
+  const SocialAppBar({
+    super.key,
+    required this.title,
+    this.titleContent,
+    this.actions = const [],
+  });
 
   final String title;
+  final Widget? titleContent;
   final List<Widget> actions;
 
   @override
@@ -181,7 +187,7 @@ class SocialAppBar extends StatelessWidget implements PreferredSizeWidget {
       foregroundColor: AppColors.text,
       elevation: 0,
       centerTitle: false,
-      title: Text(title),
+      title: titleContent ?? Text(title),
       actions: actions,
     );
   }

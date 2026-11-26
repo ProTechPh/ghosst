@@ -6,14 +6,15 @@ import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../arcade.dart';
 import '../premium.dart';
 import '../services/apk_download.dart';
 import '../services/distribution.dart';
 import '../services/download_service.dart';
 import '../services/mediafire.dart';
+import '../social_shell.dart';
 import '../theme.dart';
-import 'package:cached_network_image/cached_network_image.dart' hide DownloadProgress;
+import 'package:cached_network_image/cached_network_image.dart'
+    hide DownloadProgress;
 
 enum _State { idle, running, done, failed }
 
@@ -305,95 +306,95 @@ class _DownloadScreenState extends State<DownloadScreen> {
     final pct = p?.fraction;
 
     return Scaffold(
-      appBar: AppBar(title: Text(_isApk ? 'Install app' : 'Download file')),
-      body: Stack(
+      backgroundColor: AppColors.bg,
+      appBar: SocialAppBar(title: _isApk ? 'Install app' : 'Download file'),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpace.lg,
+          AppSpace.md,
+          AppSpace.lg,
+          32,
+        ),
         children: [
-          const MeshBackground(),
-          const Positioned.fill(child: IgnorePointer(child: TableSurface())),
-          ListView(
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 32),
-            children: [
-              // ---- product header ------------------------------------------
-              GlowCard(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    _cover(),
-                    const SizedBox(width: 13),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+          // ---- product header ------------------------------------------
+          GlowCard(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                _cover(),
+                const SizedBox(width: 13),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.title,
+                        style: const TextStyle(
+                          fontSize: 16.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.2,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 7,
+                        runSpacing: 6,
                         children: [
-                          Text(
-                            widget.title,
-                            style: const TextStyle(
-                              fontSize: 16.5,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.2,
+                          NeonPill(
+                            icon: _isApk
+                                ? Icons.android_rounded
+                                : Icons.insert_drive_file_outlined,
+                            label: _isApk ? 'APK' : 'FILE',
+                            color: AppColors.cyan,
+                          ),
+                          if (widget.version.isNotEmpty)
+                            NeonPill(
+                              icon: Icons.tag_rounded,
+                              label: widget.version,
+                              color: AppColors.textDim,
                             ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 6),
-                          Wrap(
-                            spacing: 7,
-                            runSpacing: 6,
-                            children: [
-                              NeonPill(
-                                icon: _isApk
-                                    ? Icons.android_rounded
-                                    : Icons.insert_drive_file_outlined,
-                                label: _isApk ? 'APK' : 'FILE',
-                                color: AppColors.cyan,
-                              ),
-                              if (widget.version.isNotEmpty)
-                                NeonPill(
-                                  icon: Icons.tag_rounded,
-                                  label: widget.version,
-                                  color: AppColors.textDim,
-                                ),
-                              if (widget.fileSize.isNotEmpty)
-                                NeonPill(
-                                  icon: Icons.data_usage_rounded,
-                                  label: widget.fileSize,
-                                  color: AppColors.gold,
-                                ),
-                            ],
-                          ),
+                          if (widget.fileSize.isNotEmpty)
+                            NeonPill(
+                              icon: Icons.data_usage_rounded,
+                              label: widget.fileSize,
+                              color: AppColors.gold,
+                            ),
                         ],
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-
-              // ---- progress / result ---------------------------------------
-              if (_state == _State.idle) _idleView(),
-              if (_state == _State.running) _progressView(p, pct),
-              if (_state == _State.done) _doneView(),
-              if (_state == _State.failed) _failedView(),
-
-              // ---- browser fallback, available in every state --------------
-              const SizedBox(height: 10),
-              _browserFallback(),
-
-              // ---- why a download still fails (carrier/DNS, not the app) ---
-              if (_state == _State.failed) ...[
-                const SizedBox(height: 14),
-                const Text(
-                  'Still not working? Turn off VPN or Private DNS, then try '
-                  'again — or switch to mobile data.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.textDim,
-                    fontSize: 12.5,
-                    height: 1.5,
+                    ],
                   ),
                 ),
               ],
-            ],
+            ),
           ),
+          const SizedBox(height: 18),
+
+          // ---- progress / result ---------------------------------------
+          if (_state == _State.idle) _idleView(),
+          if (_state == _State.running) _progressView(p, pct),
+          if (_state == _State.done) _doneView(),
+          if (_state == _State.failed) _failedView(),
+
+          // ---- browser fallback, available in every state --------------
+          const SizedBox(height: 10),
+          _browserFallback(),
+
+          // ---- why a download still fails (carrier/DNS, not the app) ---
+          if (_state == _State.failed) ...[
+            const SizedBox(height: 14),
+            const Text(
+              'Still not working? Turn off VPN or Private DNS, then try '
+              'again — or switch to mobile data.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.textDim,
+                fontSize: 12.5,
+                height: 1.5,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -429,15 +430,15 @@ class _DownloadScreenState extends State<DownloadScreen> {
         label: widget.title,
         image: true,
         child: CachedNetworkImage(
-        imageUrl: url,
-        width: 52,
-        height: 52,
-        fit: BoxFit.cover,
-        // 52px slot at 2x.
-        memCacheWidth: 104,
-        memCacheHeight: 104,
-        errorWidget: (_, _, _) => _coverFallback(),
-      ),
+          imageUrl: url,
+          width: 52,
+          height: 52,
+          fit: BoxFit.cover,
+          // 52px slot at 2x.
+          memCacheWidth: 104,
+          memCacheHeight: 104,
+          errorWidget: (_, _, _) => _coverFallback(),
+        ),
       ),
     );
   }
@@ -446,12 +447,12 @@ class _DownloadScreenState extends State<DownloadScreen> {
     width: 52,
     height: 52,
     decoration: BoxDecoration(
-      gradient: _isApk ? kNeonGradient : kTealGradient,
-      borderRadius: BorderRadius.circular(15),
+      color: AppColors.surfaceHigh,
+      borderRadius: BorderRadius.circular(AppRadius.input),
     ),
     child: Icon(
       _isApk ? Icons.android_rounded : Icons.download_rounded,
-      color: Colors.white,
+      color: AppColors.cyan,
       size: 26,
     ),
   );

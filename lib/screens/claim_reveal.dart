@@ -687,7 +687,7 @@ class _ClaimFlowState extends State<_ClaimFlow> {
         type: MaterialType.transparency,
         child: Stack(
           children: [
-            const MeshBackground(),
+            const Positioned.fill(child: ColoredBox(color: AppColors.bg)),
             SafeArea(
               child: Center(
                 child: SingleChildScrollView(
