@@ -87,12 +87,34 @@ class _ReelsScreenState extends State<ReelsScreen> {
   final Set<String> _liking = {};
   final Map<String, bool> _following = {};
   final Set<String> _followingBusy = {};
+  final ScrollController _feedScroll = ScrollController();
 
   @override
   void initState() {
     super.initState();
+    _feedScroll.addListener(_onFeedScroll);
     _loading = widget.active;
     if (widget.active) unawaited(_load(reset: true));
+  }
+
+  void _onFeedScroll() {
+    if (!_feedScroll.hasClients ||
+        _loading ||
+        _loadingMore ||
+        _unconfigured ||
+        _error != null ||
+        _feedScroll.position.extentAfter > 200) {
+      return;
+    }
+    _loadingMore = true;
+    unawaited(_load());
+  }
+
+  @override
+  void dispose() {
+    _feedScroll.removeListener(_onFeedScroll);
+    _feedScroll.dispose();
+    super.dispose();
   }
 
   @override
@@ -388,7 +410,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
               right: 0,
               child: Listener(
                 key: const ValueKey('reels-swipe-area'),
-                behavior: HitTestBehavior.opaque,
+                behavior: HitTestBehavior.translucent,
                 onPointerDown: _onSwipeDown,
                 onPointerUp: _onSwipeUp,
                 child: SizedBox(
@@ -689,33 +711,110 @@ class _ReelsScreenState extends State<ReelsScreen> {
         child: Text('No reels yet', style: TextStyle(color: Colors.white)),
       );
     }
-    return PageView.builder(
-      scrollDirection: Axis.vertical,
+    return ListView.separated(
+      controller: _feedScroll,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.lg,
+        AppSpace.md,
+        AppSpace.lg,
+        AppSpace.xxl,
+      ),
       itemCount: _reels.length,
-      onPageChanged: (i) {
-        if (!_loadingMore && i >= _reels.length - 2) {
-          _loadingMore = true;
-          unawaited(_load());
-        }
+      separatorBuilder: (_, _) =>
+          const Divider(height: 1, color: AppColors.border),
+      itemBuilder: (_, i) {
+        return _PostCard(
+          reel: _reels[i],
+          liked: _liked[_reels[i].id] ?? _reels[i].isLiked,
+          likeCount: _likeCounts[_reels[i].id] ?? _reels[i].likeCount,
+          following: _following[_reels[i].id] ?? _reels[i].isFollowing,
+          onLike: () => unawaited(_toggleLike(_reels[i])),
+          onFollow: () => unawaited(_toggleFollow(_reels[i])),
+          onComments: () => unawaited(_openComments(_reels[i])),
+          onDelete: () => unawaited(_deleteReel(_reels[i])),
+          onProfile: widget.onOpenProfile,
+          onReport: () => unawaited(_report(_reels[i].id)),
+        );
       },
-      itemBuilder: (_, i) => _ReelPage(
-        reel: _reels[i],
-        liked: _liked[_reels[i].id] ?? _reels[i].isLiked,
-        likeCount: _likeCounts[_reels[i].id] ?? _reels[i].likeCount,
-        following: _following[_reels[i].id] ?? _reels[i].isFollowing,
-        onLike: () => unawaited(_toggleLike(_reels[i])),
-        onFollow: () => unawaited(_toggleFollow(_reels[i])),
-        onComments: () => unawaited(_openComments(_reels[i])),
-        onDelete: () => unawaited(_deleteReel(_reels[i])),
-        onProfile: widget.onOpenProfile,
-        onReport: () => unawaited(_report(_reels[i].id)),
+    );
+  }
+}
+
+class _PostCarousel extends StatefulWidget {
+  const _PostCarousel({required this.reel});
+
+  final Reel reel;
+
+  @override
+  State<_PostCarousel> createState() => _PostCarouselState();
+}
+
+class _PostCarouselState extends State<_PostCarousel> {
+  int _index = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final reel = widget.reel;
+    final images = reel.images;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppRadius.card),
+      child: SizedBox(
+        height: 300,
+        child: Stack(
+          alignment: Alignment.bottomCenter,
+          children: [
+            PageView.builder(
+              key: ValueKey('reel-carousel-${reel.id}'),
+              itemCount: images.length,
+              onPageChanged: (i) => setState(() => _index = i),
+              itemBuilder: (_, i) => CachedNetworkImage(
+                key: ValueKey('reel-image-${reel.id}-${images[i].position}'),
+                imageUrl: images[i].url,
+                fit: BoxFit.contain,
+                errorWidget: (_, _, _) => const Center(
+                  child: Icon(
+                    Icons.broken_image_outlined,
+                    color: Colors.white54,
+                  ),
+                ),
+              ),
+            ),
+            if (images.length > 1)
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpace.xs),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (var i = 0; i < images.length; i++)
+                      Semantics(
+                        key: ValueKey('reel-dot-semantics-${reel.id}-$i'),
+                        label: 'Image ${images[i].position} of ${images.length}',
+                        selected: i == _index,
+                        child: Container(
+                          key: ValueKey('reel-dot-${reel.id}-$i'),
+                          width: 6,
+                          height: 6,
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: i == _index
+                                ? Colors.white
+                                : Colors.white38,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _ReelPage extends StatefulWidget {
-  const _ReelPage({
+class _PostCard extends StatelessWidget {
+  const _PostCard({
     required this.reel,
     required this.liked,
     required this.likeCount,
@@ -740,195 +839,142 @@ class _ReelPage extends StatefulWidget {
   final ValueChanged<String>? onProfile;
 
   @override
-  State<_ReelPage> createState() => _ReelPageState();
-}
-
-class _ReelPageState extends State<_ReelPage> {
-  int _index = 0;
-
-  @override
   Widget build(BuildContext context) {
-    final images = widget.reel.images;
-    return Semantics(
-      label: 'Reel by ${widget.reel.creator.displayName}',
-      child: Stack(
-        fit: StackFit.expand,
+    final creator = reel.creator;
+    final images = reel.images;
+    return Padding(
+      key: ValueKey('reel-post-${reel.id}'),
+      padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (images.isEmpty)
-            const Center(
-              child: Icon(
-                Icons.image_not_supported_outlined,
-                color: Colors.white54,
-              ),
-            )
-          else
-            PageView.builder(
-              key: ValueKey('reel-carousel-${widget.reel.id}'),
-              itemCount: images.length,
-              onPageChanged: (i) => setState(() => _index = i),
-              itemBuilder: (_, i) => CachedNetworkImage(
-                key: ValueKey(
-                  'reel-image-${widget.reel.id}-${images[i].position}',
-                ),
-                imageUrl: images[i].url,
-                fit: BoxFit.contain,
-                placeholder: (_, _) =>
-                    const Center(child: CircularProgressIndicator()),
-                errorWidget: (_, _, _) => const Center(
-                  child: Icon(
-                    Icons.broken_image_outlined,
-                    color: Colors.white54,
-                  ),
-                ),
-              ),
-            ),
-          const IgnorePointer(child: ColoredBox(color: Color(0x22000000))),
-          if (images.length > 1)
-            Positioned(
-              bottom: 96,
-              left: 0,
-              right: 0,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+          Semantics(
+            key: ValueKey('reel-profile-${creator.displayName}'),
+            button: onProfile != null,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onProfile == null ? null : () => onProfile!(creator.id),
+              child: Stack(
+                clipBehavior: Clip.none,
                 children: [
-                  for (var i = 0; i < images.length; i++)
-                    Semantics(
-                      key: ValueKey('reel-dot-semantics-${widget.reel.id}-$i'),
-                      label: 'Image ${images[i].position} of ${images.length}',
-                      selected: i == _index,
-                      child: Container(
-                        key: ValueKey('reel-dot-${widget.reel.id}-$i'),
-                        margin: const EdgeInsets.symmetric(horizontal: 3),
-                        width: 7,
-                        height: 7,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: i == _index ? Colors.white : Colors.white38,
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundColor: AppColors.surfaceHigh,
+                    backgroundImage:
+                        creator.avatarUrl == null || creator.avatarUrl!.isEmpty
+                        ? null
+                        : CachedNetworkImageProvider(creator.avatarUrl!),
+                    child:
+                        creator.avatarUrl == null || creator.avatarUrl!.isEmpty
+                        ? Text(creator.initial, style: AppText.caption)
+                        : null,
+                  ),
+                  if (!reel.isMine && !following)
+                    Positioned(
+                      right: -2,
+                      bottom: -2,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: onFollow,
+                        child: Container(
+                          key: ValueKey('reel-follow-badge-${reel.id}'),
+                          width: 18,
+                          height: 18,
+                          decoration: const BoxDecoration(
+                            color: AppColors.primary,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.add,
+                            size: 12,
+                            color: Colors.black,
+                          ),
                         ),
                       ),
                     ),
                 ],
               ),
             ),
-          Positioned(
-            right: AppSpace.sm,
-            bottom: 96,
-            child: Column(
-              children: [
-                GestureDetector(
-                  key: ValueKey(
-                    'reel-profile-${widget.reel.creator.displayName}',
-                  ),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: widget.onProfile == null
-                      ? null
-                      : () => widget.onProfile!(widget.reel.creator.id),
-                  child: SizedBox(
-                    width: 60,
-                    height: 60,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      alignment: Alignment.center,
-                      children: [
-                        CircleAvatar(
-                          radius: 24,
-                          backgroundColor: AppColors.surfaceHigh,
-                          backgroundImage: widget.reel.creator.avatarUrl == null
-                              ? null
-                              : CachedNetworkImageProvider(
-                                  widget.reel.creator.avatarUrl!,
-                                ),
-                          child: widget.reel.creator.avatarUrl == null
-                              ? Text(widget.reel.creator.initial)
-                              : null,
-                        ),
-                        if (!widget.reel.isMine && !widget.following)
-                          Positioned(
-                            right: 2,
-                            bottom: 0,
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: widget.onFollow,
-                              child: Semantics(
-                                button: true,
-                                label:
-                                    'Follow ${widget.reel.creator.displayName}',
-                                child: SizedBox(
-                                  width: 28,
-                                  height: 28,
-                                  child: Center(
-                                    child: Container(
-                                      key: ValueKey(
-                                        'reel-follow-badge-${widget.reel.id}',
-                                      ),
-                                      width: 20,
-                                      height: 20,
-                                      decoration: const BoxDecoration(
-                                        color: AppColors.primary,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        Icons.add,
-                                        size: 14,
-                                        color: Colors.black,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                _RailAction(
-                  key: ValueKey('reel-like-${widget.reel.id}'),
-                  tooltip: widget.liked ? 'Unlike' : 'Like',
-                  icon: Icons.favorite,
-                  color: widget.liked ? AppColors.red : Colors.white,
-                  count: widget.likeCount,
-                  onTap: widget.onLike,
-                ),
-                _RailAction(
-                  key: ValueKey('reel-comments-${widget.reel.id}'),
-                  tooltip: 'Comments',
-                  icon: Icons.mode_comment,
-                  count: widget.reel.commentCount,
-                  onTap: widget.onComments,
-                ),
-                if (widget.reel.isMine)
-                  _RailAction(
-                    key: ValueKey('reel-delete-${widget.reel.id}'),
-                    tooltip: 'Delete',
-                    icon: Icons.delete,
-                    onTap: widget.onDelete,
-                  ),
-                _RailAction(
-                  key: ValueKey('reel-report-${widget.reel.id}'),
-                  tooltip: 'Report',
-                  icon: Icons.flag,
-                  onTap: widget.onReport,
-                ),
-              ],
-            ),
           ),
-          Positioned(
-            left: AppSpace.lg,
-            right: 80,
-            bottom: AppSpace.lg,
+          const SizedBox(width: AppSpace.sm),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '@${widget.reel.creator.username}',
-                  style: AppText.subtitle.copyWith(color: Colors.white),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        creator.displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.subtitle.copyWith(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    if (creator.isAdmin || creator.isModerator)
+                      Padding(
+                        padding: const EdgeInsets.only(right: AppSpace.xs),
+                        child: Icon(
+                          Icons.verified,
+                          size: 14,
+                          color: AppColors.cyan,
+                        ),
+                      ),
+                    Text(
+                      '@${creator.username}',
+                      style: AppText.caption.copyWith(color: AppColors.textDim),
+                    ),
+                  ],
                 ),
-                if (widget.reel.caption.isNotEmpty)
+                if (reel.caption.isNotEmpty) ...[
+                  const SizedBox(height: AppSpace.xs),
                   Text(
-                    widget.reel.caption,
-                    style: AppText.caption.copyWith(color: Colors.white),
+                    reel.caption,
+                    style: AppText.body.copyWith(fontSize: 13),
                   ),
+                ],
+                if (images.isNotEmpty) ...[
+                  const SizedBox(height: AppSpace.sm),
+                  _PostCarousel(reel: reel),
+                ],
+                const SizedBox(height: AppSpace.xs),
+                Row(
+                  children: [
+                    _action(
+                      key: ValueKey('reel-comments-${reel.id}'),
+                      icon: Icons.chat_bubble_outline,
+                      label: _compactCount(reel.commentCount),
+                      onTap: onComments,
+                    ),
+                    const SizedBox(width: AppSpace.lg),
+                    _action(
+                      key: ValueKey('reel-like-${reel.id}'),
+                      icon: liked ? Icons.favorite : Icons.favorite_border,
+                      label: _compactCount(likeCount),
+                      color: liked ? AppColors.red : AppColors.textDim,
+                      onTap: onLike,
+                    ),
+                    const SizedBox(width: AppSpace.lg),
+                    _action(
+                      key: ValueKey('reel-report-${reel.id}'),
+                      icon: Icons.flag_outlined,
+                      label: '',
+                      onTap: onReport,
+                    ),
+                    if (reel.isMine) ...[
+                      const SizedBox(width: AppSpace.lg),
+                      _action(
+                        key: ValueKey('reel-delete-${reel.id}'),
+                        icon: Icons.delete_outline,
+                        label: '',
+                        onTap: onDelete,
+                      ),
+                    ],
+                  ],
+                ),
               ],
             ),
           ),
@@ -936,78 +982,40 @@ class _ReelPageState extends State<_ReelPage> {
       ),
     );
   }
+
+  Widget _action({
+    required Key key,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    Color color = AppColors.textDim,
+  }) => Semantics(
+    key: key,
+    button: true,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: SizedBox(
+        height: 48,
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: color),
+            if (label.isNotEmpty) ...[
+              const SizedBox(width: AppSpace.xs),
+              Text(label, style: AppText.caption.copyWith(color: color)),
+            ],
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 String _compactCount(int value) {
-  if (value < 1000) return '$value';
-  if (value >= 1000000000) {
-    return '${(value / 1000000000).toStringAsFixed(value < 10000000000 ? 1 : 0)}B';
+  if (value >= 1000) {
+    return '${(value / 1000).toStringAsFixed(value >= 10000 ? 0 : 1)}K';
   }
-  if (value >= 1000000) {
-    return '${(value / 1000000).toStringAsFixed(value < 10000000 ? 1 : 0)}M';
-  }
-  return '${(value / 1000).toStringAsFixed(value < 10000 ? 1 : 0)}K';
-}
-
-class _RailAction extends StatelessWidget {
-  const _RailAction({
-    super.key,
-    required this.tooltip,
-    required this.icon,
-    required this.onTap,
-    this.color = Colors.white,
-    this.count,
-  });
-
-  final String tooltip;
-  final IconData icon;
-  final VoidCallback onTap;
-  final Color color;
-  final int? count;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: tooltip,
-      value: count == null ? null : _compactCount(count!),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: SizedBox(
-          width: 76,
-          height: count == null ? kTouchMin : 64,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 30,
-                color: color,
-                shadows: const [Shadow(color: Colors.black54, blurRadius: 4)],
-              ),
-              if (count != null) ...[
-                const SizedBox(height: AppSpace.xs),
-                Text(
-                  _compactCount(count!),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppText.figure.copyWith(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    shadows: const [
-                      Shadow(color: Colors.black54, blurRadius: 4),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  return '$value';
 }
 
 class _FeedTab extends StatelessWidget {
@@ -1026,46 +1034,44 @@ class _FeedTab extends StatelessWidget {
   final double width;
 
   @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      key: ValueKey('reel-feed-$feedKey'),
-      button: true,
-      selected: selected,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: SizedBox(
-          width: width,
-          height: kTouchMin,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppText.subtitle.copyWith(
-                  fontSize: 15,
-                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                  color: Colors.white.withValues(alpha: selected ? 1 : 0.65),
-                ),
+  Widget build(BuildContext context) => Semantics(
+    key: ValueKey('reel-feed-$feedKey'),
+    button: true,
+    selected: selected,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: SizedBox(
+        width: width,
+        height: kTouchMin,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppText.subtitle.copyWith(
+                fontSize: 15,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                color: selected ? Colors.white : AppColors.textDim,
               ),
-              const SizedBox(height: AppSpace.xs),
-              if (selected)
-                Container(
-                  key: ValueKey('reel-feed-underline-$feedKey'),
-                  width: 24,
-                  height: 2,
-                  color: Colors.white,
-                )
-              else
-                const SizedBox(width: 24, height: 2),
-            ],
-          ),
+            ),
+            const SizedBox(height: AppSpace.xs),
+            if (selected)
+              Container(
+                key: ValueKey('reel-feed-underline-$feedKey'),
+                width: 24,
+                height: 2,
+                color: Colors.white,
+              )
+            else
+              const SizedBox(width: 24, height: 2),
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _ReportDialog extends StatefulWidget {

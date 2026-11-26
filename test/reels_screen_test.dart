@@ -209,6 +209,24 @@ void main() {
     expect(find.text('No reels yet'), findsOneWidget);
   });
 
+  testWidgets('feed renders scrolling X-style post cards', (tester) async {
+    await _pump(
+      tester,
+      load: (_, _) async => ReelFeedPage(
+        reels: [_reel('r1', 'One', imageCount: 3)],
+        nextOffset: 1,
+      ),
+    );
+    await _settle(tester);
+
+    expect(find.byKey(const ValueKey('reel-post-r1')), findsOneWidget);
+    expect(find.text('@one'), findsOneWidget);
+    expect(find.text('Caption r1'), findsOneWidget);
+    expect(find.byKey(const ValueKey('reel-carousel-r1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('reel-like-r1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('reel-comments-r1')), findsOneWidget);
+  });
+
   testWidgets('segments, like, comments, profile, and report actions work', (
     tester,
   ) async {
@@ -703,8 +721,10 @@ void main() {
     );
     await _settle(tester);
 
-    final feed = find.byType(PageView).first;
-    expect(tester.getTopLeft(feed).dy, 0);
+    expect(
+      find.byKey(const ValueKey('reel-post-r1')),
+      findsOneWidget,
+    );
     final scrim = tester.getRect(find.byKey(const ValueKey('reels-top-scrim')));
     expect(scrim.height, greaterThan(64));
     expect(
