@@ -1,5 +1,7 @@
 // Data the screens render. Nothing here reaches the network.
 
+import '../api/api_config.dart';
+
 /// One selectable duration option for a key product (e.g. `1 Hour` @ 10
 /// coins). The Worker stores these as JSON on the product.
 class ProductDuration {
@@ -105,7 +107,7 @@ class PublicUser {
       createdAt: json['createdAt'] as String? ?? '',
       avatarUrl: avatar.isEmpty ? null : avatar,
       bio: (json['bio'] as String? ?? '').trim(),
-      coverUrl: cover.isEmpty ? null : cover,
+      coverUrl: cover.isEmpty ? null : ApiConfig.publicUrl(cover),
       isAdmin: json['isAdmin'] == true,
       isModerator: json['isModerator'] == true,
       followerCount: count('followerCount'),

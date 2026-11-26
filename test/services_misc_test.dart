@@ -64,9 +64,11 @@ void main() {
           'https://cdn/x.png');
     });
 
-    test('imageUrl passes links through', () {
+    test('imageUrl passes links through and resolves relative keys', () {
       expect(Backend.imageUrl('https://cdn/x.png'), 'https://cdn/x.png');
-      expect(Backend.imageUrl('abc'), 'abc');
+      final resolved = Backend.imageUrl('uploads/covers/a.jpg');
+      expect(resolved, startsWith('https://'));
+      expect(resolved, endsWith('uploads/covers/a.jpg'));
     });
 
     test('AppUser holds its fields', () {

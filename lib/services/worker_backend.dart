@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 
 import '../api/api_client.dart';
+import '../api/api_config.dart';
 import '../api/api_exception.dart';
 import 'api_backend.dart';
 import 'models.dart';
@@ -172,7 +173,9 @@ class Backend {
     final form = FormData.fromMap({'image': MultipartFile.fromFileSync(path)});
     final res = await _api.post('/uploads/cover', data: form);
     final url = res['url'] as String?;
-    return (url != null && url.isNotEmpty ? url : res['path']) as String;
+    return ApiConfig.publicUrl(
+      (url != null && url.isNotEmpty ? url : res['path']) as String,
+    );
   }
 
   static Future<String> uploadProductImage(String path) async {
@@ -1011,7 +1014,8 @@ class Backend {
   // ---- images ----
 
   /// Images are links: an absolute URL, or a key the CDN will complete.
-  static String imageUrl(String fileId, {int width = 900}) => fileId;
+  static String imageUrl(String fileId, {int width = 900}) =>
+      ApiConfig.publicUrl(fileId);
 
   static Future<void> deleteKey(String keyId) =>
       _api.delete('/admin/keys/$keyId');

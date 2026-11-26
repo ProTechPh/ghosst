@@ -22,6 +22,17 @@ class ApiConfig {
 
   static List<String> get baseUrls => [baseUrl, fallbackBaseUrl];
 
+  /// Resolves an `uploads/...` key to an absolute URL using the API host.
+  static String publicUrl(String key) {
+    final value = key.trim();
+    if (value.isEmpty) return '';
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return value;
+    }
+    final uri = Uri.parse(baseUrl);
+    return '${uri.scheme}://${uri.host}/${value.replaceFirst(RegExp(r'^/'), '')}';
+  }
+
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 30);
   static const Duration sendTimeout = Duration(seconds: 30);

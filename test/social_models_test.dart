@@ -13,6 +13,16 @@ void main() {
     expect(user.coverUrl, 'https://ghossthub.com/uploads/covers/a.jpg');
   });
 
+  test('PublicUser resolves a relative cover key to an absolute URL', () {
+    final user = PublicUser.fromJson({
+      'id': 42,
+      'coverUrl': 'uploads/covers/a.jpg',
+    });
+
+    expect(user.coverUrl, startsWith('https://'));
+    expect(user.coverUrl, endsWith('uploads/covers/a.jpg'));
+  });
+
   test('PublicUser parses a complete safe profile', () {
     final user = PublicUser.fromJson({
       'id': 42,
