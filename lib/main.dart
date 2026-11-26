@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'announcement_banner.dart';
 import 'api/api_exception.dart';
 import 'arcade.dart';
 import 'premium.dart';
 import 'screens/adblock_screen.dart';
+import 'screens/admin_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/direct_chat_screen.dart';
 import 'screens/earn_screen.dart';
@@ -781,6 +783,32 @@ class _HomeShellState extends State<HomeShell> {
     ).push(MaterialPageRoute<void>(builder: (_) => const FeedbackScreen()));
   }
 
+  void _openAdmin() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          backgroundColor: AppColors.bg,
+          appBar: const SocialAppBar(title: 'Admin'),
+          body: AdminScreen(onAnnouncementSent: _refresh),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _shareApp() async {
+    final url = Distribution.isPlay
+        ? 'https://play.google.com/store/apps/details?id=com.astrixtech.ghosst'
+        : 'https://ghossthub.com';
+    try {
+      await Share.share('Ghosst — $url');
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Could not open sharing.')));
+    }
+  }
+
   void _openDirectChat({
     required String peerId,
     required String peerName,
@@ -1044,9 +1072,9 @@ class _HomeShellState extends State<HomeShell> {
         onOpenKeys: _openKeys,
         onOpenWallet: _openWallet,
         onOpenFeedback: _openFeedback,
-        onOpenAdmin: () {},
+        onOpenAdmin: _openAdmin,
         onOpenSettings: _openProfileSettings,
-        onOpenShare: () {},
+        onOpenShare: () => unawaited(_shareApp()),
         onOpenReel: (reel) => unawaited(_openCreatorReel(reel)),
       ),
     ];
