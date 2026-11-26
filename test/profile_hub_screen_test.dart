@@ -4,11 +4,13 @@ import 'package:ghosst/screens/profile_hub_screen.dart';
 import 'package:ghosst/services/models.dart';
 import 'package:ghosst/theme.dart';
 
-PublicUser _user() => PublicUser(
+PublicUser _user({String bio = '', String? coverUrl}) => PublicUser(
   id: '42',
   displayName: 'Jeric',
   username: 'jeric',
   createdAt: '',
+  bio: bio,
+  coverUrl: coverUrl,
   followerCount: 34,
   followingCount: 12,
   reelCount: 2,
@@ -61,6 +63,8 @@ ProfileHubScreen _screen({
   ValueChanged<Reel>? onOpenReel,
   Future<PublicUser> Function(String id)? loadProfile,
   Future<List<Reel>> Function(String id, int offset)? loadReels,
+  Future<String> Function(String bio)? onSaveBio,
+  Future<String> Function()? onPickCover,
 }) => ProfileHubScreen(
   userId: '42',
   displayName: 'Jeric',
@@ -74,6 +78,8 @@ ProfileHubScreen _screen({
   onOpenReel: onOpenReel,
   loadProfile: loadProfile,
   loadReels: loadReels,
+  onSaveBio: onSaveBio,
+  onPickCover: onPickCover,
 );
 
 void main() {
@@ -361,5 +367,48 @@ void main() {
       ),
     );
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('edit profile shows bio and cover and saves changes', (
+    tester,
+  ) async {
+    final saved = <String>[];
+    await _pump(
+      tester,
+      screen: _screen(
+        isAdmin: false,
+        onOpenKeys: () {},
+        onOpenWallet: () {},
+        onOpenFeedback: () {},
+        onOpenAdmin: () {},
+        onOpenSettings: () {},
+        onOpenShare: () {},
+        loadProfile: (_) async => _user(
+          bio: 'I make maps.',
+          coverUrl: 'https://example.com/cover.jpg',
+        ),
+        loadReels: (_, _) async => const [],
+        onSaveBio: (bio) async {
+          saved.add(bio);
+          return bio;
+        },
+        onPickCover: () async => 'https://example.com/new-cover.jpg',
+      ),
+    );
+
+    expect(find.text('I make maps.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-cover-band')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('profile-edit')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('profile-bio-field')), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-cover-pick')), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('profile-bio-field')),
+      'New bio here',
+    );
+    await tester.tap(find.byKey(const ValueKey('profile-save')));
+    await tester.pumpAndSettle();
+    expect(saved, ['New bio here']);
   });
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../app_menu.dart';
@@ -25,6 +26,8 @@ class ProfileHubScreen extends StatefulWidget {
     this.loadProfile,
     this.loadReels,
     this.onOpenReel,
+    this.onSaveBio,
+    this.onPickCover,
   });
 
   final String userId;
@@ -40,6 +43,8 @@ class ProfileHubScreen extends StatefulWidget {
   final Future<PublicUser> Function(String id)? loadProfile;
   final Future<List<Reel>> Function(String id, int offset)? loadReels;
   final ValueChanged<Reel>? onOpenReel;
+  final Future<String> Function(String bio)? onSaveBio;
+  final Future<String> Function()? onPickCover;
 
   @override
   State<ProfileHubScreen> createState() => _ProfileHubScreenState();
@@ -156,6 +161,12 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
         title: 'Profile',
         actions: [
           IconButton(
+            key: const ValueKey('profile-edit'),
+            tooltip: 'Edit profile',
+            onPressed: _openEditSheet,
+            icon: const Icon(Icons.edit_outlined),
+          ),
+          IconButton(
             tooltip: 'Share app',
             onPressed: widget.onOpenShare,
             icon: const Icon(Icons.share_outlined),
@@ -219,7 +230,7 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: EdgeInsets.zero,
           children: [
-            _header(avatar, initial),
+            _header(avatar, initial, profile?.coverUrl),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpace.lg),
               child: Column(
@@ -242,8 +253,11 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
                     ),
                   ],
                   const SizedBox(height: AppSpace.sm),
-                  const Text(
-                    'Official drops, updates, and community reels.',
+                  Text(
+                    key: const ValueKey('profile-bio'),
+                    (profile?.bio ?? '').trim().isNotEmpty
+                        ? (profile?.bio ?? '').trim()
+                        : 'Official drops, updates, and community reels.',
                     style: AppText.caption,
                     textAlign: TextAlign.center,
                   ),
@@ -376,7 +390,82 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
     );
   }
 
-  Widget _header(String? avatar, String initial) => Stack(
+  Future<String> _pickCover() async {
+    final picked = await FilePicker.platform.pickFiles(type: FileType.image);
+    final path = picked?.files.singleOrNull?.path;
+    if (path == null) return '';
+    return Backend.uploadCover(path);
+  }
+
+  Future<void> _openEditSheet() async {
+    final bioController = TextEditingController(
+      text: (_profile?.bio ?? '').trim(),
+    );
+    final result = await showModalBottomSheet<Map<String, String?>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      builder: (sheetContext) {
+        String? cover;
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) => Padding(
+            padding: EdgeInsets.only(
+              left: AppSpace.lg,
+              right: AppSpace.lg,
+              top: AppSpace.lg,
+              bottom: MediaQuery.viewInsetsOf(ctx).bottom + AppSpace.lg,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Edit profile', style: AppText.title),
+                const SizedBox(height: AppSpace.md),
+                TextField(
+                  key: const ValueKey('profile-bio-field'),
+                  controller: bioController,
+                  maxLength: 300,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Bio',
+                    filled: true,
+                    fillColor: AppColors.surfaceHigh,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: AppSpace.sm),
+                FilledButton.icon(
+                  key: const ValueKey('profile-cover-pick'),
+                  onPressed: () async {
+                    final url = await (widget.onPickCover ?? _pickCover)();
+                    if (url.isNotEmpty && ctx.mounted) {
+                      setSheetState(() => cover = url);
+                    }
+                  },
+                  icon: const Icon(Icons.image_outlined),
+                  label: Text(cover == null ? 'Change cover' : 'Cover updated'),
+                ),
+                const SizedBox(height: AppSpace.sm),
+                FilledButton(
+                  key: const ValueKey('profile-save'),
+                  onPressed: () => Navigator.pop(ctx, {
+                    'bio': bioController.text.trim(),
+                    if (cover != null) 'cover': cover,
+                  }),
+                  child: const Text('Save'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (result == null || !mounted) return;
+    await (widget.onSaveBio ?? Backend.updateBio)(result['bio'] ?? '');
+    if (mounted) await _loadProfile();
+  }
+
+  Widget _header(String? avatar, String initial, String? coverUrl) => Stack(
     clipBehavior: Clip.none,
     children: [
       Container(
@@ -384,6 +473,16 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
         width: double.infinity,
         height: 120,
         color: Colors.black,
+        child: Container(
+          key: const ValueKey('profile-cover-band'),
+          child: coverUrl == null || coverUrl.isEmpty
+              ? null
+              : CachedNetworkImage(
+                  imageUrl: coverUrl,
+                  fit: BoxFit.cover,
+                  errorWidget: (_, _, _) => const SizedBox.shrink(),
+                ),
+        ),
       ),
       Positioned(
         left: 0,

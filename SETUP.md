@@ -276,8 +276,10 @@ The API base URL defaults to production; point it at a local server with
       production DB — including `database/mobile_app_ad_device.sql` (the
       column self-creates on first use; the file adds the index).
 - [ ] `JWT_SECRET` in `api/config.php` changed from the placeholder.
-- [ ] `PUBLIC_CDN` set to the public site URL so `uploads/products/...` keys
-      resolve to full image URLs.
+- [ ] `PUBLIC_CDN` set to the public site URL so `uploads/products/...` and
+      `uploads/covers/...` keys resolve to full image URLs.
+- [ ] `database/mobile_app_profile_fields.sql` run once so profiles can save a
+      bio and cover photo.
 - [ ] Push notifications: `FIREBASE_SA_EMAIL` / `FIREBASE_SA_KEY` set in
       `api/config.php` on the host (blank = push silently off; same service
       account as chat), and `android/app/google-services.json` present with

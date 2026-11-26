@@ -113,6 +113,9 @@ and rollback. `JWT_SECRET` lives in `api/config.php`.
   `uploads/products/` (reusing `includes/image_upload.php`: JPG/PNG/WebP, 5MB).
   `PUBLIC_CDN` turns relative keys into display URLs. Deleting a product removes
   its local file best-effort; uploads never attached to a product are not cleaned.
+- Own-profile bio and cover live on `users.bio` / `users.cover_url` (add them with
+  `ghosst-web/database/mobile_app_profile_fields.sql` on Hostinger). The app edits
+  them via `POST /v1/me/profile` and `POST /v1/uploads/cover` (FTP `uploads/covers/`).
 - Bulk key paste is chunked (`KEYS_PER_STATEMENT = 500` in `api/routes/keys.php`)
   to stay under `max_allowed_packet`; dedupe comes from the
   `UNIQUE(product_id, key_value)` index via `INSERT IGNORE`.

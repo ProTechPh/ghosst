@@ -356,6 +356,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         ),
                       ),
                     ],
+                    if (user.bio.isNotEmpty) ...[
+                      const SizedBox(height: AppSpace.xs),
+                      Text(
+                        user.bio,
+                        key: const ValueKey('profile-bio'),
+                        textAlign: TextAlign.center,
+                        style: AppText.caption,
+                      ),
+                    ],
                     if (user.isAdmin || user.isModerator) ...[
                       const SizedBox(height: AppSpace.sm),
                       Row(
