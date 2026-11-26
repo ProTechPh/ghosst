@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../services/worker_backend.dart';
@@ -9,11 +10,13 @@ class ReelCommentsScreen extends StatefulWidget {
     required this.reelId,
     this.load,
     this.submit,
+    this.onOpenProfile,
   });
 
   final String reelId;
   final Future<List<ReelComment>> Function(int offset)? load;
   final Future<void> Function(String)? submit;
+  final ValueChanged<String>? onOpenProfile;
 
   @override
   State<ReelCommentsScreen> createState() => _ReelCommentsScreenState();
@@ -221,10 +224,28 @@ class _ReelCommentsScreenState extends State<ReelCommentsScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: AppColors.surfaceHigh,
-            child: Text(comment.user.initial),
+          Semantics(
+            key: ValueKey('comment-profile-${comment.id}'),
+            button: widget.onOpenProfile != null,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onOpenProfile == null
+                  ? null
+                  : () => widget.onOpenProfile!(comment.user.id),
+              child: CircleAvatar(
+                radius: 20,
+                backgroundColor: AppColors.surfaceHigh,
+                backgroundImage:
+                    comment.user.avatarUrl == null ||
+                        comment.user.avatarUrl!.isEmpty
+                    ? null
+                    : CachedNetworkImageProvider(comment.user.avatarUrl!),
+                child: comment.user.avatarUrl == null ||
+                        comment.user.avatarUrl!.isEmpty
+                    ? Text(comment.user.initial)
+                    : null,
+              ),
+            ),
           ),
           const SizedBox(width: AppSpace.md),
           Expanded(

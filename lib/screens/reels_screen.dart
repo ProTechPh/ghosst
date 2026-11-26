@@ -357,6 +357,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
       ),
       submit: (text) =>
           (widget.submitComment ?? Backend.postReelComment)(reel.id, text),
+      onOpenProfile: widget.onOpenProfile,
     ),
   );
 

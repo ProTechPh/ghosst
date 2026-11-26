@@ -8,6 +8,7 @@ ReelComment _comment(
   String text, {
   String name = 'Jeric',
   String createdAt = '',
+  String? avatarUrl,
 }) => ReelComment(
   id: text,
   text: text,
@@ -16,6 +17,7 @@ ReelComment _comment(
     id: '42',
     displayName: name,
     username: name.toLowerCase(),
+    avatarUrl: avatarUrl,
     createdAt: '',
     followerCount: 0,
     followingCount: 0,
@@ -27,6 +29,7 @@ Future<void> _pump(
   WidgetTester tester, {
   required Future<List<ReelComment>> Function(int) load,
   Future<void> Function(String)? submit,
+  ValueChanged<String>? onOpenProfile,
   Size size = const Size(800, 600),
   EdgeInsets viewInsets = EdgeInsets.zero,
 }) async {
@@ -40,7 +43,12 @@ Future<void> _pump(
       home: MediaQuery(
         data: MediaQueryData(size: size, viewInsets: viewInsets),
         child: Scaffold(
-          body: ReelCommentsScreen(reelId: 'r1', load: load, submit: submit),
+          body: ReelCommentsScreen(
+            reelId: 'r1',
+            load: load,
+            submit: submit,
+            onOpenProfile: onOpenProfile,
+          ),
         ),
       ),
     ),
@@ -54,6 +62,27 @@ void main() {
     await _pump(tester, load: (_) async => [_comment('Nice')]);
     expect(find.text('Nice'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets('comment avatar shows image and opens the profile', (
+    tester,
+  ) async {
+    String? opened;
+    await _pump(
+      tester,
+      load: (_) async => [
+        _comment(
+          'Nice',
+          avatarUrl: 'https://example.com/avatar.jpg',
+        ),
+      ],
+      onOpenProfile: (id) => opened = id,
+    );
+
+    expect(find.byKey(const ValueKey('comment-profile-Nice')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('comment-profile-Nice')));
+    await tester.pump();
+    expect(opened, '42');
   });
 
   testWidgets('shows empty state after initial load', (tester) async {
