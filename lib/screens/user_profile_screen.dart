@@ -324,28 +324,31 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           child: ListView(
             controller: _scroll,
             key: const ValueKey('profile-scroll'),
-            padding: const EdgeInsets.fromLTRB(
-              AppSpace.lg,
-              AppSpace.md,
-              AppSpace.lg,
-              AppSpace.xxl,
-            ),
+            padding: EdgeInsets.zero,
             children: [
-              GlowCard(
-                glow: true,
-                padding: const EdgeInsets.all(AppSpace.lg),
+              _header(user),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpace.lg),
                 child: Column(
                   children: [
-                    _avatar(user),
-                    const SizedBox(height: AppSpace.md),
+                    const SizedBox(height: 50),
                     Text(
                       _displayName(user),
                       textAlign: TextAlign.center,
-                      style: AppText.title.copyWith(fontSize: 24),
+                      style: AppText.title.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 24,
+                      ),
                     ),
                     if (user.username.isNotEmpty) ...[
                       const SizedBox(height: 2),
-                      Text('@${user.username}', style: AppText.caption),
+                      Text(
+                        '@${user.username}',
+                        style: AppText.caption.copyWith(
+                          color: AppColors.textDim,
+                        ),
+                      ),
                     ],
                     if (user.isAdmin || user.isModerator) ...[
                       const SizedBox(height: AppSpace.sm),
@@ -376,95 +379,99 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         style: AppText.caption,
                       ),
                     ],
+                    const SizedBox(height: AppSpace.lg),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        Expanded(
+                          child: _stat(
+                            'Following',
+                            user.followingCount,
+                            onTap: widget.onOpenSocialList == null
+                                ? null
+                                : () => widget.onOpenSocialList!(
+                                    SocialListDirection.following,
+                                  ),
+                          ),
+                        ),
+                        Expanded(
+                          child: _stat(
+                            'Followers',
+                            _followerCount,
+                            onTap: widget.onOpenSocialList == null
+                                ? null
+                                : () => widget.onOpenSocialList!(
+                                    SocialListDirection.followers,
+                                  ),
+                          ),
+                        ),
+                        Expanded(child: _stat('Reels', user.reelCount)),
+                      ],
+                    ),
+                    if (!user.isSelf)
+                      Padding(
+                        padding: const EdgeInsets.only(top: AppSpace.md),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: FilledButton.icon(
+                                onPressed: _blocked || _blocking
+                                    ? null
+                                    : () => widget.onMessage(_user!),
+                                icon: const Icon(
+                                  Icons.chat_bubble_outline_rounded,
+                                ),
+                                label: Text(_blocked ? 'Blocked' : 'Message'),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppColors.surfaceHigh,
+                                  foregroundColor: Colors.white,
+                                  minimumSize: const Size(0, 48),
+                                ),
+                              ),
+                            ),
+                            if (widget.onFollow != null ||
+                                widget.onUnfollow != null) ...[
+                              const SizedBox(width: AppSpace.sm),
+                              Semantics(
+                                label: _following
+                                    ? 'Unfollow ${_displayName(user)}'
+                                    : 'Follow ${_displayName(user)}',
+                                child: FilledButton(
+                                  onPressed: _followBusy ? null : _toggleFollow,
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: AppColors.tiktokCoral,
+                                    foregroundColor: Colors.white,
+                                    minimumSize: const Size(0, 48),
+                                  ),
+                                  child: Text(
+                                    _following ? 'Following' : 'Follow',
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: AppSpace.md),
+                    const Text(
+                      'Posts',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      key: const ValueKey('public-profile-posts-indicator'),
+                      width: 24,
+                      height: 2,
+                      color: AppColors.tiktokCoral,
+                    ),
+                    const SizedBox(height: AppSpace.sm),
                   ],
                 ),
               ),
-              const SizedBox(height: AppSpace.lg),
-              GlowCard(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpace.md,
-                  vertical: AppSpace.lg,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: widget.onOpenSocialList == null
-                            ? null
-                            : () => widget.onOpenSocialList!(
-                                SocialListDirection.followers,
-                              ),
-                        child: Semantics(
-                          button: widget.onOpenSocialList != null,
-                          child: StatCell(
-                            label: 'Followers',
-                            value: groupDigits(_followerCount),
-                          ),
-                        ),
-                      ),
-                    ),
-                    _divider(),
-                    Expanded(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: widget.onOpenSocialList == null
-                            ? null
-                            : () => widget.onOpenSocialList!(
-                                SocialListDirection.following,
-                              ),
-                        child: Semantics(
-                          button: widget.onOpenSocialList != null,
-                          child: StatCell(
-                            label: 'Following',
-                            value: groupDigits(user.followingCount),
-                          ),
-                        ),
-                      ),
-                    ),
-                    _divider(),
-                    Expanded(
-                      child: StatCell(
-                        label: 'Reels',
-                        value: groupDigits(user.reelCount),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (!user.isSelf)
-                Row(
-                  children: [
-                    Expanded(
-                      child: IslandButton(
-                        label: _blocked ? 'Blocked' : 'Message',
-                        icon: Icons.chat_bubble_outline_rounded,
-                        onPressed: _blocked || _blocking
-                            ? null
-                            : () => widget.onMessage(_user!),
-                      ),
-                    ),
-                    if (widget.onFollow != null ||
-                        widget.onUnfollow != null) ...[
-                      const SizedBox(width: AppSpace.sm),
-                      Semantics(
-                        label: _following
-                            ? 'Unfollow ${_displayName(user)}'
-                            : 'Follow ${_displayName(user)}',
-                        child: FilledButton(
-                          onPressed: _followBusy ? null : _toggleFollow,
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size(0, 48),
-                          ),
-                          child: Text(_following ? 'Following' : 'Follow'),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              const SizedBox(height: AppSpace.xl),
-              const SectionHeader(title: 'Reels'),
-              const SizedBox(height: AppSpace.sm),
               _reelsSection(),
             ],
           ),
@@ -487,8 +494,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         physics: const NeverScrollableScrollPhysics(),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
-          mainAxisSpacing: 4,
-          crossAxisSpacing: 4,
+          mainAxisSpacing: 2,
+          crossAxisSpacing: 2,
+          childAspectRatio: 0.75,
         ),
         itemCount: _reels.length,
         itemBuilder: (_, index) {
@@ -596,46 +604,58 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     child: Center(child: Icon(Icons.movie_outlined, color: AppColors.textDim)),
   );
 
-  Widget _divider() => Container(
-    width: 1,
-    height: 34,
-    margin: const EdgeInsets.symmetric(horizontal: AppSpace.sm),
-    color: AppColors.border,
+  Widget _header(PublicUser user) => Stack(
+    clipBehavior: Clip.none,
+    children: [
+      Container(
+        key: const ValueKey('public-profile-tiktok-header'),
+        width: double.infinity,
+        height: 120,
+        color: Colors.black,
+      ),
+      Positioned(
+        left: 0,
+        right: 0,
+        bottom: -38,
+        child: Center(
+          child: CircleAvatar(
+            radius: 42,
+            backgroundColor: AppColors.surfaceHigh,
+            backgroundImage: user.avatarUrl == null
+                ? null
+                : CachedNetworkImageProvider(user.avatarUrl!),
+            child: user.avatarUrl == null
+                ? Text(_initial(user), style: AppText.display)
+                : null,
+          ),
+        ),
+      ),
+    ],
   );
 
-  Widget _avatar(PublicUser user) {
-    final photo = user.avatarUrl;
-    return Container(
-      width: 88,
-      height: 88,
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: kNeonGradient,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.25),
-            blurRadius: 24,
-            spreadRadius: -8,
-          ),
-        ],
-      ),
-      child: Container(
-        clipBehavior: Clip.antiAlias,
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          color: AppColors.surface,
-        ),
-        child: photo == null
-            ? Center(child: Text(_initial(user), style: AppText.headline))
-            : CachedNetworkImage(
-                imageUrl: photo,
-                fit: BoxFit.cover,
-                errorWidget: (_, _, _) => Center(child: Text(_initial(user))),
+  Widget _stat(String label, int value, {VoidCallback? onTap}) =>
+      GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Semantics(
+          button: onTap != null,
+          child: Column(
+            children: [
+              Text(
+                groupDigits(value),
+                style: AppText.title.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-      ),
-    );
-  }
+              Text(
+                label,
+                style: AppText.caption.copyWith(color: AppColors.textDim),
+              ),
+            ],
+          ),
+        ),
+      );
 
   static String _displayName(PublicUser user) {
     final name = user.displayName.trim();

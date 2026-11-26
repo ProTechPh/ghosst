@@ -256,24 +256,7 @@ class _ReelCommentsScreenState extends State<ReelCommentsScreen> {
                 ),
                 const SizedBox(height: AppSpace.xs),
                 Text(comment.text, style: AppText.body.copyWith(fontSize: 14)),
-                const SizedBox(height: AppSpace.xs),
-                Text(
-                  'Reply',
-                  style: AppText.caption.copyWith(
-                    color: AppColors.textDim,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
               ],
-            ),
-          ),
-          Container(
-            key: ValueKey('reel-comment-heart-${comment.id}'),
-            width: kTouchMin,
-            height: kTouchMin,
-            alignment: Alignment.center,
-            child: const ExcludeSemantics(
-              child: Icon(Icons.favorite_border, size: 24, color: Colors.white),
             ),
           ),
         ],

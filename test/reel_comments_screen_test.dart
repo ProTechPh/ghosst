@@ -102,12 +102,7 @@ void main() {
     expect(find.text('Comments'), findsOneWidget);
     expect(find.text('VeryLongDisplayNameForComments'), findsOneWidget);
     expect(find.text(longText), findsOneWidget);
-    expect(find.text('Reply'), findsOneWidget);
-    final heartKey = ValueKey('reel-comment-heart-$longText');
-    expect(
-      tester.getSize(find.byKey(heartKey)).height,
-      greaterThanOrEqualTo(48),
-    );
+    expect(find.text('Reply'), findsNothing);
     expect(
       find.byKey(const ValueKey('reel-comments-composer')),
       findsOneWidget,

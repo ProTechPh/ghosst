@@ -99,136 +99,175 @@ class _ShopHubScreenState extends State<ShopHubScreen> {
         },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(
-            AppSpace.lg,
-            AppSpace.md,
-            AppSpace.lg,
-            AppSpace.xxl,
-          ),
+          padding: EdgeInsets.zero,
           children: [
-            GlowCard(
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.lg,
+                AppSpace.md,
+                AppSpace.lg,
+                0,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('YOUR COINS', style: AppText.label),
-                  const SizedBox(height: AppSpace.xs),
-                  Text(
-                    '${groupDigits(widget.coins)} coins',
-                    style: AppText.display.copyWith(color: AppColors.gold),
+                  Container(
+                    key: const ValueKey('shop-coin-hero'),
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(AppSpace.lg),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(AppRadius.card),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('YOUR COINS', style: AppText.label),
+                        const SizedBox(height: AppSpace.xs),
+                        Text(
+                          '${groupDigits(widget.coins)} coins',
+                          style: AppText.display.copyWith(
+                            color: AppColors.gold,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpace.xs),
+                        Container(
+                          width: 32,
+                          height: 2,
+                          color: AppColors.tiktokCoral,
+                        ),
+                        const SizedBox(height: AppSpace.sm),
+                        TextButton(
+                          onPressed: widget.onOpenEarn,
+                          child: const Text('Earn more'),
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: AppSpace.sm),
-                  TextButton(
-                    onPressed: widget.onOpenEarn,
-                    child: const Text('Earn more'),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpace.md),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: widget.onOpenEarn,
-                    icon: const Icon(Icons.play_circle_outline),
-                    label: const Text('Earn coins'),
-                  ),
-                ),
-                const SizedBox(width: AppSpace.sm),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: widget.onOpenStore,
-                    icon: const Icon(Icons.storefront_outlined),
-                    label: const Text('Browse store'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpace.xl),
-            SectionHeader(
-              title: 'Your keys',
-              trailing: TextButton(
-                key: const ValueKey('shop-open-keys'),
-                onPressed: widget.onOpenKeys,
-                child: const Text('View all'),
-              ),
-            ),
-            const SizedBox(height: AppSpace.sm),
-            if (_loading)
-              const LinearProgressIndicator()
-            else if (_claimsFailed)
-              const Text('Could not load keys', style: AppText.caption)
-            else if (_claims.isEmpty)
-              const EmptyState(
-                icon: Icons.key_outlined,
-                title: 'No keys yet',
-                message: 'Claim a product to see it here.',
-              )
-            else
-              Row(
-                children: [
-                  for (final claim in _claims.take(2))
-                    Expanded(
-                      child: Card(
-                        margin: const EdgeInsets.only(right: AppSpace.sm),
-                        child: Padding(
-                          padding: const EdgeInsets.all(AppSpace.md),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                claim.productName.isEmpty
-                                    ? 'License key'
-                                    : claim.productName,
-                                style: AppText.subtitle,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: AppSpace.xs),
-                              Text(
-                                claim.keyText,
-                                style: AppText.figure.copyWith(fontSize: 11),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
+                  const SizedBox(height: AppSpace.md),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: widget.onOpenEarn,
+                          icon: const Icon(Icons.play_circle_outline),
+                          label: const Text('Earn coins'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.surfaceHigh,
+                            foregroundColor: Colors.white,
                           ),
                         ),
                       ),
+                      const SizedBox(width: AppSpace.sm),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: widget.onOpenStore,
+                          icon: const Icon(Icons.storefront_outlined),
+                          label: const Text('Browse store'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.tiktokCoral,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpace.xl),
+                  SectionHeader(
+                    title: 'Your keys',
+                    trailing: TextButton(
+                      key: const ValueKey('shop-open-keys'),
+                      onPressed: widget.onOpenKeys,
+                      child: const Text('View all'),
                     ),
+                  ),
+                  const SizedBox(height: AppSpace.sm),
+                  if (_loading)
+                    const LinearProgressIndicator()
+                  else if (_claimsFailed)
+                    const Text('Could not load keys', style: AppText.caption)
+                  else if (_claims.isEmpty)
+                    const EmptyState(
+                      icon: Icons.key_outlined,
+                      title: 'No keys yet',
+                      message: 'Claim a product to see it here.',
+                    )
+                  else
+                    Row(
+                      children: [
+                        for (final claim in _claims.take(2))
+                          Expanded(
+                            child: Card(
+                              margin: const EdgeInsets.only(right: AppSpace.sm),
+                              child: Padding(
+                                padding: const EdgeInsets.all(AppSpace.md),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      claim.productName.isEmpty
+                                          ? 'License key'
+                                          : claim.productName,
+                                      style: AppText.subtitle,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: AppSpace.xs),
+                                    Text(
+                                      claim.keyText,
+                                      style: AppText.figure.copyWith(
+                                        fontSize: 11,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  const SizedBox(height: AppSpace.xl),
+                  SectionHeader(
+                    title: 'Featured',
+                    trailing: TextButton(
+                      onPressed: widget.onOpenStore,
+                      child: const Text('See all'),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpace.sm),
                 ],
               ),
-            const SizedBox(height: AppSpace.xl),
-            SectionHeader(
-              title: 'Featured',
-              trailing: TextButton(
-                onPressed: widget.onOpenStore,
-                child: const Text('See all'),
-              ),
             ),
-            const SizedBox(height: AppSpace.sm),
-            if (_loading)
-              const LinearProgressIndicator()
-            else if (_productsFailed)
-              const Text(
-                'Could not load featured products',
-                style: AppText.caption,
-              )
-            else if (_products.isEmpty)
-              const EmptyState(
-                icon: Icons.storefront_outlined,
-                title: 'No products yet',
-                message: 'New items will appear here.',
-              )
-            else
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpace.lg),
+              child: _loading
+                  ? const LinearProgressIndicator()
+                  : _productsFailed
+                  ? const Text(
+                      'Could not load featured products',
+                      style: AppText.caption,
+                    )
+                  : _products.isEmpty
+                  ? const EmptyState(
+                      icon: Icons.storefront_outlined,
+                      title: 'No products yet',
+                      message: 'New items will appear here.',
+                    )
+                  : const SizedBox.shrink(),
+            ),
+            if (!_loading && !_productsFailed && _products.isNotEmpty)
               GridView.builder(
+                key: const ValueKey('shop-featured-grid'),
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  mainAxisSpacing: AppSpace.sm,
-                  crossAxisSpacing: AppSpace.sm,
-                  childAspectRatio: 0.95,
+                  mainAxisSpacing: 2,
+                  crossAxisSpacing: 2,
+                  childAspectRatio: 0.75,
                 ),
                 itemCount: _products.take(4).length,
                 itemBuilder: (context, index) {
@@ -243,24 +282,13 @@ class _ShopHubScreenState extends State<ShopHubScreen> {
                         children: [
                           Expanded(
                             child: imageUrl.isEmpty
-                                ? Container(
-                                    decoration: const BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                        colors: [
-                                          AppColors.primaryDeep,
-                                          AppColors.primary,
-                                        ],
-                                      ),
-                                    ),
-                                  )
+                                ? _imagePlaceholder()
                                 : CachedNetworkImage(
                                     imageUrl: imageUrl,
                                     fit: BoxFit.cover,
-                                    errorWidget: (_, _, _) => const ColoredBox(
-                                      color: AppColors.surfaceHigh,
-                                    ),
+                                    placeholder: (_, _) => _imagePlaceholder(),
+                                    errorWidget: (_, _, _) =>
+                                        _imagePlaceholder(),
                                   ),
                           ),
                           Padding(
@@ -292,35 +320,53 @@ class _ShopHubScreenState extends State<ShopHubScreen> {
                   );
                 },
               ),
-            const SizedBox(height: AppSpace.xl),
-            Row(
-              children: [
-                Expanded(
-                  child: Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.menu_book_outlined),
-                      title: const Text('Tutorials'),
-                      onTap: widget.onOpenTutorials,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: AppSpace.sm),
-                Expanded(
-                  child: Card(
-                    child: ListTile(
-                      leading: const Icon(
-                        Icons.account_balance_wallet_outlined,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.lg,
+                AppSpace.xl,
+                AppSpace.lg,
+                AppSpace.xxl,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.menu_book_outlined),
+                        title: const Text('Tutorials'),
+                        onTap: widget.onOpenTutorials,
                       ),
-                      title: const Text('Wallet'),
-                      onTap: widget.onOpenWallet,
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: AppSpace.sm),
+                  Expanded(
+                    child: Card(
+                      child: ListTile(
+                        leading: const Icon(
+                          Icons.account_balance_wallet_outlined,
+                        ),
+                        title: const Text('Wallet'),
+                        onTap: widget.onOpenWallet,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
       ),
     );
   }
+
+  Widget _imagePlaceholder() => const ColoredBox(
+    color: AppColors.surfaceHigh,
+    child: Center(
+      child: Icon(
+        Icons.image_not_supported_outlined,
+        color: AppColors.textDim,
+        size: 28,
+      ),
+    ),
+  );
 }

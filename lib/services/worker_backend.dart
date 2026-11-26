@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:dio/dio.dart';
+
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
 import 'api_backend.dart';
@@ -157,6 +159,13 @@ class Backend {
   /// naka-setup ang service account sa API).
   static Future<String> firebaseToken() async =>
       (await _api.get('/firebase/token'))['token'] as String;
+
+  /// Admin product image → the site's FTP storage (uploads/products).
+  static Future<String> uploadProductImage(String path) async {
+    final form = FormData.fromMap({'image': MultipartFile.fromFileSync(path)});
+    final res = await _api.post('/uploads/product-image', data: form);
+    return res['path'] as String;
+  }
 
   static Future<void> deleteAccount() async {
     await _api.delete('/account', data: {'confirm': 'DELETE'});

@@ -15,6 +15,7 @@ class ReelsScreen extends StatefulWidget {
     this.load,
     this.onLike,
     this.onUnlike,
+    this.onFollow,
     this.onOpenProfile,
     this.onReport,
     this.onOpenUpload,
@@ -25,6 +26,7 @@ class ReelsScreen extends StatefulWidget {
     this.initialCreatorId,
     this.active = true,
     this.embedded = true,
+    this.refreshToken = 0,
     this.coins = 0,
     this.onOpenWallet,
   });
@@ -32,6 +34,7 @@ class ReelsScreen extends StatefulWidget {
   final Future<ReelFeedPage> Function(String feed, int offset)? load;
   final Future<void> Function(String reelId)? onLike;
   final Future<void> Function(String reelId)? onUnlike;
+  final Future<void> Function(String creatorId)? onFollow;
   final ValueChanged<String>? onOpenProfile;
   final ReportContent? onReport;
   final VoidCallback? onOpenUpload;
@@ -43,6 +46,7 @@ class ReelsScreen extends StatefulWidget {
   final String? initialCreatorId;
   final bool active;
   final bool embedded;
+  final int refreshToken;
   final int coins;
   final VoidCallback? onOpenWallet;
 
@@ -62,6 +66,8 @@ class _ReelsScreenState extends State<ReelsScreen> {
   final Map<String, bool> _liked = {};
   final Map<String, int> _likeCounts = {};
   final Set<String> _liking = {};
+  final Map<String, bool> _following = {};
+  final Set<String> _followingBusy = {};
 
   @override
   void initState() {
@@ -74,6 +80,9 @@ class _ReelsScreenState extends State<ReelsScreen> {
   void didUpdateWidget(covariant ReelsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!oldWidget.active && widget.active && _reels.isEmpty && !_loading) {
+      unawaited(_load(reset: true));
+    }
+    if (widget.active && widget.refreshToken != oldWidget.refreshToken) {
       unawaited(_load(reset: true));
     }
   }
@@ -156,6 +165,28 @@ class _ReelsScreenState extends State<ReelsScreen> {
         });
     } finally {
       if (mounted) setState(() => _liking.remove(reel.id));
+    }
+  }
+
+  Future<void> _toggleFollow(Reel reel) async {
+    if (_followingBusy.contains(reel.id)) return;
+    final following = _following[reel.id] ?? reel.isFollowing;
+    setState(() {
+      _followingBusy.add(reel.id);
+      _following[reel.id] = true;
+    });
+    try {
+      if (widget.onFollow != null) {
+        await widget.onFollow!(reel.creator.id);
+      } else {
+        await Backend.followUser(reel.creator.id);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _following[reel.id] = following);
+      }
+    } finally {
+      if (mounted) setState(() => _followingBusy.remove(reel.id));
     }
   }
 
@@ -393,7 +424,9 @@ class _ReelsScreenState extends State<ReelsScreen> {
         reel: _reels[i],
         liked: _liked[_reels[i].id] ?? _reels[i].isLiked,
         likeCount: _likeCounts[_reels[i].id] ?? _reels[i].likeCount,
+        following: _following[_reels[i].id] ?? _reels[i].isFollowing,
         onLike: () => unawaited(_toggleLike(_reels[i])),
+        onFollow: () => unawaited(_toggleFollow(_reels[i])),
         onComments: () => unawaited(_openComments(_reels[i])),
         onDelete: () => unawaited(_deleteReel(_reels[i])),
         onProfile: widget.onOpenProfile,
@@ -408,7 +441,9 @@ class _ReelPage extends StatefulWidget {
     required this.reel,
     required this.liked,
     required this.likeCount,
+    required this.following,
     required this.onLike,
+    required this.onFollow,
     required this.onComments,
     required this.onDelete,
     required this.onReport,
@@ -418,7 +453,9 @@ class _ReelPage extends StatefulWidget {
   final Reel reel;
   final bool liked;
   final int likeCount;
+  final bool following;
   final VoidCallback onLike;
+  final VoidCallback onFollow;
   final VoidCallback onComments;
   final VoidCallback onDelete;
   final VoidCallback onReport;
@@ -470,7 +507,7 @@ class _ReelPageState extends State<_ReelPage> {
           const IgnorePointer(child: ColoredBox(color: Color(0x22000000))),
           if (images.length > 1)
             Positioned(
-              top: 16,
+              bottom: 96,
               left: 0,
               right: 0,
               child: Row(
@@ -527,25 +564,38 @@ class _ReelPageState extends State<_ReelPage> {
                               ? Text(widget.reel.creator.initial)
                               : null,
                         ),
-                        if (!widget.reel.isMine && !widget.reel.isFollowing)
+                        if (!widget.reel.isMine && !widget.following)
                           Positioned(
                             right: 2,
                             bottom: 0,
-                            child: IgnorePointer(
-                              child: Container(
-                                key: ValueKey(
-                                  'reel-follow-badge-${widget.reel.id}',
-                                ),
-                                width: 20,
-                                height: 20,
-                                decoration: const BoxDecoration(
-                                  color: AppColors.primary,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.add,
-                                  size: 14,
-                                  color: Colors.black,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: widget.onFollow,
+                              child: Semantics(
+                                button: true,
+                                label:
+                                    'Follow ${widget.reel.creator.displayName}',
+                                child: SizedBox(
+                                  width: 28,
+                                  height: 28,
+                                  child: Center(
+                                    child: Container(
+                                      key: ValueKey(
+                                        'reel-follow-badge-${widget.reel.id}',
+                                      ),
+                                      width: 20,
+                                      height: 20,
+                                      decoration: const BoxDecoration(
+                                        color: AppColors.primary,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.add,
+                                        size: 14,
+                                        color: Colors.black,
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),

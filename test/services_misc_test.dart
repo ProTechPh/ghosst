@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/api/api_config.dart';
-import 'package:ghosst/services/cloudinary.dart';
 import 'package:ghosst/services/distribution.dart';
 import 'package:ghosst/services/install_id.dart';
 import 'package:ghosst/services/play_store.dart';
@@ -17,15 +16,8 @@ void main() {
     });
   });
 
-  group('CloudinaryUpload', () {
-    test('unsigned preset constants are set', () {
-      expect(CloudinaryUpload.cloudName, isNotEmpty);
-      expect(CloudinaryUpload.uploadPreset, isNotEmpty);
-    });
-
-    test('exception message survives toString', () {
-      expect(const CloudinaryException('nope').toString(), 'nope');
-    });
+  test('Backend exposes the FTP product-image uploader', () {
+    expect(Backend.uploadProductImage, isNotNull);
   });
 
   group('Push', () {

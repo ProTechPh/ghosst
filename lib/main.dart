@@ -491,6 +491,7 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   SocialTab tab = SocialTab.home;
+  int _reelRefresh = 0;
   int coins = 0;
   bool isAdmin = false;
   bool isModerator = false;
@@ -857,6 +858,7 @@ class _HomeShellState extends State<HomeShell> {
           ),
         ),
       );
+      if (mounted) setState(() => _reelRefresh++);
     } finally {
       _openingProfiles.remove(id);
     }
@@ -869,6 +871,7 @@ class _HomeShellState extends State<HomeShell> {
           backgroundColor: Colors.black,
           body: ReelsScreen(
             embedded: false,
+            onFollow: Backend.followUser,
             initialReelId: reel.id,
             initialCreatorId: reel.creator.id,
             load: (feed, offset) async {
@@ -955,7 +958,10 @@ class _HomeShellState extends State<HomeShell> {
         ),
       );
       if (!mounted || uploaded == null) return;
-      setState(() => tab = SocialTab.home);
+      setState(() {
+        tab = SocialTab.home;
+        _reelRefresh++;
+      });
     } on ApiException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -1034,6 +1040,8 @@ class _HomeShellState extends State<HomeShell> {
     final pages = <Widget>[
       ReelsScreen(
         active: tab == SocialTab.home,
+        onFollow: Backend.followUser,
+        refreshToken: _reelRefresh,
         onOpenProfile: _openUserProfile,
         onDeleteReel: Backend.deleteReel,
         coins: coins,
@@ -1061,6 +1069,7 @@ class _HomeShellState extends State<HomeShell> {
         ),
       ),
       ProfileHubScreen(
+        key: ValueKey('profile-hub-$_reelRefresh'),
         userId: Backend.cachedUser?.id ?? '',
         displayName: display,
         avatarUrl: photoUrl,

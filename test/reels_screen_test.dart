@@ -52,11 +52,13 @@ Future<void> _pump(
   required Future<ReelFeedPage> Function(String, int) load,
   Future<void> Function(String)? onLike,
   Future<void> Function(String)? onUnlike,
+  Future<void> Function(String)? onFollow,
   ValueChanged<String>? onOpenProfile,
   ReportContent? onReport,
   VoidCallback? onOpenUpload,
   Future<void> Function(String)? onDeleteReel,
   bool active = true,
+  int refreshToken = 0,
   int coins = 0,
   VoidCallback? onOpenWallet,
 }) async {
@@ -69,11 +71,13 @@ Future<void> _pump(
           load: load,
           onLike: onLike,
           onUnlike: onUnlike,
+          onFollow: onFollow,
           onOpenProfile: onOpenProfile,
           onReport: onReport,
           onOpenUpload: onOpenUpload,
           onDeleteReel: onDeleteReel,
           active: active,
+          refreshToken: refreshToken,
           coins: coins,
           onOpenWallet: onOpenWallet,
           loadComments: (_, _) async => const [],
@@ -91,6 +95,26 @@ Future<void> _settle(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('refresh token reloads the feed after upload or profile change', (
+    tester,
+  ) async {
+    var calls = 0;
+    Future<ReelFeedPage> loader(_, _) async {
+      calls++;
+      return ReelFeedPage(reels: [_reel('r$calls', 'One')], nextOffset: 1);
+    }
+
+    await _pump(tester, load: loader);
+    await _settle(tester);
+    expect(calls, 1);
+    expect(find.text('Caption r1'), findsOneWidget);
+
+    await _pump(tester, load: loader, refreshToken: 1);
+    await _settle(tester);
+    expect(calls, 2);
+    expect(find.text('Caption r2'), findsOneWidget);
+  });
+
   testWidgets('inactive tab loads on first activation', (tester) async {
     final key = GlobalKey();
     var calls = 0;
@@ -356,6 +380,23 @@ void main() {
     expect(find.byKey(const ValueKey('reel-follow-badge-r2')), findsOneWidget);
   });
 
+  testWidgets('plus badge follows the creator', (tester) async {
+    final followed = <String>[];
+    await _pump(
+      tester,
+      load: (_, _) async => ReelFeedPage(
+        reels: [_reel('r1', 'One', isFollowing: false)],
+        nextOffset: 1,
+      ),
+      onFollow: (id) async => followed.add(id),
+    );
+    await _settle(tester);
+    await tester.tap(find.byKey(const ValueKey('reel-follow-badge-r1')));
+    await _settle(tester);
+    expect(followed, ['One']);
+    expect(find.byKey(const ValueKey('reel-follow-badge-r1')), findsNothing);
+  });
+
   testWidgets('carousel renders dots and horizontal swipe changes image', (
     tester,
   ) async {
@@ -371,6 +412,12 @@ void main() {
     expect(find.byKey(const ValueKey('reel-dot-r1-0')), findsOneWidget);
     expect(find.byKey(const ValueKey('reel-dot-r1-1')), findsOneWidget);
     expect(find.byKey(const ValueKey('reel-dot-r1-2')), findsOneWidget);
+    expect(
+      tester.getCenter(find.byKey(const ValueKey('reel-dot-r1-1'))).dy,
+      greaterThan(
+        tester.view.physicalSize.height / tester.view.devicePixelRatio / 2,
+      ),
+    );
     final firstDot = tester.widget<Semantics>(
       find.byKey(const ValueKey('reel-dot-semantics-r1-0')),
     );

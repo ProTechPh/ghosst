@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../premium.dart';
-import '../services/cloudinary.dart';
 import '../services/worker_backend.dart';
 import '../social_shell.dart';
 import '../theme.dart';
@@ -555,8 +554,8 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
-  /// Uploads the picked images to Cloudinary and returns their public URLs.
-  /// No bucket, no key: the preset is unsigned, so the app needs no secret.
+  /// Uploads the picked images to the site's FTP storage and returns their
+  /// relative paths (uploads/products/...), which the API turns into URLs.
   Future<List<String>?> _pickImages() async {
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.image,
@@ -570,7 +569,7 @@ class _AdminScreenState extends State<AdminScreen> {
       if (path == null) continue;
       if (mounted) setState(() => message = 'Uploading ${f.name}…');
       try {
-        urls.add(await CloudinaryUpload.upload(path));
+        urls.add(await Backend.uploadProductImage(path));
       } catch (e) {
         if (mounted) setState(() => message = 'Upload failed: $e');
         break;

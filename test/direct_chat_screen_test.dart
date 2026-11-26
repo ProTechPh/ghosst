@@ -15,15 +15,27 @@ class _FakeDirectChatClient implements DirectChatClient {
   bool failMarkRead = false;
   String? sendError;
   bool isBlockedResult = false;
+  bool sessionReady = true;
+  bool failMessages = false;
+  String messagesError = 'permission-denied';
+  int signInCalls = 0;
+  int messagesCalls = 0;
 
   @override
-  Future<String?> currentUid() async => 'me';
+  Future<String?> currentUid() async => sessionReady ? 'me' : null;
 
   @override
   Stream<List<DirectThread>> threads() => const Stream.empty();
 
   @override
-  Stream<DirectMessageFeed> messages(String threadId) => _controller.stream;
+  Stream<DirectMessageFeed> messages(String threadId) async* {
+    messagesCalls++;
+    if (failMessages) {
+      yield* Stream<DirectMessageFeed>.error(StateError(messagesError));
+      return;
+    }
+    yield* _controller.stream;
+  }
 
   @override
   Future<String?> send(String threadId, String text) async {
@@ -49,7 +61,11 @@ class _FakeDirectChatClient implements DirectChatClient {
   Future<void> unblock(String uid) async {}
 
   @override
-  Future<bool> ensureSignedIn() async => true;
+  Future<bool> ensureSignedIn() async {
+    signInCalls++;
+    sessionReady = true;
+    return true;
+  }
 
   @override
   Future<void> signOut() async {}
@@ -91,6 +107,55 @@ Future<void> _pump(
 }
 
 void main() {
+  testWidgets('DM boot signs in before reading the current uid', (tester) async {
+    final client = _FakeDirectChatClient()..sessionReady = false;
+    await _pump(tester, client);
+    await tester.pump();
+
+    expect(find.text('Could not load messages'), findsNothing);
+    expect(client.signInCalls, 1);
+    client.emit(const []);
+    await tester.pump();
+    expect(find.byType(TextField), findsOneWidget);
+  });
+
+  testWidgets('new thread shows an empty conversation and can send', (
+    tester,
+  ) async {
+    final client = _FakeDirectChatClient()..failMessages = true;
+    await _pump(tester, client);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not load messages'), findsNothing);
+    expect(find.text('No messages yet'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+
+    client.failMessages = false;
+    await tester.enterText(find.byType(TextField), 'hello');
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+
+    expect(client.sent, ['hello']);
+    expect(client.messagesCalls, greaterThanOrEqualTo(2));
+    expect(find.text('Could not load messages'), findsNothing);
+  });
+
+  testWidgets('non-permission stream errors keep the reason visible', (
+    tester,
+  ) async {
+    final client = _FakeDirectChatClient()
+      ..failMessages = true
+      ..messagesError = 'network down';
+    await _pump(tester, client);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not load messages'), findsOneWidget);
+    expect(find.textContaining('network down'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+  });
+
   testWidgets('DM route uses a white social app bar and 48dp actions', (
     tester,
   ) async {

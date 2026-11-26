@@ -71,6 +71,61 @@ void main() {
     expect(find.text('Wallet'), findsOneWidget);
   });
 
+  testWidgets('shop uses TikTok chrome and an edge-to-edge featured grid', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      screen: ShopHubScreen(
+        coins: 1250,
+        onRefresh: () async {},
+        onOpenEarn: () {},
+        onOpenStore: () {},
+        onOpenKeys: () {},
+        onOpenTutorials: () {},
+        onOpenWallet: () {},
+        loadProducts: () async => [
+          _product('p1', 'Featured Loader'),
+          _product('p2', 'Featured App'),
+        ],
+        loadClaims: () async => [_claim('c1', 'My Key')],
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('shop-coin-hero')), findsOneWidget);
+    final grid = tester.widget<GridView>(
+      find.byKey(const ValueKey('shop-featured-grid')),
+    );
+    final delegate =
+        grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+    expect(delegate.crossAxisCount, 2);
+    expect(delegate.crossAxisSpacing, 2);
+    expect(delegate.mainAxisSpacing, 2);
+    expect(delegate.childAspectRatio, 0.75);
+  });
+
+  testWidgets('TikTok shop fits a 320px screen', (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _pump(
+      tester,
+      screen: ShopHubScreen(
+        coins: 99999999,
+        onRefresh: () async {},
+        onOpenEarn: () {},
+        onOpenStore: () {},
+        onOpenKeys: () {},
+        onOpenTutorials: () {},
+        onOpenWallet: () {},
+        loadProducts: () async => [_product('p1', 'Featured Loader')],
+        loadClaims: () async => [_claim('c1', 'My Key')],
+      ),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('dashboard actions invoke their callbacks', (tester) async {
     final calls = <String>[];
     await _pump(

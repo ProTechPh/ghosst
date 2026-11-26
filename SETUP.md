@@ -12,7 +12,7 @@ the Cloudflare Worker used to serve, so the Flutter code did not change — only
 | Database | MySQL `khctcfuv_ghosst` on Hostinger — accounts sa `users`, ang app data sa `app_*` |
 | Schema + data | `ghosst-web/database/` (dump + `app_announcements.sql`), `api/migrate_app_users.php` |
 | Flutter client | `lib/api/` (Dio) + `lib/services/worker_backend.dart` |
-| Images | Cloudinary (unsigned upload preset `ghosst`) |
+| Images | Site FTP storage `uploads/products/` via admin-only `POST /v1/uploads/product-image` |
 
 `api/README.md` is the API's own doc (deploy, rollback, unported features);
 this file is the app-side setup.
@@ -242,7 +242,7 @@ The API base URL defaults to production; point it at a local server with
 `php -S 127.0.0.1:8099 -t C:\laragon\www\api C:\laragon\www\api\index.php`.
 
 1. Sign in with Google → **Profile** → **Admin** appears for an admin account.
-2. Admin: **New product** → name, cost, image (Cloudinary picker or URL) →
+2. Admin: **New product** → name, cost, image (FTP upload or URL) →
    **Add product**. Key products: paste keys, one per line → **Add keys**.
    APK/File products: paste a MediaFire page or direct URL.
 3. **Shop** → **Earn coins** → **Watch ad & earn coins** → the app polls your
@@ -276,8 +276,8 @@ The API base URL defaults to production; point it at a local server with
       production DB — including `database/mobile_app_ad_device.sql` (the
       column self-creates on first use; the file adds the index).
 - [ ] `JWT_SECRET` in `api/config.php` changed from the placeholder.
-- [ ] `CLOUDINARY_API_SECRET` set, so deleting a product also deletes its
-      images.
+- [ ] `PUBLIC_CDN` set to the public site URL so `uploads/products/...` keys
+      resolve to full image URLs.
 - [ ] Push notifications: `FIREBASE_SA_EMAIL` / `FIREBASE_SA_KEY` set in
       `api/config.php` on the host (blank = push silently off; same service
       account as chat), and `android/app/google-services.json` present with

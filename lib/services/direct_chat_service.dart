@@ -300,6 +300,7 @@ class DirectChatService implements DirectChatClient {
             ? participants.firstWhere((id) => id != uid)
             : uid;
         batch.set(_inboxThreads(owner).doc(threadId), {
+          'threadId': threadId,
           'peerId': peer,
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));

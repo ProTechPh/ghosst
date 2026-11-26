@@ -52,6 +52,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   bool _sending = false;
   bool _blocked = false;
   bool _pendingWrites = false;
+  String? _errorDetail;
   int _lastMarkedTs = 0;
 
   String get _threadId => directThreadId(_myId ?? '', widget.peerId);
@@ -70,40 +71,70 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     super.dispose();
   }
 
+  void _subscribe() {
+    _sub?.cancel();
+    _sub = _client.messages(_threadId).listen(
+      (feed) {
+        if (!mounted) return;
+        final ordered = [...feed.messages]
+          ..sort((a, b) => a.tsMillis.compareTo(b.tsMillis));
+        setState(() {
+          _messages = ordered;
+          _pendingWrites = feed.hasPendingWrites;
+          _loading = false;
+          _failed = false;
+          _errorDetail = null;
+        });
+        _markNewRead(ordered);
+        _jumpToBottom();
+      },
+      onError: (Object e, StackTrace stack) {
+        // shortcut: a fresh DM has no thread doc yet, so the messages rule
+        // denies the read. Treat that as empty — the first send creates the
+        // thread; blocked users are surfaced by isBlocked and the send path.
+        if (e.toString().toLowerCase().contains('permission-denied')) {
+          if (mounted) {
+            setState(() {
+              _messages = const [];
+              _loading = false;
+              _failed = false;
+              _errorDetail = null;
+            });
+          }
+          return;
+        }
+        debugPrint('[DM] messages error: $e');
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _failed = true;
+          _errorDetail = e.toString();
+        });
+      },
+    );
+  }
+
   Future<void> _boot() async {
+    _sub?.cancel();
+    _sub = null;
     setState(() {
       _loading = true;
       _failed = false;
+      _errorDetail = null;
     });
     try {
+      // DM bootstrap needs the invisible Firebase sign-in first — a persisted
+      // backend session does not guarantee a Firebase user exists yet.
+      final ok = await _client.ensureSignedIn().timeout(
+        const Duration(seconds: 25),
+        onTimeout: () => false,
+      );
+      if (!ok) throw StateError('Chat sign-in failed');
       final uid = await _client.currentUid();
       if (!mounted) return;
       if (uid == null || uid.isEmpty) throw StateError('No chat session');
       setState(() => _myId = uid);
-      _sub = _client
-          .messages(_threadId)
-          .listen(
-            (feed) {
-              if (!mounted) return;
-              final ordered = [...feed.messages]
-                ..sort((a, b) => a.tsMillis.compareTo(b.tsMillis));
-              setState(() {
-                _messages = ordered;
-                _pendingWrites = feed.hasPendingWrites;
-                _loading = false;
-                _failed = false;
-              });
-              _markNewRead(ordered);
-              _jumpToBottom();
-            },
-            onError: (Object _) {
-              if (!mounted) return;
-              setState(() {
-                _loading = false;
-                _failed = true;
-              });
-            },
-          );
+      _subscribe();
       unawaited(_client.markRead(_threadId).catchError((_) {}));
       unawaited(
         _client
@@ -113,11 +144,13 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
             })
             .catchError((_) {}),
       );
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[DM] boot failed: $e');
       if (mounted) {
         setState(() {
           _loading = false;
           _failed = true;
+          _errorDetail ??= e.toString();
         });
       }
     }
@@ -155,6 +188,13 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(problem)));
+      return;
+    }
+    // The first send creates the thread doc; the stream denied before that
+    // can only work with a fresh subscription.
+    if (mounted && _myId != null) {
+      setState(() => _failed = false);
+      _subscribe();
     }
   }
 
@@ -366,10 +406,23 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _failed
-          ? EmptyState(
-              icon: Icons.cloud_off_outlined,
-              title: 'Could not load messages',
-              action: TextButton(onPressed: _boot, child: const Text('Retry')),
+          ? Column(
+              children: [
+                Flexible(
+                  child: EmptyState(
+                    icon: Icons.cloud_off_outlined,
+                    title: 'Could not load messages',
+                    message:
+                        _errorDetail ??
+                        'Send a message to start the conversation.',
+                    action: TextButton(
+                      onPressed: _boot,
+                      child: const Text('Retry'),
+                    ),
+                  ),
+                ),
+                if (!_blocked) _composer(),
+              ],
             )
           : Column(
               children: [

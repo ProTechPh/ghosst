@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ghosst/premium.dart';
 import 'package:ghosst/screens/user_profile_screen.dart';
 import 'package:ghosst/screens/social_list_screen.dart';
 import 'package:ghosst/services/models.dart';
@@ -29,6 +30,25 @@ PublicUser _user({
   reelCount: 3,
   isFollowing: isFollowing,
   isSelf: isSelf,
+);
+
+Reel _reel(String id) => Reel(
+  id: id,
+  caption: '',
+  posterUrl: 'https://example.com/$id.jpg',
+  images: [
+    ReelImage(
+      position: 1,
+      url: 'https://example.com/r.jpg',
+      sha256: 'a' * 64,
+      sizeBytes: 1,
+      mimeType: 'image/jpeg',
+    ),
+  ],
+  createdAt: '',
+  creator: _user(),
+  likeCount: 0,
+  commentCount: 0,
 );
 
 Future<void> _pump(
@@ -397,6 +417,51 @@ void main() {
     expect(find.byKey(const ValueKey('profile-reel-r1')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('profile-reel-r2')));
     expect(opened?.id, 'r2');
+  });
+
+  testWidgets('public profile uses TikTok chrome and an edge-to-edge grid', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      loader: (_) async => _user(),
+      loadReels: (_, _) async => [_reel('r1'), _reel('r2')],
+      onOpenReel: (_) {},
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('public-profile-tiktok-header')),
+      findsOneWidget,
+    );
+    expect(find.text('Posts'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('public-profile-posts-indicator')),
+      findsOneWidget,
+    );
+    expect(find.byType(SectionHeader), findsNothing);
+    final grid = tester.widget<GridView>(find.byType(GridView));
+    final delegate =
+        grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+    expect(delegate.crossAxisCount, 3);
+    expect(delegate.crossAxisSpacing, 2);
+    expect(delegate.mainAxisSpacing, 2);
+    expect(delegate.childAspectRatio, 0.75);
+  });
+
+  testWidgets('public TikTok profile fits a 320px screen', (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _pump(
+      tester,
+      loader: (_) async => _user(isAdmin: true, isModerator: true),
+      loadReels: (_, _) async => [_reel('r1')],
+      onOpenReel: (_) {},
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('profile shows loading until the profile arrives', (
