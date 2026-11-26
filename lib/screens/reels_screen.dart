@@ -343,34 +343,20 @@ class _ReelsScreenState extends State<ReelsScreen> {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       if (widget.onOpenTutorials != null)
-                                        IconButton(
-                                          tooltip: 'Tutorials',
-                                          onPressed: widget.onOpenTutorials,
-                                          icon: const Icon(
-                                            Icons.menu_book_outlined,
-                                            size: 18,
+                                        _TopShortcut(
+                                          key: const ValueKey(
+                                            'reel-shortcut-tutorials',
                                           ),
-                                          iconSize: 18,
-                                          padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints.tightFor(
-                                            width: 32,
-                                            height: 32,
-                                          ),
+                                          label: 'Tutorials',
+                                          onTap: widget.onOpenTutorials!,
                                         ),
                                       if (widget.onOpenFeedback != null)
-                                        IconButton(
-                                          tooltip: 'Send feedback',
-                                          onPressed: widget.onOpenFeedback,
-                                          icon: const Icon(
-                                            Icons.feedback_outlined,
-                                            size: 18,
+                                        _TopShortcut(
+                                          key: const ValueKey(
+                                            'reel-shortcut-feedback',
                                           ),
-                                          iconSize: 18,
-                                          padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints.tightFor(
-                                            width: 32,
-                                            height: 32,
-                                          ),
+                                          label: 'Feedback',
+                                          onTap: widget.onOpenFeedback!,
                                         ),
                                     ],
                                   ),
@@ -834,6 +820,38 @@ class _FeedTab extends StatelessWidget {
       ),
     );
   }
+}
+
+class _TopShortcut extends StatelessWidget {
+  const _TopShortcut({super.key, required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: SizedBox(
+        width: 58,
+        height: kTouchMin,
+        child: Center(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppText.subtitle.copyWith(
+              fontSize: 12,
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _ReportDialog extends StatefulWidget {

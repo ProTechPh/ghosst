@@ -135,6 +135,7 @@ const ROUTES = [
     ['GET',    '#^/v1/admin/reports$#',                     'admin_reports_list',      'required'],
     ['POST',   '#^/v1/admin/reports/([\w-]+)/status$#',     'admin_reports_set_status','required'],
     ['GET',    '#^/v1/feedback/mine$#',                    'feedback_mine',           'required'],
+    ['GET',    '#^/v1/feedback/public$#',                  'feedback_public',         'none'],
     // Website tutorials (public CMS content).
     ['GET',    '#^/v1/tutorials$#',                        'tutorials_list',          'none'],
     // Leaderboard — top coin holders.

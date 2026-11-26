@@ -51,6 +51,7 @@ api_error(
 
 if (!defined('PUBLIC_CDN')) define('PUBLIC_CDN', 'https://ghossthub.com');
 require_once __DIR__ . '/../lib/uploads.php';
+require_once __DIR__ . '/../routes/feedback.php';
 
 check(
     product_image_url('uploads/products/a.jpg') === 'https://ghossthub.com/uploads/products/a.jpg',
@@ -80,5 +81,18 @@ check(
 );
 check(delete_cover_image('../config.php') === false, 'cover delete rejects foreign paths');
 check(delete_cover_image('uploads/covers/missing.jpg') === false, 'missing cover delete is false');
+
+$mapped = public_feedback_map([
+    'id' => 3,
+    'username' => 'juan',
+    'comment' => 'Nice app',
+    'rating' => 5,
+    'image_path' => 'uploads/feedback/a.jpg',
+    'created_at' => '2026-11-26 10:00:00',
+]);
+check(
+    $mapped['comment'] === 'Nice app' && $mapped['rating'] === 5 && $mapped['username'] === 'juan',
+    'public feedback row is mapped'
+);
 
 echo "ok\n";

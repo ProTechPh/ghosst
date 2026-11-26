@@ -453,6 +453,14 @@ class Backend {
     return (res['feedbackId'] ?? '').toString();
   }
 
+  static Future<List<WebsiteFeedback>> publicFeedback() async {
+    final res = await _api.get('/feedback/public');
+    return (res['feedbacks'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(WebsiteFeedback.fromJson)
+        .toList();
+  }
+
   static Future<List<AppFeedback>> myFeedback({
     int limit = 20,
     int offset = 0,

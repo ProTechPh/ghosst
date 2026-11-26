@@ -378,6 +378,37 @@ class AppFeedback {
   );
 }
 
+/// One public entry from the website feedback page (feedback.php).
+class WebsiteFeedback {
+  const WebsiteFeedback({
+    required this.id,
+    required this.username,
+    required this.comment,
+    required this.rating,
+    required this.createdAt,
+    this.imageUrl,
+  });
+
+  final String id;
+  final String username;
+  final String comment;
+  final int rating;
+  final String createdAt;
+  final String? imageUrl;
+
+  factory WebsiteFeedback.fromJson(Map<String, dynamic> json) {
+    final image = (json['imageUrl'] as String? ?? '').trim();
+    return WebsiteFeedback(
+      id: (json['id'] ?? '').toString(),
+      username: json['username'] as String? ?? '',
+      comment: json['comment'] as String? ?? '',
+      rating: int.tryParse((json['rating'] ?? '').toString()) ?? 0,
+      createdAt: json['createdAt'] as String? ?? '',
+      imageUrl: image.isEmpty ? null : ApiConfig.publicUrl(image),
+    );
+  }
+}
+
 String? validateAppFeedback(String comment, int rating) {
   final value = comment.trim();
   if (value.runes.length < 10) return 'Comment must be at least 10 characters.';

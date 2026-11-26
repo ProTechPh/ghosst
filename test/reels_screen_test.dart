@@ -397,8 +397,16 @@ void main() {
     );
     await _settle(tester);
 
-    await tester.tap(find.byTooltip('Tutorials'));
-    await tester.tap(find.byTooltip('Send feedback'));
+    expect(
+      find.byKey(const ValueKey('reel-shortcut-tutorials')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('reel-shortcut-feedback')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const ValueKey('reel-shortcut-tutorials')));
+    await tester.tap(find.byKey(const ValueKey('reel-shortcut-feedback')));
     await tester.pump();
     expect(opened, ['tutorials', 'feedback']);
   });

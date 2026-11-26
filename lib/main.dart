@@ -15,6 +15,7 @@ import 'screens/chat_screen.dart';
 import 'screens/direct_chat_screen.dart';
 import 'screens/earn_screen.dart';
 import 'screens/feedback_screen.dart';
+import 'screens/website_feedback_screen.dart';
 import 'screens/inbox_screen.dart';
 import 'screens/landing_screen.dart';
 import 'screens/my_keys_screen.dart';
@@ -784,6 +785,14 @@ class _HomeShellState extends State<HomeShell> {
     ).push(MaterialPageRoute<void>(builder: (_) => const FeedbackScreen()));
   }
 
+  void _openWebsiteFeedback() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const WebsiteFeedbackScreen(),
+      ),
+    );
+  }
+
   void _openAdmin() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -873,7 +882,7 @@ class _HomeShellState extends State<HomeShell> {
             embedded: false,
             onFollow: Backend.followUser,
             onOpenTutorials: _openTutorials,
-            onOpenFeedback: _openFeedback,
+            onOpenFeedback: _openWebsiteFeedback,
             initialReelId: reel.id,
             initialCreatorId: reel.creator.id,
             load: (feed, offset) async {
@@ -1044,7 +1053,7 @@ class _HomeShellState extends State<HomeShell> {
         active: tab == SocialTab.home,
         onFollow: Backend.followUser,
         onOpenTutorials: _openTutorials,
-        onOpenFeedback: _openFeedback,
+        onOpenFeedback: _openWebsiteFeedback,
         refreshToken: _reelRefresh,
         onOpenProfile: _openUserProfile,
         onDeleteReel: Backend.deleteReel,
