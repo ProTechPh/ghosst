@@ -104,11 +104,6 @@ void main() {
     expect(find.text('12'), findsOneWidget);
     expect(find.text('34'), findsOneWidget);
     expect(find.text('2'), findsOneWidget);
-    expect(find.text('Keys'), findsOneWidget);
-    expect(find.text('Wallet'), findsOneWidget);
-    expect(find.text('Feedback'), findsOneWidget);
-    expect(find.text('Admin'), findsOneWidget);
-    expect(find.byTooltip('Settings'), findsOneWidget);
     expect(find.byTooltip('Share app'), findsOneWidget);
     await _scrollTo(tester, find.byKey(const ValueKey('profile-reel-r1')));
     expect(find.byKey(const ValueKey('profile-reel-r1')), findsOneWidget);
@@ -137,11 +132,12 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('Keys'));
-    await tester.tap(find.text('Wallet'));
-    await tester.tap(find.text('Feedback'));
-    await tester.tap(find.text('Admin'));
-    await tester.tap(find.byTooltip('Settings'));
+    for (final label in ['Keys', 'Wallet', 'Feedback', 'Admin', 'Settings']) {
+      await tester.tap(find.byKey(const ValueKey('profile-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+    }
     await tester.tap(find.byTooltip('Share app'));
     await _scrollTo(tester, find.byKey(const ValueKey('profile-reel-r1')));
     await tester.tap(find.byKey(const ValueKey('profile-reel-r1')));
@@ -208,7 +204,83 @@ void main() {
     );
     expect(find.text('Jeric'), findsOneWidget);
     expect(find.text('Could not load profile'), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-menu')), findsOneWidget);
+  });
+
+  testWidgets('tiktok profile chrome moves utilities behind an overflow menu', (
+    tester,
+  ) async {
+    final calls = <String>[];
+    await _pump(
+      tester,
+      screen: _screen(
+        isAdmin: true,
+        onOpenKeys: () => calls.add('keys'),
+        onOpenWallet: () => calls.add('wallet'),
+        onOpenFeedback: () => calls.add('feedback'),
+        onOpenAdmin: () => calls.add('admin'),
+        onOpenSettings: () => calls.add('settings'),
+        onOpenShare: () => calls.add('share'),
+        loadProfile: (_) async => _user(),
+        loadReels: (_, _) async => const [],
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('profile-tiktok-header')), findsOneWidget);
+    expect(find.text('Posts'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('profile-posts-indicator')),
+      findsOneWidget,
+    );
+    for (final label in ['Keys', 'Wallet', 'Feedback', 'Admin']) {
+      expect(find.text(label), findsNothing);
+    }
+    expect(find.byIcon(Icons.settings_outlined), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('profile-menu')));
+    await tester.pumpAndSettle();
+    for (final label in ['Settings', 'Keys', 'Wallet', 'Feedback', 'Admin']) {
+      expect(find.text(label), findsOneWidget);
+    }
+    var menuOpen = true;
+    for (final entry in {
+      'Settings': 'settings',
+      'Keys': 'keys',
+      'Wallet': 'wallet',
+      'Feedback': 'feedback',
+      'Admin': 'admin',
+    }.entries) {
+      if (!menuOpen) {
+        await tester.tap(find.byKey(const ValueKey('profile-menu')));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.text(entry.key));
+      await tester.pumpAndSettle();
+      menuOpen = false;
+    }
+    await tester.tap(find.byTooltip('Share app'));
+    await tester.pump();
+    expect(calls, ['settings', 'keys', 'wallet', 'feedback', 'admin', 'share']);
+  });
+
+  testWidgets('non-admin profile menu hides Admin', (tester) async {
+    await _pump(
+      tester,
+      screen: _screen(
+        isAdmin: false,
+        onOpenKeys: () {},
+        onOpenWallet: () {},
+        onOpenFeedback: () {},
+        onOpenAdmin: () {},
+        onOpenSettings: () {},
+        onOpenShare: () {},
+        loadProfile: (_) async => _user(),
+        loadReels: (_, _) async => const [],
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('profile-menu')));
+    await tester.pumpAndSettle();
+    expect(find.text('Admin'), findsNothing);
     expect(find.text('Keys'), findsOneWidget);
-    expect(find.text('Wallet'), findsOneWidget);
   });
 }

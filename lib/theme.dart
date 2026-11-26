@@ -29,6 +29,10 @@ class AppColors {
   static const Color red = Color(0xFFF43F5E);
   static const Color text = Color(0xFFF8FAFC);
   static const Color textDim = Color(0xFF8B98A5);
+
+  // TikTok signature accents from DESIGN.md — highlights, never page fills.
+  static const Color tiktokCoral = Color(0xFFFE2C55);
+  static const Color tiktokCyan = Color(0xFF25F4EE);
 }
 
 const Gradient kNeonGradient = LinearGradient(

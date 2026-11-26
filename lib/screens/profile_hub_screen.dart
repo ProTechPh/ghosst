@@ -119,10 +119,12 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
       _reelsFailed = false;
     });
     try {
-      final List<Reel> rows = await (widget.loadReels ?? Backend.userReels)(
-        widget.userId,
-        _reelOffset,
-      );
+      final List<Reel> rows;
+      if (widget.loadReels != null) {
+        rows = await widget.loadReels!(widget.userId, _reelOffset);
+      } else {
+        rows = await Backend.userReels(widget.userId, offset: _reelOffset);
+      }
       if (!mounted) return;
       setState(() {
         _reels = [..._reels, ...rows];
@@ -153,14 +155,35 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
         title: 'Profile',
         actions: [
           IconButton(
-            tooltip: 'Settings',
-            onPressed: widget.onOpenSettings,
-            icon: const Icon(Icons.settings_outlined),
-          ),
-          IconButton(
             tooltip: 'Share app',
             onPressed: widget.onOpenShare,
             icon: const Icon(Icons.share_outlined),
+          ),
+          PopupMenuButton<String>(
+            key: const ValueKey('profile-menu'),
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              switch (value) {
+                case 'settings':
+                  widget.onOpenSettings?.call();
+                case 'keys':
+                  widget.onOpenKeys?.call();
+                case 'wallet':
+                  widget.onOpenWallet?.call();
+                case 'feedback':
+                  widget.onOpenFeedback?.call();
+                case 'admin':
+                  widget.onOpenAdmin?.call();
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'settings', child: Text('Settings')),
+              const PopupMenuItem(value: 'keys', child: Text('Keys')),
+              const PopupMenuItem(value: 'wallet', child: Text('Wallet')),
+              const PopupMenuItem(value: 'feedback', child: Text('Feedback')),
+              if (widget.isAdmin)
+                const PopupMenuItem(value: 'admin', child: Text('Admin')),
+            ],
           ),
         ],
       ),
@@ -174,95 +197,81 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
         child: ListView(
           controller: _scroll,
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(
-            AppSpace.lg,
-            AppSpace.lg,
-            AppSpace.lg,
-            AppSpace.xxl,
-          ),
+          padding: EdgeInsets.zero,
           children: [
-            Center(
-              child: CircleAvatar(
-                radius: 42,
-                backgroundImage: avatar == null || avatar.isEmpty
-                    ? null
-                    : CachedNetworkImageProvider(avatar),
-                child: avatar == null || avatar.isEmpty
-                    ? Text(initial, style: AppText.display)
-                    : null,
-              ),
-            ),
-            const SizedBox(height: AppSpace.md),
-            Text(
-              name.isEmpty ? 'Ghosst member' : name,
-              style: AppText.title,
-              textAlign: TextAlign.center,
-            ),
-            if (username.isNotEmpty) ...[
-              const SizedBox(height: 2),
-              Text(
-                '@$username',
-                style: AppText.caption,
-                textAlign: TextAlign.center,
-              ),
-            ],
-            const SizedBox(height: AppSpace.sm),
-            const Text(
-              'Official drops, updates, and community reels.',
-              style: AppText.caption,
-              textAlign: TextAlign.center,
-            ),
-            if (_profileLoading) ...[
-              const SizedBox(height: AppSpace.sm),
-              const LinearProgressIndicator(),
-            ],
-            if (_profileFailed) ...[
-              const SizedBox(height: AppSpace.sm),
-              const Text(
-                'Could not load profile',
-                style: AppText.caption,
-                textAlign: TextAlign.center,
-              ),
-              TextButton(onPressed: _loadProfile, child: const Text('Retry')),
-            ],
-            const SizedBox(height: AppSpace.lg),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _stat('Following', profile?.followingCount ?? 0),
-                _stat('Followers', profile?.followerCount ?? 0),
-                _stat('Reels', profile?.reelCount ?? _reels.length),
-              ],
-            ),
-            const SizedBox(height: AppSpace.xl),
-            Row(
-              children: [
-                _action(
-                  icon: Icons.key_outlined,
-                  label: 'Keys',
-                  onTap: widget.onOpenKeys,
-                ),
-                _action(
-                  icon: Icons.account_balance_wallet_outlined,
-                  label: 'Wallet',
-                  onTap: widget.onOpenWallet,
-                ),
-                _action(
-                  icon: Icons.feedback_outlined,
-                  label: 'Feedback',
-                  onTap: widget.onOpenFeedback,
-                ),
-                if (widget.isAdmin)
-                  _action(
-                    icon: Icons.admin_panel_settings_outlined,
-                    label: 'Admin',
-                    onTap: widget.onOpenAdmin,
+            _header(avatar, initial),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpace.lg),
+              child: Column(
+                children: [
+                  const SizedBox(height: 50),
+                  Text(
+                    name.isEmpty ? 'Ghosst member' : name,
+                    style: AppText.title.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-              ],
+                  if (username.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      '@$username',
+                      style: AppText.caption.copyWith(color: AppColors.textDim),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                  const SizedBox(height: AppSpace.sm),
+                  const Text(
+                    'Official drops, updates, and community reels.',
+                    style: AppText.caption,
+                    textAlign: TextAlign.center,
+                  ),
+                  if (_profileLoading) ...[
+                    const SizedBox(height: AppSpace.sm),
+                    const LinearProgressIndicator(),
+                  ],
+                  if (_profileFailed) ...[
+                    const SizedBox(height: AppSpace.sm),
+                    const Text(
+                      'Could not load profile',
+                      style: AppText.caption,
+                      textAlign: TextAlign.center,
+                    ),
+                    TextButton(
+                      onPressed: _loadProfile,
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                  const SizedBox(height: AppSpace.lg),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _stat('Following', profile?.followingCount ?? 0),
+                      _stat('Followers', profile?.followerCount ?? 0),
+                      _stat('Reels', profile?.reelCount ?? _reels.length),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpace.md),
+                  const Text(
+                    'Posts',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    key: const ValueKey('profile-posts-indicator'),
+                    width: 24,
+                    height: 2,
+                    color: AppColors.tiktokCoral,
+                  ),
+                  const SizedBox(height: AppSpace.sm),
+                ],
+              ),
             ),
-            const SizedBox(height: AppSpace.xl),
-            const SectionHeader(title: 'Your reels'),
-            const SizedBox(height: AppSpace.sm),
             if (_reelsLoading && _reels.isEmpty)
               const LinearProgressIndicator()
             else if (_reelsFailed && _reels.isEmpty)
@@ -340,34 +349,45 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
     );
   }
 
-  Widget _stat(String label, int value) => Column(
+  Widget _header(String? avatar, String initial) => Stack(
+    clipBehavior: Clip.none,
     children: [
-      Text(groupDigits(value), style: AppText.subtitle),
-      Text(label, style: AppText.caption),
-    ],
-  );
-
-  Widget _action({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) => Expanded(
-    child: Card(
-      margin: const EdgeInsets.only(right: AppSpace.xs),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: AppSpace.md),
-          child: Column(
-            children: [
-              Icon(icon, color: AppColors.primary),
-              const SizedBox(height: AppSpace.xs),
-              Text(label, style: AppText.caption),
-            ],
+      Container(
+        key: const ValueKey('profile-tiktok-header'),
+        width: double.infinity,
+        height: 120,
+        color: Colors.black,
+      ),
+      Positioned(
+        left: 0,
+        right: 0,
+        bottom: -38,
+        child: Center(
+          child: CircleAvatar(
+            radius: 42,
+            backgroundColor: AppColors.surfaceHigh,
+            backgroundImage: avatar == null || avatar.isEmpty
+                ? null
+                : CachedNetworkImageProvider(avatar),
+            child: avatar == null || avatar.isEmpty
+                ? Text(initial, style: AppText.display)
+                : null,
           ),
         ),
       ),
-    ),
+    ],
+  );
+
+  Widget _stat(String label, int value) => Column(
+    children: [
+      Text(
+        groupDigits(value),
+        style: AppText.title.copyWith(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      Text(label, style: AppText.caption.copyWith(color: AppColors.textDim)),
+    ],
   );
 }
