@@ -16,6 +16,7 @@ Reel _reel(
   bool isMine = false,
   int likeCount = 0,
   int commentCount = 0,
+  bool isFollowing = false,
 }) => Reel(
   id: id,
   caption: 'Caption $id',
@@ -42,6 +43,7 @@ Reel _reel(
   ),
   likeCount: likeCount,
   commentCount: commentCount,
+  isFollowing: isFollowing,
   isMine: isMine,
 );
 
@@ -296,6 +298,62 @@ void main() {
 
     expect(find.byType(BottomSheet), findsOneWidget);
     expect(find.byKey(const ValueKey('reel-image-r1-1')), findsOneWidget);
+  });
+
+  testWidgets('like count updates immediately and rolls back on failure', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      load: (_, _) async => ReelFeedPage(
+        reels: [_reel('r1', 'One', likeCount: 999)],
+        nextOffset: 1,
+      ),
+      onLike: (id) async {},
+    );
+    await _settle(tester);
+    expect(find.text('999'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('reel-like-r1')));
+    await _settle(tester);
+    expect(find.text('1.0K'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _pump(
+      tester,
+      load: (_, _) async => ReelFeedPage(
+        reels: [_reel('r2', 'Two', likeCount: 999)],
+        nextOffset: 1,
+      ),
+      onLike: (id) async => throw StateError('offline'),
+    );
+    await _settle(tester);
+    await tester.tap(find.byKey(const ValueKey('reel-like-r2')));
+    await _settle(tester);
+    expect(find.text('999'), findsOneWidget);
+  });
+
+  testWidgets('plus badge follows backend follow state', (tester) async {
+    await _pump(
+      tester,
+      load: (_, _) async => ReelFeedPage(
+        reels: [_reel('r1', 'One', isFollowing: true)],
+        nextOffset: 1,
+      ),
+    );
+    await _settle(tester);
+    expect(find.byKey(const ValueKey('reel-follow-badge-r1')), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _pump(
+      tester,
+      load: (_, _) async => ReelFeedPage(
+        reels: [_reel('r2', 'Two', isFollowing: false)],
+        nextOffset: 1,
+      ),
+    );
+    await _settle(tester);
+    expect(find.byKey(const ValueKey('reel-follow-badge-r2')), findsOneWidget);
   });
 
   testWidgets('carousel renders dots and horizontal swipe changes image', (

@@ -60,6 +60,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
   String? _error;
   bool _unconfigured = false;
   final Map<String, bool> _liked = {};
+  final Map<String, int> _likeCounts = {};
   final Set<String> _liking = {};
 
   @override
@@ -110,6 +111,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
         _reels = items;
         for (final reel in page.reels) {
           _liked.putIfAbsent(reel.id, () => reel.isLiked);
+          _likeCounts.putIfAbsent(reel.id, () => reel.likeCount);
         }
       });
     } on ApiException catch (e) {
@@ -133,9 +135,12 @@ class _ReelsScreenState extends State<ReelsScreen> {
   Future<void> _toggleLike(Reel reel) async {
     if (_liking.contains(reel.id)) return;
     final liked = _liked[reel.id] ?? reel.isLiked;
+    final count = _likeCounts[reel.id] ?? reel.likeCount;
+    final nextCount = count + (liked ? -1 : 1);
     setState(() {
       _liking.add(reel.id);
       _liked[reel.id] = !liked;
+      _likeCounts[reel.id] = nextCount < 0 ? 0 : nextCount;
     });
     try {
       if (liked) {
@@ -144,7 +149,11 @@ class _ReelsScreenState extends State<ReelsScreen> {
         await (widget.onLike ?? Backend.likeReel)(reel.id);
       }
     } catch (_) {
-      if (mounted) setState(() => _liked[reel.id] = liked);
+      if (mounted)
+        setState(() {
+          _liked[reel.id] = liked;
+          _likeCounts[reel.id] = count;
+        });
     } finally {
       if (mounted) setState(() => _liking.remove(reel.id));
     }
@@ -383,6 +392,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
       itemBuilder: (_, i) => _ReelPage(
         reel: _reels[i],
         liked: _liked[_reels[i].id] ?? _reels[i].isLiked,
+        likeCount: _likeCounts[_reels[i].id] ?? _reels[i].likeCount,
         onLike: () => unawaited(_toggleLike(_reels[i])),
         onComments: () => unawaited(_openComments(_reels[i])),
         onDelete: () => unawaited(_deleteReel(_reels[i])),
@@ -397,6 +407,7 @@ class _ReelPage extends StatefulWidget {
   const _ReelPage({
     required this.reel,
     required this.liked,
+    required this.likeCount,
     required this.onLike,
     required this.onComments,
     required this.onDelete,
@@ -406,6 +417,7 @@ class _ReelPage extends StatefulWidget {
 
   final Reel reel;
   final bool liked;
+  final int likeCount;
   final VoidCallback onLike;
   final VoidCallback onComments;
   final VoidCallback onDelete;
@@ -515,7 +527,7 @@ class _ReelPageState extends State<_ReelPage> {
                               ? Text(widget.reel.creator.initial)
                               : null,
                         ),
-                        if (!widget.reel.isMine)
+                        if (!widget.reel.isMine && !widget.reel.isFollowing)
                           Positioned(
                             right: 2,
                             bottom: 0,
@@ -547,7 +559,7 @@ class _ReelPageState extends State<_ReelPage> {
                   tooltip: widget.liked ? 'Unlike' : 'Like',
                   icon: Icons.favorite,
                   color: widget.liked ? AppColors.red : Colors.white,
-                  count: widget.reel.likeCount,
+                  count: widget.likeCount,
                   onTap: widget.onLike,
                 ),
                 _RailAction(
