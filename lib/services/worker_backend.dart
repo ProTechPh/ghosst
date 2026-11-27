@@ -584,8 +584,14 @@ class Backend {
         .toList();
   }
 
-  static Future<void> postReelComment(String id, String text) =>
-      _api.post('/reels/$id/comments', data: {'text': text});
+  static Future<void> postReelComment(
+    String id,
+    String text, {
+    String? parentId,
+  }) => _api.post(
+    '/reels/$id/comments',
+    data: {'text': text, 'parentId': ?parentId},
+  );
 
   static Future<void> deleteReelComment(String reelId, String commentId) =>
       _api.delete('/reels/$reelId/comments/$commentId');

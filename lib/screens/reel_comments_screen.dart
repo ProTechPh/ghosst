@@ -10,12 +10,14 @@ class ReelCommentsScreen extends StatefulWidget {
     required this.reelId,
     this.load,
     this.submit,
+    this.submitReply,
     this.onOpenProfile,
   });
 
   final String reelId;
   final Future<List<ReelComment>> Function(int offset)? load;
   final Future<void> Function(String)? submit;
+  final Future<void> Function(String parentId, String text)? submitReply;
   final ValueChanged<String>? onOpenProfile;
 
   @override
@@ -32,6 +34,8 @@ class _ReelCommentsScreenState extends State<ReelCommentsScreen> {
   bool _hasMore = true;
   bool _sending = false;
   String? _error;
+  String? _replyToId;
+  String _replyToName = '';
 
   @override
   void initState() {
@@ -89,14 +93,23 @@ class _ReelCommentsScreenState extends State<ReelCommentsScreen> {
     if (text.isEmpty || _sending) return;
     setState(() => _sending = true);
     try {
-      if (widget.submit != null) {
+      final parentId = _replyToId;
+      if (parentId != null && widget.submitReply != null) {
+        await widget.submitReply!(parentId, text);
+      } else if (widget.submit != null) {
         await widget.submit!(text);
       } else {
-        await Backend.postReelComment(widget.reelId, text);
+        await Backend.postReelComment(
+          widget.reelId,
+          text,
+          parentId: parentId,
+        );
       }
       if (!mounted) return;
       _input.clear();
       setState(() {
+        _replyToId = null;
+        _replyToName = '';
         _comments = [];
         _offset = 0;
         _hasMore = true;
@@ -276,7 +289,28 @@ class _ReelCommentsScreenState extends State<ReelCommentsScreen> {
                   ],
                 ),
                 const SizedBox(height: AppSpace.xs),
+                if (comment.replyTo.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpace.xs),
+                    child: Text(
+                      'Replying to @${comment.replyTo}',
+                      key: ValueKey('comment-reply-label-${comment.id}'),
+                      style: AppText.caption.copyWith(color: AppColors.cyan),
+                    ),
+                  ),
                 Text(comment.text, style: AppText.body.copyWith(fontSize: 14)),
+                SizedBox(
+                  height: kTouchMin,
+                  child: TextButton.icon(
+                    key: ValueKey('comment-reply-${comment.id}'),
+                    onPressed: () => setState(() {
+                      _replyToId = comment.id;
+                      _replyToName = comment.user.displayName;
+                    }),
+                    icon: const Icon(Icons.reply_outlined, size: 16),
+                    label: const Text('Reply'),
+                  ),
+                ),
               ],
             ),
           ),
@@ -302,6 +336,30 @@ class _ReelCommentsScreenState extends State<ReelCommentsScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (_replyToId != null)
+            Padding(
+              key: const ValueKey('comment-reply-banner'),
+              padding: const EdgeInsets.only(bottom: AppSpace.xs),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Replying to @$_replyToName',
+                      style: AppText.caption.copyWith(color: AppColors.cyan),
+                    ),
+                  ),
+                  IconButton(
+                    key: const ValueKey('comment-reply-cancel'),
+                    tooltip: 'Cancel reply',
+                    icon: const Icon(Icons.close, size: 18),
+                    onPressed: () => setState(() {
+                      _replyToId = null;
+                      _replyToName = '';
+                    }),
+                  ),
+                ],
+              ),
+            ),
           SizedBox(
             height: kTouchMin,
             child: Row(
@@ -340,8 +398,10 @@ class _ReelCommentsScreenState extends State<ReelCommentsScreen> {
                 child: TextField(
                   controller: _input,
                   maxLength: 500,
-                  decoration: const InputDecoration(
-                    hintText: 'Add a comment...',
+                  decoration: InputDecoration(
+                    hintText: _replyToId == null
+                        ? 'Add a comment...'
+                        : 'Reply to @$_replyToName...',
                     counterText: '',
                     filled: true,
                     fillColor: AppColors.surfaceHigh,
