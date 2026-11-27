@@ -42,6 +42,8 @@ then see it on the top-up page and can submit a receipt for manual approval.
 - Current hardcoded allowlists: `upload_receipt.php` (`gcash`, `paypal`) and
   `process-payment.php` (`qrph`, `paypal`). Only the manual receipt handler
   needs to learn custom methods.
+- `manual_payment_enabled` is the master switch; `upload_receipt.php` already
+  rejects every manual submission when it is off. Custom methods must obey it.
 - Escaping: all values rendered with `htmlspecialchars`; JS config injected
   with `json_encode(..., JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)`.
 
@@ -84,6 +86,12 @@ Validation rules: name 1–50 chars; number 1–50; note ≤ 200; key matches
 `^[a-z0-9][a-z0-9_-]{0,49}$`, unique, not in the reserved set; invalid rows are
 dropped (not fatal). Slug is generated from the name on first save and kept in
 a hidden field afterwards, so renaming does not break historical requests.
+Numbers keep punctuation (bank references) — escaping is handled at render
+time, not by shrinking the allowed character set.
+
+Save contract: if rows were posted but **all** of them are invalid, keep the
+previous list and show a validation error (no silent data loss). An explicitly
+empty list (every row removed) is a valid clear.
 
 `manual_methods_save` upserts `settings.manual_payment_methods` with
 `INSERT ... ON DUPLICATE KEY UPDATE`, same statement style as `admin/settings.php`.
@@ -103,8 +111,9 @@ a hidden field afterwards, so renaming does not break historical requests.
 
 ### 3. Customer top-up page — `ghosst-web/topup.php`
 
-- Load enabled custom methods; add them to `$anyMethodAvailable` and to the
-  `$defaultMethod` fallback chain (after GCash/PayPal).
+- Load enabled custom methods, additionally gated by the
+  `manual_payment_enabled` master switch; add them to `$anyMethodAvailable`
+  and to the `$defaultMethod` fallback chain (after GCash/PayPal).
 - Render one radio per enabled custom method using the existing
   `.method.nx-manual-method` markup, `data-is-auto="0"`, `data-currency="PHP"`,
   generic `bi-wallet2` icon, label = method name, `MANUAL` badge, and
@@ -112,8 +121,11 @@ a hidden field afterwards, so renaming does not break historical requests.
 - Inject each into `GHOSST_MANUAL_CONFIG` as `{number, name, note}`.
 - In `onMethodChange()`, after the `gcash` / `paypal` branches, add a generic
   `else if (GHOSST_MANUAL_CONFIG[method])` branch rendering the same account
-  card pattern (name, note, number + copy button). Summary label uses the
-  method name from config.
+  card pattern (name, note, number + copy button). All interpolated values in
+  that branch — including the `data-copy` attribute — go through a small
+  `escapeHtml()` helper (or `textContent` where possible), because numbers may
+  legitimately contain quotes/punctuation. Summary label uses the method name
+  from config.
 
 ### 4. Receipt handler — `ghosst-web/upload_receipt.php`
 
@@ -128,6 +140,9 @@ a hidden field afterwards, so renaming does not break historical requests.
   icon logic with: `gcash` → `phone-fill`, `paypal` → `paypal`, `qrph` →
   `qr-code-scan`, anything else → `wallet2`; label via
   `manual_method_label($methods, $key)` (falls back to `ucfirst($key)`).
+- The GCash-branded approved/rejected summary card counts all manual requests;
+  relabel it to "Manual Approved" / "Manual Rejected" (query unchanged) so
+  GoTyme approvals are not reported as GCash.
 
 ### 6. Tests / verification
 
@@ -146,6 +161,16 @@ a hidden field afterwards, so renaming does not break historical requests.
    number, enable, Save.
 3. Open top-up page, select GoTyme, confirm details + copy button, submit a
    small test receipt, approve it from admin dashboard.
+
+## Reviewer decisions folded in
+
+- Custom methods obey the `manual_payment_enabled` master switch; otherwise
+  customers could select a method whose receipt is guaranteed to be rejected.
+- JS account-card interpolation is escaped (`escapeHtml()` / `textContent`),
+  including `data-copy`; number values keep punctuation.
+- An all-invalid save is a no-op with an error, never a silent clear; removing
+  every row is the explicit way to clear.
+- The dashboard summary card is relabeled "Manual" instead of "GCash".
 
 ## Left to the builder
 

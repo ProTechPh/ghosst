@@ -50,6 +50,8 @@ class ApiException implements Exception {
           'account_banned' =>
             'Your account has been suspended. Contact support if you think this is a mistake.',
           'not_owner' => 'This item does not belong to your account.',
+          'reels_post_banned' =>
+            'You cannot post reels right now. You can still browse and chat.',
           _ => 'You do not have access to this. '
               'If you use a VPN or Private DNS, turn it off and try again.',
         },

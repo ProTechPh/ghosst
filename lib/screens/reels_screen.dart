@@ -110,6 +110,8 @@ class ReelsScreen extends StatefulWidget {
     this.initialReelId,
     this.initialCreatorId,
     this.openCommentsOnLoad = false,
+    this.onOpenSearch,
+    this.loadReel,
     this.active = true,
     this.embedded = true,
     this.refreshToken = 0,
@@ -136,6 +138,8 @@ class ReelsScreen extends StatefulWidget {
   final String? initialReelId;
   final String? initialCreatorId;
   final bool openCommentsOnLoad;
+  final VoidCallback? onOpenSearch;
+  final Future<Reel> Function(String)? loadReel;
   final bool active;
   final bool embedded;
   final int refreshToken;
@@ -267,6 +271,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
         }
       });
       _maybeAutoOpenComments();
+      unawaited(_pinRequestedReel());
     } on ApiException catch (e) {
       if (!mounted || request != _requestId) return;
       setState(() {
@@ -494,6 +499,25 @@ class _ReelsScreenState extends State<ReelsScreen> {
     ),
   );
 
+  Future<void> _pinRequestedReel() async {
+    final id = widget.initialReelId;
+    if (id == null || _reels.any((item) => item.id == id)) return;
+    try {
+      final reel = await (widget.loadReel ?? Backend.reel)(id);
+      if (!mounted) return;
+      setState(() {
+        _reels = [reel, ..._reels];
+        _entries = reelsFeedEntries(
+          _reels,
+          widget.active && AdService.adsEnabled,
+        );
+      });
+      _maybeAutoOpenComments();
+    } catch (_) {
+      // Best effort: the feed stays usable without the pinned reel.
+    }
+  }
+
   void _maybeAutoOpenComments() {
     if (!widget.openCommentsOnLoad || _autoOpenedComments) return;
     final id = widget.initialReelId;
@@ -571,7 +595,9 @@ class _ReelsScreenState extends State<ReelsScreen> {
                             children: [
                               Positioned(
                                 left: AppSpace.sm,
-                                right: AppSpace.sm,
+                                right: widget.onOpenSearch != null
+                                    ? kTouchMin + AppSpace.sm
+                                    : AppSpace.sm,
                                 top: 0,
                                 bottom: 0,
                                 child: Align(
@@ -635,6 +661,23 @@ class _ReelsScreenState extends State<ReelsScreen> {
                                   ),
                                 ),
                               ),
+                              if (widget.onOpenSearch != null)
+                                Positioned(
+                                  right: AppSpace.sm,
+                                  top: 0,
+                                  child: SizedBox(
+                                    height: kTouchMin,
+                                    child: IconButton(
+                                      key: const ValueKey('reels-search'),
+                                      tooltip: 'Search',
+                                      icon: const Icon(
+                                        Icons.search,
+                                        color: Colors.white,
+                                      ),
+                                      onPressed: widget.onOpenSearch,
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                         ),

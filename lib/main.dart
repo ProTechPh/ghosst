@@ -24,6 +24,7 @@ import 'screens/profile_screen.dart';
 import 'screens/profile_hub_screen.dart';
 import 'screens/reel_upload_screen.dart';
 import 'screens/reels_screen.dart';
+import 'screens/search_screen.dart';
 import 'screens/shop_hub_screen.dart';
 import 'screens/social_list_screen.dart';
 import 'screens/splash_screen.dart';
@@ -772,7 +773,6 @@ class _HomeShellState extends State<HomeShell> {
           embedded: false,
           isAdmin: isAdmin,
           isModerator: isModerator,
-          onOpenInbox: _openInbox,
           onOpenProfile: _openUserProfile,
         ),
       ),
@@ -833,10 +833,6 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
-  void _openInbox() {
-    setState(() => tab = SocialTab.inbox);
-  }
-
   Future<void> _openUserProfile(String id) async {
     if (!_openingProfiles.add(id)) return;
     try {
@@ -891,6 +887,7 @@ class _HomeShellState extends State<HomeShell> {
             initialReelId: reel.id,
             initialCreatorId: reel.creator.id,
             openCommentsOnLoad: openComments,
+            loadReel: Backend.reel,
             load: (feed, offset) async {
               final page = await Backend.reels(feed: feed, offset: offset);
               final index = page.reels.indexWhere((item) => item.id == reel.id);
@@ -1028,6 +1025,17 @@ class _HomeShellState extends State<HomeShell> {
     }
   }
 
+  void _openSearch() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SearchScreen(
+          onOpenProfile: _openUserProfile,
+          onOpenReel: (reel) => unawaited(_openCreatorReel(reel)),
+        ),
+      ),
+    );
+  }
+
   void _openProfile() {
     setState(() => tab = SocialTab.profile);
   }
@@ -1080,6 +1088,8 @@ class _HomeShellState extends State<HomeShell> {
         refreshToken: _reelRefresh,
         onOpenProfile: _openUserProfile,
         onDeleteReel: Backend.deleteReel,
+        onOpenSearch: _openSearch,
+        loadReel: Backend.reel,
         coins: coins,
         onOpenWallet: _openWallet,
       ),
