@@ -232,11 +232,28 @@ class _ReelCommentsScreenState extends State<ReelCommentsScreen> {
   }
 
   Widget _commentRow(ReelComment comment) {
+    final isReply = comment.parentId.isNotEmpty;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),
+      padding: EdgeInsets.fromLTRB(
+        isReply ? AppSpace.xl : 0,
+        AppSpace.sm,
+        0,
+        AppSpace.sm,
+      ),
       child: Row(
+        key: ValueKey('comment-row-${comment.id}'),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (isReply)
+            Container(
+              width: 2,
+              height: 72,
+              margin: const EdgeInsets.only(right: AppSpace.sm),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+              ),
+            ),
           Semantics(
             key: ValueKey('comment-profile-${comment.id}'),
             button: widget.onOpenProfile != null,
@@ -299,18 +316,19 @@ class _ReelCommentsScreenState extends State<ReelCommentsScreen> {
                     ),
                   ),
                 Text(comment.text, style: AppText.body.copyWith(fontSize: 14)),
-                SizedBox(
-                  height: kTouchMin,
-                  child: TextButton.icon(
-                    key: ValueKey('comment-reply-${comment.id}'),
-                    onPressed: () => setState(() {
-                      _replyToId = comment.id;
-                      _replyToName = comment.user.displayName;
-                    }),
-                    icon: const Icon(Icons.reply_outlined, size: 16),
-                    label: const Text('Reply'),
+                if (!isReply)
+                  SizedBox(
+                    height: kTouchMin,
+                    child: TextButton.icon(
+                      key: ValueKey('comment-reply-${comment.id}'),
+                      onPressed: () => setState(() {
+                        _replyToId = comment.id;
+                        _replyToName = comment.user.displayName;
+                      }),
+                      icon: const Icon(Icons.reply_outlined, size: 16),
+                      label: const Text('Reply'),
+                    ),
                   ),
-                ),
               ],
             ),
           ),

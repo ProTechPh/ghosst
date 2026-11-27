@@ -264,6 +264,24 @@ void main() {
     expect(find.text('Replying to @Jeric'), findsOneWidget);
   });
 
+  testWidgets('reply rows are indented under their parent', (tester) async {
+    await _pump(
+      tester,
+      load: (_) async => [
+        _comment('Parent'),
+        _comment('Child', parentId: 'Parent', replyTo: 'Jeric'),
+      ],
+    );
+
+    final parentLeft = tester.getRect(
+      find.byKey(const ValueKey('comment-row-Parent')),
+    ).left;
+    final childLeft = tester.getRect(
+      find.byKey(const ValueKey('comment-row-Child')),
+    ).left;
+    expect(childLeft, greaterThan(parentLeft + 8));
+  });
+
   testWidgets('missing submitReply falls back to plain submit', (tester) async {
     String? plain;
     await _pump(
