@@ -20,10 +20,20 @@ class InboxScreen extends StatefulWidget {
     this.onOpenWorldChat,
     this.onUnreadChanged,
     this.loadAnnouncements,
+    this.loadReelNotifications,
+    this.markReelNotificationsRead,
+    this.onOpenReelNotification,
   });
 
   /// Latest app announcements, shown as the Inbox notification card.
   final Future<List<Announcement>> Function()? loadAnnouncements;
+
+  /// Reel activity on the separate Activity page of this inbox.
+  final Future<({List<ReelNotification> notifications, int unreadCount, int nextOffset})>
+      Function()? loadReelNotifications;
+  final Future<int> Function({String? id})? markReelNotificationsRead;
+  final void Function(String reelId, {required bool openComments})?
+      onOpenReelNotification;
 
   final DirectChatClient? client;
   final Future<List<ChatUserSummary>> Function(List<String> ids)? loadUsers;
@@ -47,12 +57,102 @@ class _InboxScreenState extends State<InboxScreen> {
   bool _failed = false;
   List<Announcement> _notifications = const [];
   String _notificationsSeenAt = '';
+  String _page = 'messages';
+  List<ReelNotification> _activity = const [];
+  int _activityUnread = 0;
+  bool _activityLoading = true;
+  bool _activityFailed = false;
 
   @override
   void initState() {
     super.initState();
     _subscribe();
     unawaited(_loadNotifications());
+    unawaited(_loadActivity());
+  }
+
+  Future<void> _loadActivity() async {
+    setState(() {
+      _activityLoading = true;
+      _activityFailed = false;
+    });
+    try {
+      final page = await (widget.loadReelNotifications ??
+          Backend.reelNotifications)();
+      if (!mounted) return;
+      setState(() {
+        _activity = page.notifications;
+        _activityUnread = page.unreadCount;
+        _activityLoading = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _activityLoading = false;
+          _activityFailed = true;
+        });
+      }
+    }
+  }
+
+  Future<void> _openActivityNotification(ReelNotification item) async {
+    try {
+      final unread = await (widget.markReelNotificationsRead ??
+          Backend.markReelNotificationsRead)(id: item.id);
+      if (mounted) {
+        setState(() {
+          _activityUnread = unread;
+          _activity = [
+            for (final row in _activity)
+              row.id == item.id
+                  ? ReelNotification(
+                      id: row.id,
+                      type: row.type,
+                      actor: row.actor,
+                      reelId: row.reelId,
+                      commentId: row.commentId,
+                      text: row.text,
+                      createdAt: row.createdAt,
+                      isRead: true,
+                    )
+                  : row,
+          ];
+        });
+      }
+    } catch (_) {
+      // Opening the reel must not wait on a read receipt.
+    }
+    widget.onOpenReelNotification?.call(
+      item.reelId,
+      openComments: item.type != 'like',
+    );
+  }
+
+  Future<void> _markActivityRead() async {
+    try {
+      final unread = await (widget.markReelNotificationsRead ??
+          Backend.markReelNotificationsRead)();
+      if (mounted) {
+        setState(() {
+          _activityUnread = unread;
+          _activity = [
+            for (final row in _activity)
+              ReelNotification(
+                id: row.id,
+                type: row.type,
+                actor: row.actor,
+                reelId: row.reelId,
+                commentId: row.commentId,
+                text: row.text,
+                createdAt: row.createdAt,
+                isRead: true,
+              ),
+          ];
+        });
+      }
+    } catch (_) {
+      // Best effort: the page keeps its unread state for the next retry.
+    }
   }
 
   bool _announcementUnread(Announcement item, String seen) {
@@ -322,6 +422,51 @@ class _InboxScreenState extends State<InboxScreen> {
   Widget build(BuildContext context) {
     final body = Column(
       children: [
+        _pageTabs(),
+        Expanded(
+          child: _page == 'activity' ? _activityContent() : _messagesContent(),
+        ),
+      ],
+    );
+    if (widget.embedded) return body;
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      appBar: AppBar(
+        backgroundColor: AppColors.bg,
+        leading: IconButton(
+          key: const ValueKey('inbox-add'),
+          tooltip: 'New message',
+          onPressed: _newMessage,
+          icon: const Icon(Icons.person_add_alt_1_outlined),
+        ),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Inbox'),
+            const SizedBox(width: 6),
+            Icon(
+              Icons.arrow_drop_down,
+              size: 18,
+              color: AppColors.textDim,
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            key: const ValueKey('inbox-search'),
+            tooltip: 'Search people',
+            onPressed: _newMessage,
+            icon: const Icon(Icons.search),
+          ),
+        ],
+      ),
+      body: body,
+    );
+  }
+
+  Widget _messagesContent() {
+    return Column(
+      children: [
         _circleShelf(),
         if (_notifications.isNotEmpty)
           Padding(
@@ -414,39 +559,201 @@ class _InboxScreenState extends State<InboxScreen> {
         Expanded(child: _threadContent()),
       ],
     );
-    if (widget.embedded) return body;
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.bg,
-        leading: IconButton(
-          key: const ValueKey('inbox-add'),
-          tooltip: 'New message',
-          onPressed: _newMessage,
-          icon: const Icon(Icons.person_add_alt_1_outlined),
-        ),
-        title: Row(
+  }
+
+  Widget _pageTabs() {
+    return Container(
+      key: const ValueKey('inbox-page-tabs'),
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      child: Row(
+        children: [
+          for (final page in ['messages', 'activity'])
+            Expanded(
+              child: Semantics(
+                key: ValueKey('inbox-tab-$page'),
+                button: true,
+                selected: _page == page,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => setState(() => _page = page),
+                  child: SizedBox(
+                    height: kTouchMin,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          page == 'messages' ? 'Messages' : 'Activity',
+                          style: AppText.subtitle.copyWith(
+                            fontSize: 14,
+                            fontWeight: _page == page
+                                ? FontWeight.w800
+                                : FontWeight.w600,
+                            color: _page == page
+                                ? Colors.white
+                                : AppColors.textDim,
+                          ),
+                        ),
+                        if (page == 'activity' && _activityUnread > 0) ...[
+                          const SizedBox(width: AppSpace.xs),
+                          Container(
+                            key: const ValueKey('inbox-activity-badge'),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1,
+                            ),
+                            decoration: const BoxDecoration(
+                              color: AppColors.tiktokCoral,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Text(
+                              '$_activityUnread',
+                              style: AppText.caption.copyWith(
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _activityContent() {
+    if (_activityLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_activityFailed) {
+      return Center(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Inbox'),
-            const SizedBox(width: 6),
-            Icon(
-              Icons.arrow_drop_down,
-              size: 18,
-              color: AppColors.textDim,
+            const Text('Could not load activity'),
+            TextButton(
+              key: const ValueKey('inbox-notifications-retry'),
+              onPressed: () => unawaited(_loadActivity()),
+              child: const Text('Retry'),
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            key: const ValueKey('inbox-search'),
-            tooltip: 'Search people',
-            onPressed: _newMessage,
-            icon: const Icon(Icons.search),
+      );
+    }
+    if (_activity.isEmpty) {
+      return EmptyState(
+        key: const ValueKey('inbox-notifications-empty'),
+        icon: Icons.favorite_border,
+        title: 'No activity yet',
+        message: 'Likes and comments on your reels will show up here.',
+      );
+    }
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpace.lg,
+            AppSpace.md,
+            AppSpace.lg,
+            AppSpace.xs,
           ),
+          child: Row(
+            children: [
+              Text(
+                'ACTIVITY',
+                style: AppText.caption.copyWith(color: AppColors.primary),
+              ),
+              const Spacer(),
+              TextButton(
+                key: const ValueKey('inbox-notifications-read-all'),
+                onPressed: () => unawaited(_markActivityRead()),
+                child: const Text('Mark all read'),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpace.lg,
+              AppSpace.xs,
+              AppSpace.lg,
+              AppSpace.xxl,
+            ),
+            itemCount: _activity.length,
+            separatorBuilder: (_, _) => const SizedBox(height: AppSpace.sm),
+            itemBuilder: (_, i) => _activityRow(_activity[i]),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _activityRow(ReelNotification item) {
+    final name = item.actor.displayName.isEmpty
+        ? 'Member'
+        : item.actor.displayName;
+    final action = switch (item.type) {
+      'like' => 'liked your reel',
+      'comment' => 'commented on your reel',
+      'reply' => 'replied to your comment',
+      _ => 'posted on your reel',
+    };
+    return GlowCard(
+      key: ValueKey('inbox-notification-${item.id}'),
+      onTap: () => unawaited(_openActivityNotification(item)),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: AppColors.surfaceHigh,
+            backgroundImage: item.actor.avatarUrl == null ||
+                    item.actor.avatarUrl!.isEmpty
+                ? null
+                : CachedNetworkImageProvider(item.actor.avatarUrl!),
+            child: Text(name.substring(0, 1).toUpperCase(), style: AppText.caption),
+          ),
+          const SizedBox(width: AppSpace.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: AppText.subtitle.copyWith(fontSize: 14),
+                ),
+                Text(action, style: AppText.caption),
+                if (item.text.isNotEmpty && item.type != 'like')
+                  Text(
+                    item.text,
+                    style: AppText.caption,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          if (!item.isRead)
+            Semantics(
+              label: 'Unread activity',
+              child: Container(
+                key: ValueKey('inbox-notification-unread-${item.id}'),
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: AppColors.tiktokCoral,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
         ],
       ),
-      body: body,
     );
   }
 
@@ -454,23 +761,27 @@ class _InboxScreenState extends State<InboxScreen> {
     return _loading
         ? const Center(child: CircularProgressIndicator())
         : _failed
-        ? EmptyState(
-            icon: Icons.cloud_off_outlined,
-            title: 'Could not load messages',
-            message: 'Check your connection and try again.',
-            action: TextButton(
-              onPressed: _subscribe,
-              child: const Text('Retry'),
+        ? SingleChildScrollView(
+            child: EmptyState(
+              icon: Icons.cloud_off_outlined,
+              title: 'Could not load messages',
+              message: 'Check your connection and try again.',
+              action: TextButton(
+                onPressed: _subscribe,
+                child: const Text('Retry'),
+              ),
             ),
           )
         : _threads.isEmpty
-        ? EmptyState(
-            icon: Icons.forum_outlined,
-            title: 'No private messages yet',
-            message: 'Start a conversation with another Ghosst member.',
-            action: TextButton(
-              onPressed: _newMessage,
-              child: const Text('New message'),
+        ? SingleChildScrollView(
+            child: EmptyState(
+              icon: Icons.forum_outlined,
+              title: 'No private messages yet',
+              message: 'Start a conversation with another Ghosst member.',
+              action: TextButton(
+                onPressed: _newMessage,
+                child: const Text('New message'),
+              ),
             ),
           )
         : ListView.separated(
