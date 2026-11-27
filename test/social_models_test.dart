@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:ghosst/services/models.dart';
 import 'package:ghosst/services/worker_backend.dart';
 
 void main() {
