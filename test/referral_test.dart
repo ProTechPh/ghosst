@@ -11,6 +11,35 @@ void main() {
     expect(Backend.normalizeReferralCode('REF-ABCDEFG'), '');
   });
 
+  test('invite text keeps a legacy referral code as stored', () {
+    final text = Backend.referralInviteText(
+      referralCode: 'ABC123',
+      isPlay: true,
+    );
+    expect(text, contains('ABC123'));
+  });
+
+  test('invite text carries the store link and the referral code', () {
+    final play = Backend.referralInviteText(
+      referralCode: 'REF-ABC234',
+      isPlay: true,
+    );
+    expect(play, contains('Try Ghosst'));
+    expect(
+      play,
+      contains('https://play.google.com/store/apps/details?id=com.astrixtech.ghosst'),
+    );
+    expect(play, contains('REF-ABC234'));
+
+    final direct = Backend.referralInviteText(
+      referralCode: 'REF-ABC234',
+      isPlay: false,
+    );
+    expect(direct, contains('https://ghossthub.com'));
+    expect(direct, isNot(contains('play.google.com')));
+    expect(direct, contains('REF-ABC234'));
+  });
+
   testWidgets('referral sheet shows the code and claim controls', (
     tester,
   ) async {

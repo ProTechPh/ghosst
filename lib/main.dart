@@ -802,11 +802,12 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   Future<void> _shareApp() async {
-    final url = Distribution.isPlay
-        ? 'https://play.google.com/store/apps/details?id=com.astrixtech.ghosst'
-        : 'https://ghossthub.com';
+    final text = Backend.referralInviteText(
+      referralCode: Backend.cachedUser?.referralCode ?? '',
+      isPlay: Distribution.isPlay,
+    );
     try {
-      await Share.share('Ghosst — $url');
+      await Share.share(text);
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(

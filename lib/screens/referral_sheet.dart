@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../arcade.dart';
+import '../services/distribution.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
 
@@ -45,7 +46,10 @@ class _ReferralSheetState extends State<ReferralSheet> {
   Future<void> _share() async {
     if (widget.referralCode.isEmpty) return;
     await Share.share(
-      'Join me on Ghosst — my referral code: ${widget.referralCode}',
+      Backend.referralInviteText(
+        referralCode: widget.referralCode,
+        isPlay: Distribution.isPlay,
+      ),
     );
   }
 

@@ -15,7 +15,7 @@ import 'session_store.dart';
 export 'models.dart';
 
 /// Fixed reward credited by the API when a referral code is claimed.
-const int REFERRAL_REWARD = 100;
+const int referralReward = 100;
 
 /// The signed-in account, as much of it as the UI shows.
 enum BackendSessionState { live, unknown, revoked }
@@ -333,10 +333,29 @@ class Backend {
     return RegExp(r'^REF-[A-Z2-9]{6}$').hasMatch(code) ? code : '';
   }
 
+  /// Share copy for the Profile share button: store link + invitation + code.
+  static String referralInviteText({
+    required String referralCode,
+    required bool isPlay,
+  }) {
+    final url = isPlay
+        ? 'https://play.google.com/store/apps/details?id=com.astrixtech.ghosst'
+        : 'https://ghossthub.com';
+    // Display the code exactly as stored — older accounts may not have the
+    // REF- prefix, and a strict filter would silently drop it from invites.
+    final code = referralCode.trim();
+    final text = StringBuffer(
+      'Try Ghosst — earn coins from ads and unlock license keys and apps!\n'
+      'Download: $url',
+    );
+    if (code.isNotEmpty) text.writeln('\nUse my referral code: $code');
+    return text.toString();
+  }
+
   /// The invitee claims someone else's code; the API credits that referrer.
   static Future<int> claimReferral(String code) async {
     final res = await _api.post('/me/referral', data: {'code': normalizeReferralCode(code)});
-    return res['reward'] as int? ?? REFERRAL_REWARD;
+    return res['reward'] as int? ?? referralReward;
   }
 
   /// Remaining reward budget for the rolling 24h window. Advisory: the SSV
