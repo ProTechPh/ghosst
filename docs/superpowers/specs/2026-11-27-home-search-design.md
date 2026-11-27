@@ -74,24 +74,33 @@ finds reels already on screen — not a real search).
   callbacks (defaults to `Backend`), plus `onOpenProfile` and `onOpenReel`.
 - AppBar with back button and a `TextField` (autofocus, clear button).
 - Debounce 350 ms; ignore queries shorter than 2 chars; reset results to empty.
-- Body: loading indicator while either call is in flight; error state with
-  Retry; otherwise two sections:
+- Body: loading indicator while a call is in flight; **each section owns its
+  error/retry state** so a failed reel search does not hide successful user
+  results (and vice versa):
   - `PEOPLE` — avatar, name, `@username`, tap → `onOpenProfile(id)`.
   - `REELS` — poster thumbnail (CachedNetworkImage), caption (1–2 lines),
     compact like/comment counts, tap → `onOpenReel(reel)`.
   - A section with zero results shows a small "No users found" / "No reels
     found" line; both empty shows a calm empty state.
-- Keys: `search-input`, `search-clear`, `search-loading`, `search-error`,
-  `search-retry`, `search-user-<id>`, `search-reel-<id>`, `search-no-users`,
-  `search-no-reels`.
+- Keys: `search-input`, `search-clear`, `search-loading`, `search-user-<id>`,
+  `search-reel-<id>`, `search-no-users`, `search-no-reels`,
+  `search-users-error` / `search-reels-error`, `search-users-retry` /
+  `search-reels-retry`.
 
 ### 4. Home entry point
 
 - `ReelsScreen` gains optional `onOpenSearch` (VoidCallback). In the embedded
   top bar, add a search `IconButton` (tooltip 'Search', key `reels-search`)
   before the tabs; tapping calls the callback. Standalone ReelsScreen hides it.
-- `main.dart` wires `onOpenSearch` on the home ReelsScreen only:
-  `Navigator.push(SearchScreen(onOpenProfile: _openUserProfile, onOpenReel: (reel) => _openCreatorReel(reel)))`.
+- `SearchScreen` **pops itself before invoking either tap callback**, so
+  tapping yourself switches the HomeShell tab (instead of appearing to do
+  nothing) and Back never returns to stale results.
+- `main.dart` wires `onOpenSearch` on the home ReelsScreen only.
+  For reel results, fetch the exact reel with `Backend.reel(reel.id)` and open
+  it through `_openCreatorReel`; extend that method's `load` closure so the
+  requested id is **always prepended when missing from the first feed page**
+  (today it only appends creator reels, which can open the wrong older reel).
+  This also hardens the Activity route that already uses `_openCreatorReel`.
 
 ### 5. Tests / verification
 
@@ -111,6 +120,14 @@ finds reels already on screen — not a real search).
 
 1. Upload `api/` (new route + handler) to Hostinger.
 2. Ship the Flutter build with the search entry point.
+
+## Reviewer decisions folded in
+
+- Tapping a reel opens the **exact** reel: fetch by id and pin it, never rely on
+  it being in the first feed page. Also fixes the Activity route's similar gap.
+- SearchScreen pops itself before calling `onOpenProfile`/`onOpenReel`.
+- Users and Reels sections fail independently; a partial outage still shows the
+  successful section, each with its own Retry.
 
 ## Left to the builder
 
