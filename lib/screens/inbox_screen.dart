@@ -95,37 +95,40 @@ class _InboxScreenState extends State<InboxScreen> {
     }
   }
 
-  Future<void> _openActivityNotification(ReelNotification item) async {
-    try {
-      final unread = await (widget.markReelNotificationsRead ??
-          Backend.markReelNotificationsRead)(id: item.id);
-      if (mounted) {
-        setState(() {
-          _activityUnread = unread;
-          _activity = [
-            for (final row in _activity)
-              row.id == item.id
-                  ? ReelNotification(
-                      id: row.id,
-                      type: row.type,
-                      actor: row.actor,
-                      reelId: row.reelId,
-                      commentId: row.commentId,
-                      text: row.text,
-                      createdAt: row.createdAt,
-                      isRead: true,
-                    )
-                  : row,
-          ];
-        });
-      }
-    } catch (_) {
-      // Opening the reel must not wait on a read receipt.
-    }
+  void _openActivityNotification(ReelNotification item) {
     widget.onOpenReelNotification?.call(
       item.reelId,
       openComments: item.type != 'like',
     );
+    unawaited(_markActivityNotificationRead(item));
+  }
+
+  Future<void> _markActivityNotificationRead(ReelNotification item) async {
+    try {
+      final unread = await (widget.markReelNotificationsRead ??
+          Backend.markReelNotificationsRead)(id: item.id);
+      if (!mounted) return;
+      setState(() {
+        _activityUnread = unread;
+        _activity = [
+          for (final row in _activity)
+            row.id == item.id
+                ? ReelNotification(
+                    id: row.id,
+                    type: row.type,
+                    actor: row.actor,
+                    reelId: row.reelId,
+                    commentId: row.commentId,
+                    text: row.text,
+                    createdAt: row.createdAt,
+                    isRead: true,
+                  )
+                : row,
+        ];
+      });
+    } catch (_) {
+      // Best effort: the row stays unread until the next reload.
+    }
   }
 
   Future<void> _markActivityRead() async {
@@ -578,7 +581,10 @@ class _InboxScreenState extends State<InboxScreen> {
                 selected: _page == page,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: () => setState(() => _page = page),
+                  onTap: () {
+                    setState(() => _page = page);
+                    if (page == 'activity') unawaited(_loadActivity());
+                  },
                   child: SizedBox(
                     height: kTouchMin,
                     child: Row(
@@ -695,6 +701,17 @@ class _InboxScreenState extends State<InboxScreen> {
     );
   }
 
+  String _activityTime(String iso) {
+    final parsed = DateTime.tryParse(iso);
+    if (parsed == null) return '';
+    final age = DateTime.now().difference(parsed.toLocal());
+    if (age.inDays >= 7) return '${age.inDays ~/ 7}w';
+    if (age.inDays > 0) return '${age.inDays}d';
+    if (age.inHours > 0) return '${age.inHours}h';
+    if (age.inMinutes > 0) return '${age.inMinutes}m';
+    return 'now';
+  }
+
   Widget _activityRow(ReelNotification item) {
     final name = item.actor.displayName.isEmpty
         ? 'Member'
@@ -707,7 +724,7 @@ class _InboxScreenState extends State<InboxScreen> {
     };
     return GlowCard(
       key: ValueKey('inbox-notification-${item.id}'),
-      onTap: () => unawaited(_openActivityNotification(item)),
+      onTap: () => _openActivityNotification(item),
       child: Row(
         children: [
           CircleAvatar(
@@ -737,6 +754,14 @@ class _InboxScreenState extends State<InboxScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
               ],
+            ),
+          ),
+          const SizedBox(width: AppSpace.xs),
+          Text(
+            _activityTime(item.createdAt),
+            style: AppText.caption.copyWith(
+              fontSize: 11,
+              color: AppColors.textDim,
             ),
           ),
           if (!item.isRead)
