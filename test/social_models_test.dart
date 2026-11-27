@@ -244,4 +244,51 @@ void main() {
     expect(ticket.uploads.single.maxBytes, 10485760);
     expect(ticket.expiresAt.year, 2026);
   });
+
+  test('ReelComment parses reply fields and tolerates a flat comment', () {
+    final reply = ReelComment.fromJson({
+      'id': 'c2',
+      'text': 'nice',
+      'createdAt': '2026-11-27T10:00:00Z',
+      'parentId': 'c1',
+      'replyTo': 'Juan',
+      'user': {'id': 9, 'displayName': 'Ana'},
+    });
+    expect(reply.parentId, 'c1');
+    expect(reply.replyTo, 'Juan');
+
+    final flat = ReelComment.fromJson({
+      'id': 'c1',
+      'text': 'first',
+      'user': {'id': 7},
+    });
+    expect(flat.parentId, '');
+    expect(flat.replyTo, '');
+  });
+
+  test('ReelNotification parses activity and defaults missing values', () {
+    final item = ReelNotification.fromJson({
+      'id': 'n1',
+      'type': 'reply',
+      'actor': {'id': 7, 'displayName': 'Juan'},
+      'reelId': 'r1',
+      'commentId': 'c2',
+      'text': 'nice reply',
+      'createdAt': '2026-11-27T10:00:00Z',
+      'isRead': true,
+    });
+    expect(item.id, 'n1');
+    expect(item.type, 'reply');
+    expect(item.actor.displayName, 'Juan');
+    expect(item.reelId, 'r1');
+    expect(item.commentId, 'c2');
+    expect(item.text, 'nice reply');
+    expect(item.createdAt, '2026-11-27T10:00:00Z');
+    expect(item.isRead, isTrue);
+
+    final bare = ReelNotification.fromJson({'id': 'n2'});
+    expect(bare.type, '');
+    expect(bare.actor.id, '');
+    expect(bare.isRead, isFalse);
+  });
 }

@@ -247,12 +247,16 @@ class ReelComment {
     required this.text,
     required this.createdAt,
     required this.user,
+    this.parentId = '',
+    this.replyTo = '',
   });
 
   final String id;
   final String text;
   final String createdAt;
   final PublicUser user;
+  final String parentId;
+  final String replyTo;
 
   factory ReelComment.fromJson(Map<String, dynamic> json) {
     final rawUser = json['user'];
@@ -263,6 +267,46 @@ class ReelComment {
       user: PublicUser.fromJson(
         rawUser is Map<String, dynamic> ? rawUser : const {},
       ),
+      parentId: (json['parentId'] ?? '').toString(),
+      replyTo: (json['replyTo'] ?? '').toString(),
+    );
+  }
+}
+
+class ReelNotification {
+  const ReelNotification({
+    required this.id,
+    required this.type,
+    required this.actor,
+    required this.reelId,
+    required this.commentId,
+    required this.text,
+    required this.createdAt,
+    required this.isRead,
+  });
+
+  final String id;
+  final String type;
+  final PublicUser actor;
+  final String reelId;
+  final String commentId;
+  final String text;
+  final String createdAt;
+  final bool isRead;
+
+  factory ReelNotification.fromJson(Map<String, dynamic> json) {
+    final rawActor = json['actor'];
+    return ReelNotification(
+      id: (json['id'] ?? '').toString(),
+      type: (json['type'] ?? '').toString(),
+      actor: PublicUser.fromJson(
+        rawActor is Map<String, dynamic> ? rawActor : const {},
+      ),
+      reelId: (json['reelId'] ?? '').toString(),
+      commentId: (json['commentId'] ?? '').toString(),
+      text: (json['text'] ?? '').toString(),
+      createdAt: (json['createdAt'] ?? '').toString(),
+      isRead: json['isRead'] == true,
     );
   }
 }
