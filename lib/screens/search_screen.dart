@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
-import '../services/models.dart';
 import '../services/worker_backend.dart';
 import '../theme.dart';
 
