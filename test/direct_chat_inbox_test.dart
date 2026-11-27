@@ -110,8 +110,12 @@ Future<void> _pump(
   Future<int> Function({String? id})? markReelNotificationsRead,
   void Function(String reelId, {required bool openComments})?
       onOpenReelNotification,
-
+  Size size = const Size(800, 600),
 }) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(
     MaterialApp(
       theme: AppTheme.dark,
@@ -589,5 +593,67 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('inbox-notification-n1')));
     await tester.pump();
     expect(routed, 'r1');
+  });
+
+  testWidgets('circle shelf labels do not collide on a narrow screen', (
+    tester,
+  ) async {
+    final client = _FakeDirectChatClient();
+    DirectThread thread(String peer) => DirectThread(
+      id: 'me__$peer',
+      participants: ['me', peer],
+      lastMessage: 'hi',
+      lastMessageAt: 2000,
+      lastSenderId: peer,
+      lastReadAt: const {},
+      createdAt: 1000,
+      updatedAt: 2000,
+    );
+    await _pump(
+      tester,
+      client,
+      size: const Size(320, 640),
+      loadUsers: (ids) async => [
+        for (final id in ids)
+          ChatUserSummary(
+            id: id,
+            name: id == 'sophie' ? 'Sophie Sophie G.' : 'Sylvie',
+          ),
+      ],
+    );
+    client.emit([thread('sophie'), thread('sylvie')]);
+    await tester.pumpAndSettle();
+
+    final shelf = find.byKey(const ValueKey('inbox-circles'));
+    final world = tester.getRect(
+      find.descendant(of: shelf, matching: find.text('World chat')),
+    );
+    final sophie = tester.getRect(
+      find.descendant(of: shelf, matching: find.text('Sophie Sophie G.')),
+    );
+    expect(
+      world.right,
+      lessThan(sophie.left),
+      reason: 'top circles must not run their labels together',
+    );
+  });
+
+  testWidgets('circle shelf uses the available width', (tester) async {
+    final client = _FakeDirectChatClient();
+    await _pump(tester, client, size: const Size(320, 640));
+    client.emit(const []);
+    await tester.pumpAndSettle();
+    final narrow = tester.getRect(
+      find.byKey(const ValueKey('inbox-world')),
+    ).width;
+
+    await _pump(tester, client, size: const Size(800, 600));
+    client.emit(const []);
+    await tester.pumpAndSettle();
+    final wide = tester.getRect(
+      find.byKey(const ValueKey('inbox-world')),
+    ).width;
+
+    expect(wide, greaterThan(narrow + 40));
   });
 }

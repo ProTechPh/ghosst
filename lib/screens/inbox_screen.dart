@@ -29,11 +29,14 @@ class InboxScreen extends StatefulWidget {
   final Future<List<Announcement>> Function()? loadAnnouncements;
 
   /// Reel activity on the separate Activity page of this inbox.
-  final Future<({List<ReelNotification> notifications, int unreadCount, int nextOffset})>
-      Function()? loadReelNotifications;
+  final Future<
+    ({List<ReelNotification> notifications, int unreadCount, int nextOffset})
+  >
+  Function()?
+  loadReelNotifications;
   final Future<int> Function({String? id})? markReelNotificationsRead;
   final void Function(String reelId, {required bool openComments})?
-      onOpenReelNotification;
+  onOpenReelNotification;
 
   final DirectChatClient? client;
   final Future<List<ChatUserSummary>> Function(List<String> ids)? loadUsers;
@@ -77,8 +80,8 @@ class _InboxScreenState extends State<InboxScreen> {
       _activityFailed = false;
     });
     try {
-      final page = await (widget.loadReelNotifications ??
-          Backend.reelNotifications)();
+      final page =
+          await (widget.loadReelNotifications ?? Backend.reelNotifications)();
       if (!mounted) return;
       setState(() {
         _activity = page.notifications;
@@ -105,8 +108,9 @@ class _InboxScreenState extends State<InboxScreen> {
 
   Future<void> _markActivityNotificationRead(ReelNotification item) async {
     try {
-      final unread = await (widget.markReelNotificationsRead ??
-          Backend.markReelNotificationsRead)(id: item.id);
+      final unread =
+          await (widget.markReelNotificationsRead ??
+              Backend.markReelNotificationsRead)(id: item.id);
       if (!mounted) return;
       setState(() {
         _activityUnread = unread;
@@ -133,8 +137,9 @@ class _InboxScreenState extends State<InboxScreen> {
 
   Future<void> _markActivityRead() async {
     try {
-      final unread = await (widget.markReelNotificationsRead ??
-          Backend.markReelNotificationsRead)();
+      final unread =
+          await (widget.markReelNotificationsRead ??
+              Backend.markReelNotificationsRead)();
       if (mounted) {
         setState(() {
           _activityUnread = unread;
@@ -338,87 +343,102 @@ class _InboxScreenState extends State<InboxScreen> {
     String? initial,
     IconData? icon,
     Color ring = AppColors.primary,
+    double itemWidth = 68,
   }) => GestureDetector(
     key: key,
     onTap: onTap,
     child: SizedBox(
-      width: 68,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 60,
-            height: 60,
-            padding: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: ring, width: 2),
+      width: itemWidth,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpace.xs),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 60,
+              height: 60,
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: ring, width: 2),
+              ),
+              child: CircleAvatar(
+                backgroundColor: AppColors.surfaceHigh,
+                backgroundImage: avatarUrl == null || avatarUrl.isEmpty
+                    ? null
+                    : CachedNetworkImageProvider(avatarUrl),
+                child: icon != null
+                    ? Icon(icon, color: AppColors.primary, size: 24)
+                    : Text(initial ?? '?', style: AppText.subtitle),
+              ),
             ),
-            child: CircleAvatar(
-              backgroundColor: AppColors.surfaceHigh,
-              backgroundImage: avatarUrl == null || avatarUrl.isEmpty
-                  ? null
-                  : CachedNetworkImageProvider(avatarUrl),
-              child: icon != null
-                  ? Icon(icon, color: AppColors.primary, size: 24)
-                  : Text(initial ?? '?', style: AppText.subtitle),
+            const SizedBox(height: AppSpace.xs),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppText.caption,
             ),
-          ),
-          const SizedBox(height: AppSpace.xs),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppText.caption,
-          ),
-        ],
+          ],
+        ),
       ),
     ),
   );
 
-  Widget _circleShelf() => SizedBox(
+  Widget _circleShelf() => LayoutBuilder(
     key: const ValueKey('inbox-circles'),
-    height: 104,
-    child: ListView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpace.lg,
-        vertical: AppSpace.sm,
-      ),
-      children: [
-        _circle(
-          label: 'Create',
-          icon: Icons.add,
-          onTap: _newMessage,
-        ),
-        _circle(
-          key: const ValueKey('inbox-world'),
-          label: 'World chat',
-          icon: Icons.public,
-          ring: AppColors.tiktokCoral,
-          onTap: widget.onOpenWorldChat ?? () {},
-        ),
-        for (final thread in _threads.take(12)) ...[
-          _circle(
-            label: _users[thread.peerId(_myId ?? '')]?.name ?? 'Member',
-            avatarUrl: _users[thread.peerId(_myId ?? '')]?.avatarUrl,
-            initial: () {
-              final name = _users[thread.peerId(_myId ?? '')]?.name ?? 'M';
-              return name.isEmpty ? 'M' : name.substring(0, 1).toUpperCase();
-            }(),
-            ring: AppColors.tiktokCoral,
-            onTap: () => _openThread(
-              thread,
-              _users[thread.peerId(_myId ?? '')] ??
-                  ChatUserSummary(
-                    id: thread.peerId(_myId ?? ''),
-                    name: 'Member',
-                  ),
-            ),
+    builder: (context, constraints) {
+      final raw = (constraints.maxWidth - AppSpace.lg * 2) / 4;
+      final itemWidth = raw < 72 ? 72.0 : raw;
+      return SizedBox(
+        height: 104,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpace.lg,
+            vertical: AppSpace.sm,
           ),
-        ],
-      ],
-    ),
+          children: [
+            _circle(
+              label: 'Create',
+              icon: Icons.add,
+              onTap: _newMessage,
+              itemWidth: itemWidth,
+            ),
+            _circle(
+              key: const ValueKey('inbox-world'),
+              label: 'World chat',
+              icon: Icons.public,
+              ring: AppColors.tiktokCoral,
+              onTap: widget.onOpenWorldChat ?? () {},
+              itemWidth: itemWidth,
+            ),
+            for (final thread in _threads.take(12)) ...[
+              _circle(
+                label: _users[thread.peerId(_myId ?? '')]?.name ?? 'Member',
+                avatarUrl: _users[thread.peerId(_myId ?? '')]?.avatarUrl,
+                initial: () {
+                  final name = _users[thread.peerId(_myId ?? '')]?.name ?? 'M';
+                  return name.isEmpty
+                      ? 'M'
+                      : name.substring(0, 1).toUpperCase();
+                }(),
+                ring: AppColors.tiktokCoral,
+                itemWidth: itemWidth,
+                onTap: () => _openThread(
+                  thread,
+                  _users[thread.peerId(_myId ?? '')] ??
+                      ChatUserSummary(
+                        id: thread.peerId(_myId ?? ''),
+                        name: 'Member',
+                      ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    },
   );
 
   @override
@@ -447,11 +467,7 @@ class _InboxScreenState extends State<InboxScreen> {
           children: [
             const Text('Inbox'),
             const SizedBox(width: 6),
-            Icon(
-              Icons.arrow_drop_down,
-              size: 18,
-              color: AppColors.textDim,
-            ),
+            Icon(Icons.arrow_drop_down, size: 18, color: AppColors.textDim),
           ],
         ),
         actions: [
@@ -533,16 +549,11 @@ class _InboxScreenState extends State<InboxScreen> {
                               ],
                             ),
                           ),
-                          if (_announcementUnread(
-                            item,
-                            _notificationsSeenAt,
-                          ))
+                          if (_announcementUnread(item, _notificationsSeenAt))
                             Container(
                               width: 8,
                               height: 8,
-                              margin: const EdgeInsets.only(
-                                right: AppSpace.sm,
-                              ),
+                              margin: const EdgeInsets.only(right: AppSpace.sm),
                               decoration: const BoxDecoration(
                                 color: AppColors.primary,
                                 shape: BoxShape.circle,
@@ -730,21 +741,21 @@ class _InboxScreenState extends State<InboxScreen> {
           CircleAvatar(
             radius: 20,
             backgroundColor: AppColors.surfaceHigh,
-            backgroundImage: item.actor.avatarUrl == null ||
-                    item.actor.avatarUrl!.isEmpty
+            backgroundImage:
+                item.actor.avatarUrl == null || item.actor.avatarUrl!.isEmpty
                 ? null
                 : CachedNetworkImageProvider(item.actor.avatarUrl!),
-            child: Text(name.substring(0, 1).toUpperCase(), style: AppText.caption),
+            child: Text(
+              name.substring(0, 1).toUpperCase(),
+              style: AppText.caption,
+            ),
           ),
           const SizedBox(width: AppSpace.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  name,
-                  style: AppText.subtitle.copyWith(fontSize: 14),
-                ),
+                Text(name, style: AppText.subtitle.copyWith(fontSize: 14)),
                 Text(action, style: AppText.caption),
                 if (item.text.isNotEmpty && item.type != 'like')
                   Text(
