@@ -91,3 +91,22 @@ hindi naaabot ng app (`/v1/auth/google` ay ID-token based).
 - Ang 100 ay fixed, hindi admin-tunable — wala nang settings dependence.
 - Ang pagtanggal ng `referrals.php` ay mawawalan ng history view; ang app sheet ay
   magpapakita lang ng code at claim result, hindi ng invite list.
+- Ang code format para sa claim ay pinalawak sa `(REF-)?[A-Z0-9]{4,12}` para
+  magamit ang lumang codes na may `0`/`1` o walang prefix; ang bagong generasyon
+  ay nananatiling `REF-[A-Z2-9]{6}`.
+
+## Deploy checklist (Hostinger)
+Ang repo ay hindi nagde-deploy ng website; kailangang i-upload nang manual:
+
+1. I-upload ang binagong API: `config.php`, `routes/account.php`, `index.php`.
+2. Burahin sa Hostinger ang `ajax/redeem_referral.php` at `referrals.php`.
+3. I-upload ang binagong website files: `ajax/auth.php`, `auth/google-callback.php`,
+   `includes/db_config.php`, `dashboard.php`, `gifts.php`, `profile.php`,
+   `settings.php`, `admin/includes/layout.php`.
+4. Kumpirmahin na `GET /v1/me` ay may `referralCode`, at `POST /v1/me/referral`
+   ay umiiral (hindi 404).
+5. Two-user smoke bago i-release: sariling code → walang kredito; replay → 409;
+   deleted referrer → 404; valid legacy code (hal. may `0`) → 200 at +100 coins.
+   Ito ang release gate — walang automated DB test para sa handler sa repo.
+6. Huwag galawin ang `referral_balance`, `checkout.php`, `referral_coin_rate`,
+   o `allow_referral_pay` — frozen value lang ang requirement.
