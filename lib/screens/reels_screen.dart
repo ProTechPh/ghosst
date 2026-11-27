@@ -109,6 +109,7 @@ class ReelsScreen extends StatefulWidget {
     this.onDeleteReel,
     this.initialReelId,
     this.initialCreatorId,
+    this.openCommentsOnLoad = false,
     this.active = true,
     this.embedded = true,
     this.refreshToken = 0,
@@ -134,6 +135,7 @@ class ReelsScreen extends StatefulWidget {
   final Future<void> Function(String reelId)? onDeleteReel;
   final String? initialReelId;
   final String? initialCreatorId;
+  final bool openCommentsOnLoad;
   final bool active;
   final bool embedded;
   final int refreshToken;
@@ -157,6 +159,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
   bool _extraLoading = false;
   String? _extraError;
   int _requestId = 0;
+  bool _autoOpenedComments = false;
   List<Reel> _reels = [];
   List<Object> _entries = const [];
   int _nextOffset = 0;
@@ -263,6 +266,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
           _likeCounts.putIfAbsent(reel.id, () => reel.likeCount);
         }
       });
+      _maybeAutoOpenComments();
     } on ApiException catch (e) {
       if (!mounted || request != _requestId) return;
       setState(() {
@@ -486,6 +490,22 @@ class _ReelsScreenState extends State<ReelsScreen> {
       onOpenProfile: widget.onOpenProfile,
     ),
   );
+
+  void _maybeAutoOpenComments() {
+    if (!widget.openCommentsOnLoad || _autoOpenedComments) return;
+    final id = widget.initialReelId;
+    if (id == null) return;
+    Reel? target;
+    for (final item in _reels) {
+      if (item.id == id) {
+        target = item;
+        break;
+      }
+    }
+    if (target == null) return;
+    _autoOpenedComments = true;
+    unawaited(_openComments(target));
+  }
 
   @override
   Widget build(BuildContext context) {
