@@ -58,6 +58,7 @@ class PublicUser {
     required this.followerCount,
     required this.followingCount,
     required this.reelCount,
+    this.likeCount = 0,
     this.avatarUrl,
     this.bio = '',
     this.coverUrl,
@@ -79,6 +80,7 @@ class PublicUser {
   final int followerCount;
   final int followingCount;
   final int reelCount;
+  final int likeCount;
   final bool isFollowing;
   final bool isSelf;
 
@@ -113,6 +115,7 @@ class PublicUser {
       followerCount: count('followerCount'),
       followingCount: count('followingCount'),
       reelCount: count('reelCount'),
+      likeCount: count('likeCount'),
       isFollowing: json['isFollowing'] == true,
       isSelf: json['isSelf'] == true,
     );

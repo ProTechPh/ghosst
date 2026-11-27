@@ -291,6 +291,9 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
                       Expanded(
                         child: _stat('Reels', profile?.reelCount ?? _reels.length),
                       ),
+                      Expanded(
+                        child: _stat('Likes', profile?.likeCount ?? 0),
+                      ),
                     ],
                   ),
                   const SizedBox(height: AppSpace.md),

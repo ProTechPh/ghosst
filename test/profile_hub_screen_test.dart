@@ -110,6 +110,7 @@ void main() {
     expect(find.text('12'), findsOneWidget);
     expect(find.text('34'), findsOneWidget);
     expect(find.text('2'), findsOneWidget);
+    expect(find.text('Likes'), findsOneWidget);
     expect(find.byTooltip('Share app'), findsOneWidget);
     await _scrollTo(tester, find.byKey(const ValueKey('profile-reel-r1')));
     expect(find.byKey(const ValueKey('profile-reel-r1')), findsOneWidget);

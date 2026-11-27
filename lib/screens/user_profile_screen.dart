@@ -421,6 +421,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           ),
                         ),
                         Expanded(child: _stat('Reels', user.reelCount)),
+                        Expanded(child: _stat('Likes', user.likeCount)),
                       ],
                     ),
                     if (!user.isSelf)

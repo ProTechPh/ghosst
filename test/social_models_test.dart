@@ -35,6 +35,7 @@ void main() {
       'followerCount': 12,
       'followingCount': 7,
       'reelCount': 3,
+      'likeCount': 9,
       'isFollowing': true,
       'isSelf': false,
       'email': 'private@example.com',
@@ -52,6 +53,7 @@ void main() {
     expect(user.followerCount, 12);
     expect(user.followingCount, 7);
     expect(user.reelCount, 3);
+    expect(user.likeCount, 9);
     expect(user.isFollowing, isTrue);
     expect(user.isSelf, isFalse);
   });
@@ -69,6 +71,7 @@ void main() {
     expect(user.followerCount, 0);
     expect(user.followingCount, 0);
     expect(user.reelCount, 0);
+    expect(user.likeCount, 0);
     expect(user.isFollowing, isFalse);
     expect(user.isSelf, isFalse);
   });

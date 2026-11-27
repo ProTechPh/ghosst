@@ -215,8 +215,8 @@ $profile = social_profile_user([
     'is_moderator' => 0,
 ], '42');
 check($profile['isSelf'] === true && $profile['isFollowing'] === false, 'profile viewer flags');
-check($profile['followerCount'] === 0 && $profile['followingCount'] === 0 && $profile['reelCount'] === 0, 'profile counts default to zero');
-check(array_keys($profile) === ['id', 'displayName', 'username', 'avatarUrl', 'bio', 'coverUrl', 'isAdmin', 'isModerator', 'createdAt', 'followerCount', 'followingCount', 'reelCount', 'isFollowing', 'isSelf'], 'profile field allowlist');
+check($profile['followerCount'] === 0 && $profile['followingCount'] === 0 && $profile['reelCount'] === 0 && $profile['likeCount'] === 0, 'profile counts default to zero');
+check(array_keys($profile) === ['id', 'displayName', 'username', 'avatarUrl', 'bio', 'coverUrl', 'isAdmin', 'isModerator', 'createdAt', 'followerCount', 'followingCount', 'reelCount', 'likeCount', 'isFollowing', 'isSelf'], 'profile field allowlist');
 
 $GLOBALS['social_queries'] = [];
 $GLOBALS['social_user_row'] = [

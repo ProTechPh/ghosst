@@ -186,6 +186,12 @@ function social_profile_counts(string $userId): array
                 AND EXISTS (SELECT 1 FROM app_reel_media m WHERE m.reel_id = r.id AND m.status = 'visible')",
             [$userId]
         ) ?? 0),
+        'likeCount' => (int) (scalar(
+            'SELECT COUNT(*) FROM app_reel_likes l
+               JOIN app_reels r ON r.id = l.reel_id
+              WHERE r.user_id = ? AND r.status = \'visible\'',
+            [$userId]
+        ) ?? 0),
     ];
 }
 
@@ -197,6 +203,7 @@ function social_profile_user(array $row, string $viewerId, array $counts = []): 
         'followerCount' => (int) ($counts['followerCount'] ?? 0),
         'followingCount' => (int) ($counts['followingCount'] ?? 0),
         'reelCount' => (int) ($counts['reelCount'] ?? 0),
+        'likeCount' => (int) ($counts['likeCount'] ?? 0),
         'isFollowing' => $viewerId !== $id && scalar(
             'SELECT 1 FROM app_follows WHERE follower_id = ? AND creator_id = ?',
             [$viewerId, $id]
