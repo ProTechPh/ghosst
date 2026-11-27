@@ -140,6 +140,24 @@ void main() {
     expect(find.byKey(const ValueKey('search-reel-r1')), findsOneWidget);
   });
 
+  testWidgets('result rows have breathing room', (tester) async {
+    await tester.pumpWidget(_harness(
+      searchUsers: (q) async => [
+        ChatUserSummary(id: '1', name: 'Sylvie One'),
+        ChatUserSummary(id: '2', name: 'Sylvie Two'),
+      ],
+      searchReels: (q) async => [_reel()],
+    ));
+    await _open(tester);
+    await _type(tester, 'syl');
+
+    final first = tester.getRect(find.byKey(const ValueKey('search-user-1')));
+    final second = tester.getRect(find.byKey(const ValueKey('search-user-2')));
+    expect(second.top - first.bottom, greaterThanOrEqualTo(AppSpace.md));
+    expect(first.left, greaterThanOrEqualTo(AppSpace.lg));
+    expect(first.right, lessThanOrEqualTo(800 - AppSpace.lg));
+  });
+
   testWidgets('tapping a result pops search and opens the target', (
     tester,
   ) async {

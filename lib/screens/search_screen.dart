@@ -207,9 +207,14 @@ class _SearchScreenState extends State<SearchScreen> {
             emptyKey: 'search-no-users',
             retryKey: 'search-users-retry',
             onRetry: () => unawaited(_runUsers(_query)),
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpace.lg),
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpace.lg,
+                vertical: AppSpace.sm,
+              ),
               itemCount: _users.length,
+              separatorBuilder: (_, _) =>
+                  const SizedBox(height: AppSpace.md),
               itemBuilder: (_, i) => _userRow(_users[i]),
             ),
           ),
@@ -222,9 +227,14 @@ class _SearchScreenState extends State<SearchScreen> {
             emptyKey: 'search-no-reels',
             retryKey: 'search-reels-retry',
             onRetry: () => unawaited(_runReels(_query)),
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpace.lg),
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpace.lg,
+                vertical: AppSpace.sm,
+              ),
               itemCount: _reels.length,
+              separatorBuilder: (_, _) =>
+                  const SizedBox(height: AppSpace.md),
               itemBuilder: (_, i) => _reelRow(_reels[i]),
             ),
           ),
