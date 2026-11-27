@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api/api_exception.dart';
+import '../services/ad_service.dart';
 import '../services/worker_backend.dart';
 import '../services/youtube.dart';
 import '../theme.dart';
@@ -28,6 +30,69 @@ List<Object> reelsFeedEntries(List<Reel> reels, bool adsEnabled) {
     if (adsEnabled && (i + 1) % 5 == 0) entries.add(ReelAdSlot(slot++));
   }
   return entries;
+}
+
+class _ReelAdSlot extends StatefulWidget {
+  const _ReelAdSlot({super.key, required this.slot});
+
+  final ReelAdSlot slot;
+
+  @override
+  State<_ReelAdSlot> createState() => _ReelAdSlotState();
+}
+
+class _ReelAdSlotState extends State<_ReelAdSlot> {
+  BannerAd? _ad;
+
+  @override
+  void initState() {
+    super.initState();
+    if (AdService.adsEnabled) unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    if (!AdService.adsEnabled || !mounted) return;
+    late final BannerAd ad;
+    ad = BannerAd(
+      adUnitId: AdUnits.banner,
+      size: AdSize.banner,
+      request: const AdRequest(),
+      listener: BannerAdListener(
+        onAdLoaded: (_) {
+          if (mounted) {
+            setState(() => _ad = ad);
+          } else {
+            ad.dispose();
+          }
+        },
+        onAdFailedToLoad: (failed, error) {
+          failed.dispose();
+          AdService.logAdError('Banner', AdUnits.banner, error, action: 'load');
+        },
+      ),
+    );
+    await ad.load();
+  }
+
+  @override
+  void dispose() {
+    _ad?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ad = _ad;
+    if (ad == null) return const SizedBox.shrink();
+    return Semantics(
+      label: 'Advertisement',
+      child: SizedBox(
+        width: ad.size.width.toDouble(),
+        height: ad.size.height.toDouble(),
+        child: ColoredBox(color: AppColors.bg, child: AdWidget(ad: ad)),
+      ),
+    );
+  }
 }
 
 class ReelsScreen extends StatefulWidget {
@@ -94,6 +159,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
   String? _extraError;
   int _requestId = 0;
   List<Reel> _reels = [];
+  List<Object> _entries = const [];
   int _nextOffset = 0;
   bool _loading = true;
   bool _loadingMore = false;
@@ -110,8 +176,19 @@ class _ReelsScreenState extends State<ReelsScreen> {
   void initState() {
     super.initState();
     _feedScroll.addListener(_onFeedScroll);
+    AdService.instance.adsEnabledNotifier.addListener(_rebuildEntries);
     _loading = widget.active;
     if (widget.active) unawaited(_load(reset: true));
+  }
+
+  void _rebuildEntries() {
+    if (!mounted) return;
+    setState(
+      () => _entries = reelsFeedEntries(
+        _reels,
+        widget.active && AdService.adsEnabled,
+      ),
+    );
   }
 
   void _onFeedScroll() {
@@ -130,6 +207,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
   @override
   void dispose() {
     _feedScroll.removeListener(_onFeedScroll);
+    AdService.instance.adsEnabledNotifier.removeListener(_rebuildEntries);
     _feedScroll.dispose();
     super.dispose();
   }
@@ -143,6 +221,7 @@ class _ReelsScreenState extends State<ReelsScreen> {
     if (widget.active && widget.refreshToken != oldWidget.refreshToken) {
       unawaited(_load(reset: true));
     }
+    if (widget.active != oldWidget.active) _rebuildEntries();
   }
 
   Future<ReelFeedPage> _loadPage(String feed, int offset) {
@@ -176,6 +255,10 @@ class _ReelsScreenState extends State<ReelsScreen> {
           items.addAll(page.reels);
         }
         _reels = items;
+        _entries = reelsFeedEntries(
+          _reels,
+          widget.active && AdService.adsEnabled,
+        );
         for (final reel in page.reels) {
           _liked.putIfAbsent(reel.id, () => reel.isLiked);
           _likeCounts.putIfAbsent(reel.id, () => reel.likeCount);
@@ -371,6 +454,10 @@ class _ReelsScreenState extends State<ReelsScreen> {
       setState(() {
         _reels.removeWhere((item) => item.id == reel.id);
         _liked.remove(reel.id);
+        _entries = reelsFeedEntries(
+          _reels,
+          widget.active && AdService.adsEnabled,
+        );
       });
     } catch (_) {
       if (mounted) {
@@ -696,21 +783,31 @@ class _ReelsScreenState extends State<ReelsScreen> {
         AppSpace.lg,
         AppSpace.xxl,
       ),
-      itemCount: _reels.length,
+      itemCount: _entries.length,
       separatorBuilder: (_, _) =>
           const Divider(height: 1, color: AppColors.border),
-      itemBuilder: (_, i) => _PostCard(
-        reel: _reels[i],
-        liked: _liked[_reels[i].id] ?? _reels[i].isLiked,
-        likeCount: _likeCounts[_reels[i].id] ?? _reels[i].likeCount,
-        following: _following[_reels[i].id] ?? _reels[i].isFollowing,
-        onLike: () => unawaited(_toggleLike(_reels[i])),
-        onFollow: () => unawaited(_toggleFollow(_reels[i])),
-        onComments: () => unawaited(_openComments(_reels[i])),
-        onDelete: () => unawaited(_deleteReel(_reels[i])),
-        onProfile: widget.onOpenProfile,
-        onReport: () => unawaited(_report(_reels[i].id)),
-      ),
+      itemBuilder: (_, i) {
+        final entry = _entries[i];
+        if (entry is ReelAdSlot) {
+          return _ReelAdSlot(
+            key: ValueKey('reel-ad-slot-${entry.index}'),
+            slot: entry,
+          );
+        }
+        final reel = entry as Reel;
+        return _PostCard(
+          reel: reel,
+          liked: _liked[reel.id] ?? reel.isLiked,
+          likeCount: _likeCounts[reel.id] ?? reel.likeCount,
+          following: _following[reel.id] ?? reel.isFollowing,
+          onLike: () => unawaited(_toggleLike(reel)),
+          onFollow: () => unawaited(_toggleFollow(reel)),
+          onComments: () => unawaited(_openComments(reel)),
+          onDelete: () => unawaited(_deleteReel(reel)),
+          onProfile: widget.onOpenProfile,
+          onReport: () => unawaited(_report(reel.id)),
+        );
+      },
     );
   }
 }
