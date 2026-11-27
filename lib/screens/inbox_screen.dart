@@ -644,25 +644,10 @@ class _InboxScreenState extends State<InboxScreen> {
   }
 
   Widget _activityContent() {
-    if (_activityLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_activityFailed) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Could not load activity'),
-            TextButton(
-              key: const ValueKey('inbox-notifications-retry'),
-              onPressed: () => unawaited(_loadActivity()),
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      );
-    }
-    if (_activity.isEmpty && _notifications.isEmpty) {
+    if (_activity.isEmpty &&
+        _notifications.isEmpty &&
+        !_activityLoading &&
+        !_activityFailed) {
       return EmptyState(
         key: const ValueKey('inbox-notifications-empty'),
         icon: Icons.favorite_border,
@@ -704,20 +689,44 @@ class _InboxScreenState extends State<InboxScreen> {
             ),
             children: [
               if (_notifications.isNotEmpty) _announcementSection(),
-              if (_activity.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    0,
-                    AppSpace.md,
-                    0,
-                    AppSpace.xs,
-                  ),
-                  child: Text(
-                    'REEL ACTIVITY',
-                    style: AppText.caption.copyWith(color: AppColors.primary),
-                  ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  0,
+                  AppSpace.md,
+                  0,
+                  AppSpace.xs,
                 ),
-              for (final item in _activity) _activityRow(item),
+                child: Text(
+                  'REEL ACTIVITY',
+                  style: AppText.caption.copyWith(color: AppColors.primary),
+                ),
+              ),
+              if (_activityLoading && _activity.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(AppSpace.md),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_activityFailed)
+                Padding(
+                  padding: const EdgeInsets.all(AppSpace.md),
+                  child: Column(
+                    children: [
+                      const Text('Could not load activity'),
+                      TextButton(
+                        key: const ValueKey('inbox-notifications-retry'),
+                        onPressed: () => unawaited(_loadActivity()),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                )
+              else if (_activity.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(AppSpace.md),
+                  child: Text('No reel activity yet.'),
+                )
+              else
+                for (final item in _activity) _activityRow(item),
             ],
           ),
         ),

@@ -700,4 +700,35 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('New drop'), findsNothing);
   });
+
+  testWidgets('announcements remain visible when reel activity fails', (
+    tester,
+  ) async {
+    final client = _FakeDirectChatClient();
+    await _pump(
+      tester,
+      client,
+      loadAnnouncements: () async => [
+        const Announcement(
+          id: 'a1',
+          title: 'New drop',
+          body: 'Fresh keys are live.',
+          createdAt: '2026-11-26T10:00:00.000Z',
+        ),
+      ],
+      loadReelNotifications: () async {
+        throw StateError('offline');
+      },
+    );
+    client.emit(const []);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('inbox-tab-activity')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('New drop'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('inbox-notifications-retry')),
+      findsOneWidget,
+    );
+  });
 }
