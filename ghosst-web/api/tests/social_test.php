@@ -607,4 +607,9 @@ check(
     'comment payload carries the commenter id'
 );
 
+check(
+    reels_delete_local_files(['../config', 'not-a-uuid']) === 0,
+    'invalid reel ids are refused by local media cleanup'
+);
+
 echo "ok\n";
