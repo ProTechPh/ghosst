@@ -1,7 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/services/models.dart';
+import 'package:ghosst/services/worker_backend.dart';
 
 void main() {
+  test('Backend exposes reel search', () {
+    expect(Backend.searchReels, isA<Function>());
+  });
+
   test('PublicUser parses bio and cover from a profile payload', () {
     final user = PublicUser.fromJson({
       'id': 42,

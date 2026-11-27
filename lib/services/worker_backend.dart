@@ -541,6 +541,21 @@ class Backend {
 
   static Future<void> deleteReel(String id) => _api.delete('/reels/$id');
 
+  static Future<List<Reel>> searchReels(
+    String query, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final res = await _api.get(
+      '/reels/search',
+      query: {'q': query, 'limit': '$limit', 'offset': '$offset'},
+    );
+    return (res['reels'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(Reel.fromJson)
+        .toList();
+  }
+
   static Future<ReelFeedPage> reels({
     String feed = 'for-you',
     int limit = 10,
