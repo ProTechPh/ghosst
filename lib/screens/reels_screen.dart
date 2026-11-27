@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -366,11 +365,12 @@ class _ReelsScreenState extends State<ReelsScreen> {
         await (widget.onLike ?? Backend.likeReel)(reel.id);
       }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _liked[reel.id] = liked;
           _likeCounts[reel.id] = count;
         });
+      }
     } finally {
       if (mounted) setState(() => _liking.remove(reel.id));
     }
@@ -582,8 +582,9 @@ class _ReelsScreenState extends State<ReelsScreen> {
                                             label: 'Following',
                                             selected: _section == 'following',
                                             onTap: () {
-                                              if (_section == 'following')
+                                              if (_section == 'following') {
                                                 return;
+                                              }
                                               setState(() {
                                                 _section = 'following';
                                                 _feed = 'following';

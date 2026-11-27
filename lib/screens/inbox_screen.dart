@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import '../announcement_banner.dart';
 import '../services/direct_chat_service.dart';
 import '../services/worker_backend.dart';
-import '../social_shell.dart';
 import '../theme.dart';
 import 'direct_chat_screen.dart';
 
@@ -48,7 +47,6 @@ class _InboxScreenState extends State<InboxScreen> {
   bool _failed = false;
   List<Announcement> _notifications = const [];
   String _notificationsSeenAt = '';
-  bool _notificationsUnread = false;
 
   @override
   void initState() {
@@ -72,14 +70,10 @@ class _InboxScreenState extends State<InboxScreen> {
       try {
         final seen = (await Backend.reads())?.announcementsSeenAt ?? '';
         if (mounted) {
-          setState(() {
-            _notificationsSeenAt = seen;
-            _notificationsUnread =
-                items.any((a) => _announcementUnread(a, seen));
-          });
+          setState(() => _notificationsSeenAt = seen);
         }
       } catch (_) {
-        if (mounted) setState(() => _notificationsUnread = true);
+        // Reads are optional — never block the inbox.
       }
     } catch (_) {
       // Notifications are optional — never block the inbox.
@@ -87,7 +81,6 @@ class _InboxScreenState extends State<InboxScreen> {
   }
 
   Future<void> _openNotification(Announcement item) async {
-    if (mounted) setState(() => _notificationsUnread = false);
     await showAnnouncementSheet(context, item);
     await Backend.markReads(
       announcementsSeenAt: DateTime.now().toUtc().toIso8601String(),
@@ -234,7 +227,6 @@ class _InboxScreenState extends State<InboxScreen> {
     );
   }
 
-  @override
   Widget _circle({
     required String label,
     required VoidCallback onTap,
@@ -326,6 +318,7 @@ class _InboxScreenState extends State<InboxScreen> {
     ),
   );
 
+  @override
   Widget build(BuildContext context) {
     final body = Column(
       children: [

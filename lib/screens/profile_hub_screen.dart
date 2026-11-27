@@ -535,7 +535,7 @@ class _ProfileEditSheetState extends State<_ProfileEditSheet> {
               final url = await widget.onPickCover();
               if (url.isNotEmpty && mounted) setState(() => _cover = url);
             } catch (e) {
-              if (mounted) {
+              if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Could not upload cover: $e')),
                 );
