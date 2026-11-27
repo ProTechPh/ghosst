@@ -14,6 +14,9 @@ import 'session_store.dart';
 // which are re-exported so a screen needs only one import.
 export 'models.dart';
 
+/// Fixed reward credited by the API when a referral code is claimed.
+const int REFERRAL_REWARD = 100;
+
 /// The signed-in account, as much of it as the UI shows.
 enum BackendSessionState { live, unknown, revoked }
 
@@ -25,6 +28,7 @@ class AppUser {
     this.photoUrl,
     this.createdAt = '',
     this.chatMuted = false,
+    this.referralCode = '',
   });
 
   final String id;
@@ -33,6 +37,7 @@ class AppUser {
   final String? photoUrl;
   final String createdAt;
   final bool chatMuted;
+  final String referralCode;
 }
 
 /// Same surface the screens already used, served by the `ghosst-api` Worker.
@@ -208,6 +213,7 @@ class Backend {
       photoUrl: photo,
       createdAt: u['createdAt'] as String? ?? '',
       chatMuted: _chatMuted!,
+      referralCode: u['referralCode'] as String? ?? '',
     );
   }
 
@@ -318,6 +324,19 @@ class Backend {
       if (_transient(e)) rethrow;
       return 0;
     }
+  }
+
+  /// Client-side mirror of the API's REF-[A-Z2-9]{6} format, so a typo never
+  /// costs a round-trip. Empty string means invalid.
+  static String normalizeReferralCode(String input) {
+    final code = input.trim().toUpperCase();
+    return RegExp(r'^REF-[A-Z2-9]{6}$').hasMatch(code) ? code : '';
+  }
+
+  /// The invitee claims someone else's code; the API credits that referrer.
+  static Future<int> claimReferral(String code) async {
+    final res = await _api.post('/me/referral', data: {'code': normalizeReferralCode(code)});
+    return res['reward'] as int? ?? REFERRAL_REWARD;
   }
 
   /// Remaining reward budget for the rolling 24h window. Advisory: the SSV
