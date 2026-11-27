@@ -105,11 +105,14 @@ Future<void> _pump(
   VoidCallback? onOpenWorldChat,
   ValueChanged<int>? onUnreadChanged,
   Future<List<Announcement>> Function()? loadAnnouncements,
-  Future<({List<ReelNotification> notifications, int unreadCount, int nextOffset})>
-      Function()? loadReelNotifications,
+  Future<
+    ({List<ReelNotification> notifications, int unreadCount, int nextOffset})
+  >
+  Function()?
+  loadReelNotifications,
   Future<int> Function({String? id})? markReelNotificationsRead,
   void Function(String reelId, {required bool openComments})?
-      onOpenReelNotification,
+  onOpenReelNotification,
   Size size = const Size(800, 600),
 }) async {
   tester.view.physicalSize = size;
@@ -193,15 +196,17 @@ void main() {
     expect(find.byKey(const ValueKey('inbox-add')), findsOneWidget);
     expect(find.byKey(const ValueKey('inbox-search')), findsOneWidget);
     expect(find.byKey(const ValueKey('inbox-circles')), findsOneWidget);
-    expect(find.byKey(const ValueKey('inbox-notifications')), findsOneWidget);
+    expect(find.byKey(const ValueKey('inbox-notifications')), findsNothing);
     expect(find.byKey(const ValueKey('inbox-world')), findsOneWidget);
     expect(find.byKey(const ValueKey('thread-me__old')), findsOneWidget);
     expect(unread, 1);
+
+    await tester.tap(find.byKey(const ValueKey('inbox-tab-activity')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('inbox-notifications')), findsOneWidget);
   });
 
-  testWidgets('inbox shows all announcements as notifications', (
-    tester,
-  ) async {
+  testWidgets('inbox shows all announcements as notifications', (tester) async {
     final client = _FakeDirectChatClient();
     await _pump(
       tester,
@@ -223,6 +228,8 @@ void main() {
       ],
     );
     client.emit(const []);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('inbox-tab-activity')));
     await tester.pumpAndSettle();
 
     expect(find.text('New drop'), findsOneWidget);
@@ -420,7 +427,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('inbox-tab-activity')));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('inbox-notifications-read-all')));
+    await tester.tap(
+      find.byKey(const ValueKey('inbox-notifications-read-all')),
+    );
     await tester.pumpAndSettle();
 
     expect(calls, 1);
@@ -496,7 +505,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('inbox-tab-activity')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('inbox-notifications-retry')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('inbox-notifications-retry')),
+      findsOneWidget,
+    );
     fail = false;
     await tester.tap(find.byKey(const ValueKey('inbox-notifications-retry')));
     await tester.pumpAndSettle();
@@ -507,9 +519,7 @@ void main() {
     expect(find.byKey(const ValueKey('thread-me__old')), findsOneWidget);
   });
 
-  testWidgets('activity reloads when the tab is entered again', (
-    tester,
-  ) async {
+  testWidgets('activity reloads when the tab is entered again', (tester) async {
     final client = _FakeDirectChatClient();
     var rows = <ReelNotification>[_notif('n1', 'comment')];
     await _pump(
@@ -582,8 +592,7 @@ void main() {
         nextOffset: 1,
       ),
       markReelNotificationsRead: ({id}) => never.future,
-      onOpenReelNotification: (id, {required bool openComments}) =>
-          routed = id,
+      onOpenReelNotification: (id, {required bool openComments}) => routed = id,
     );
     client.emit(const []);
     await tester.pumpAndSettle();
@@ -643,17 +652,52 @@ void main() {
     await _pump(tester, client, size: const Size(320, 640));
     client.emit(const []);
     await tester.pumpAndSettle();
-    final narrow = tester.getRect(
-      find.byKey(const ValueKey('inbox-world')),
-    ).width;
+    final narrow = tester
+        .getRect(find.byKey(const ValueKey('inbox-world')))
+        .width;
 
     await _pump(tester, client, size: const Size(800, 600));
     client.emit(const []);
     await tester.pumpAndSettle();
-    final wide = tester.getRect(
-      find.byKey(const ValueKey('inbox-world')),
-    ).width;
+    final wide = tester
+        .getRect(find.byKey(const ValueKey('inbox-world')))
+        .width;
 
     expect(wide, greaterThan(narrow + 40));
+  });
+
+  testWidgets('announcements and reel activity share the Activity tab', (
+    tester,
+  ) async {
+    final client = _FakeDirectChatClient();
+    await _pump(
+      tester,
+      client,
+      loadAnnouncements: () async => [
+        const Announcement(
+          id: 'a1',
+          title: 'New drop',
+          body: 'Fresh keys are live.',
+          createdAt: '2026-11-26T10:00:00.000Z',
+        ),
+      ],
+      loadReelNotifications: () async => (
+        notifications: [_notif('n1', 'like')],
+        unreadCount: 1,
+        nextOffset: 1,
+      ),
+    );
+    client.emit(const []);
+    await tester.pumpAndSettle();
+
+    expect(find.text('New drop'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('inbox-tab-activity')));
+    await tester.pumpAndSettle();
+    expect(find.text('New drop'), findsOneWidget);
+    expect(find.byKey(const ValueKey('inbox-notification-n1')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('inbox-tab-messages')));
+    await tester.pumpAndSettle();
+    expect(find.text('New drop'), findsNothing);
   });
 }

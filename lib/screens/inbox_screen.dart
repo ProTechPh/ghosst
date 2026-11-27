@@ -158,6 +158,11 @@ class _InboxScreenState extends State<InboxScreen> {
           ];
         });
       }
+      final now = DateTime.now().toUtc().toIso8601String();
+      await Backend.markReads(
+        announcementsSeenAt: now,
+      ).catchError((Object _) {});
+      if (mounted) setState(() => _notificationsSeenAt = now);
     } catch (_) {
       // Best effort: the page keeps its unread state for the next retry.
     }
@@ -487,93 +492,87 @@ class _InboxScreenState extends State<InboxScreen> {
     return Column(
       children: [
         _circleShelf(),
-        if (_notifications.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpace.lg,
-              AppSpace.md,
-              AppSpace.lg,
-              AppSpace.sm,
-            ),
-            child: Column(
-              key: const ValueKey('inbox-notifications'),
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'NOTIFICATIONS',
-                  style: AppText.caption.copyWith(color: AppColors.primary),
-                ),
-                const SizedBox(height: AppSpace.xs),
-                for (final item in _notifications)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpace.xs),
-                    child: GlowCard(
-                      key: ValueKey('inbox-notification-${item.id}'),
-                      onTap: () => unawaited(_openNotification(item)),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(
-                                AppRadius.input,
-                              ),
-                            ),
-                            child: const Icon(
-                              Icons.campaign_outlined,
-                              color: AppColors.primary,
-                              size: 20,
-                            ),
-                          ),
-                          const SizedBox(width: AppSpace.md),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  item.title,
-                                  style: AppText.subtitle.copyWith(
-                                    fontSize: 14,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                Text(
-                                  item.body,
-                                  style: AppText.caption,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (_announcementUnread(item, _notificationsSeenAt))
-                            Container(
-                              width: 8,
-                              height: 8,
-                              margin: const EdgeInsets.only(right: AppSpace.sm),
-                              decoration: const BoxDecoration(
-                                color: AppColors.primary,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          const Icon(
-                            Icons.chevron_right,
-                            color: AppColors.textDim,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
         Expanded(child: _threadContent()),
       ],
     );
   }
+
+  Widget _announcementSection() => Padding(
+    key: const ValueKey('inbox-notifications'),
+    padding: const EdgeInsets.fromLTRB(
+      AppSpace.lg,
+      AppSpace.md,
+      AppSpace.lg,
+      AppSpace.xs,
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'ANNOUNCEMENTS',
+          style: AppText.caption.copyWith(color: AppColors.primary),
+        ),
+        const SizedBox(height: AppSpace.xs),
+        for (final item in _notifications) _announcementCard(item),
+      ],
+    ),
+  );
+
+  Widget _announcementCard(Announcement item) => Padding(
+    padding: const EdgeInsets.only(bottom: AppSpace.xs),
+    child: GlowCard(
+      key: ValueKey('inbox-notification-${item.id}'),
+      onTap: () => unawaited(_openNotification(item)),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(AppRadius.input),
+            ),
+            child: const Icon(
+              Icons.campaign_outlined,
+              color: AppColors.primary,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: AppSpace.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.title,
+                  style: AppText.subtitle.copyWith(fontSize: 14),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  item.body,
+                  style: AppText.caption,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          if (_announcementUnread(item, _notificationsSeenAt))
+            Container(
+              width: 8,
+              height: 8,
+              margin: const EdgeInsets.only(right: AppSpace.sm),
+              decoration: const BoxDecoration(
+                color: AppColors.primary,
+                shape: BoxShape.circle,
+              ),
+            ),
+          const Icon(Icons.chevron_right, color: AppColors.textDim),
+        ],
+      ),
+    ),
+  );
 
   Widget _pageTabs() {
     return Container(
@@ -663,12 +662,12 @@ class _InboxScreenState extends State<InboxScreen> {
         ),
       );
     }
-    if (_activity.isEmpty) {
+    if (_activity.isEmpty && _notifications.isEmpty) {
       return EmptyState(
         key: const ValueKey('inbox-notifications-empty'),
         icon: Icons.favorite_border,
         title: 'No activity yet',
-        message: 'Likes and comments on your reels will show up here.',
+        message: 'Announcements and likes on your reels show up here.',
       );
     }
     return Column(
@@ -696,16 +695,30 @@ class _InboxScreenState extends State<InboxScreen> {
           ),
         ),
         Expanded(
-          child: ListView.separated(
+          child: ListView(
             padding: const EdgeInsets.fromLTRB(
               AppSpace.lg,
               AppSpace.xs,
               AppSpace.lg,
               AppSpace.xxl,
             ),
-            itemCount: _activity.length,
-            separatorBuilder: (_, _) => const SizedBox(height: AppSpace.sm),
-            itemBuilder: (_, i) => _activityRow(_activity[i]),
+            children: [
+              if (_notifications.isNotEmpty) _announcementSection(),
+              if (_activity.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    0,
+                    AppSpace.md,
+                    0,
+                    AppSpace.xs,
+                  ),
+                  child: Text(
+                    'REEL ACTIVITY',
+                    style: AppText.caption.copyWith(color: AppColors.primary),
+                  ),
+                ),
+              for (final item in _activity) _activityRow(item),
+            ],
           ),
         ),
       ],
