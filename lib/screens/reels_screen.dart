@@ -13,6 +13,23 @@ import 'direct_chat_screen.dart' show ReportContent;
 import 'reel_comments_screen.dart';
 import 'tutorials_screen.dart' show TutorialDetailScreen, TutorialThumb;
 
+class ReelAdSlot {
+  const ReelAdSlot(this.index);
+
+  // Slot index is stable as more posts are appended to the feed.
+  final int index;
+}
+
+List<Object> reelsFeedEntries(List<Reel> reels, bool adsEnabled) {
+  final entries = <Object>[];
+  var slot = 0;
+  for (var i = 0; i < reels.length; i++) {
+    entries.add(reels[i]);
+    if (adsEnabled && (i + 1) % 5 == 0) entries.add(ReelAdSlot(slot++));
+  }
+  return entries;
+}
+
 class ReelsScreen extends StatefulWidget {
   const ReelsScreen({
     super.key,
