@@ -772,7 +772,6 @@ class _HomeShellState extends State<HomeShell> {
           embedded: false,
           isAdmin: isAdmin,
           isModerator: isModerator,
-          onOpenInbox: _openInbox,
           onOpenProfile: _openUserProfile,
         ),
       ),
@@ -831,10 +830,6 @@ class _HomeShellState extends State<HomeShell> {
         ),
       ),
     );
-  }
-
-  void _openInbox() {
-    setState(() => tab = SocialTab.inbox);
   }
 
   Future<void> _openUserProfile(String id) async {

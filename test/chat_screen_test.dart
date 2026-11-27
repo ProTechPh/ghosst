@@ -119,7 +119,6 @@ Future<void> _pump(
   bool active = true,
   bool embedded = true,
   bool isAdmin = false,
-  VoidCallback? onOpenInbox,
   ValueChanged<String>? onOpenProfile,
 }) async {
   await tester.pumpWidget(
@@ -132,7 +131,6 @@ Future<void> _pump(
                 active: active,
                 embedded: embedded,
                 isAdmin: isAdmin,
-                onOpenInbox: onOpenInbox,
                 onOpenProfile: onOpenProfile,
               ),
             )
@@ -141,7 +139,6 @@ Future<void> _pump(
               active: active,
               embedded: embedded,
               isAdmin: isAdmin,
-              onOpenInbox: onOpenInbox,
               onOpenProfile: onOpenProfile,
             ),
     ),
@@ -172,14 +169,11 @@ void main() {
     expect(opened, 'uid-2');
   });
 
-  testWidgets('shows an Inbox button and opens it', (tester) async {
-    var opened = false;
-    await _pump(tester, _FakeClient(), onOpenInbox: () => opened = true);
+  testWidgets('world chat has no inbox button', (tester) async {
+    await _pump(tester, _FakeClient());
     await tester.pumpAndSettle();
 
-    expect(find.byTooltip('Inbox'), findsOneWidget);
-    await tester.tap(find.byTooltip('Inbox'));
-    expect(opened, isTrue);
+    expect(find.byTooltip('Inbox'), findsNothing);
   });
 
   testWidgets('World chat route uses a white social app bar and 48dp send', (
