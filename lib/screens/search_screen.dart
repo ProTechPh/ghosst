@@ -35,7 +35,6 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _reelsLoading = false;
   bool _usersFailed = false;
   bool _reelsFailed = false;
-  bool _searched = false;
 
   @override
   void dispose() {
@@ -49,7 +48,6 @@ class _SearchScreenState extends State<SearchScreen> {
     final query = value.trim();
     setState(() {
       _query = query;
-      _searched = false;
       _users = const [];
       _reels = const [];
       _usersLoading = false;
@@ -59,7 +57,6 @@ class _SearchScreenState extends State<SearchScreen> {
     });
     if (query.length < 2) return;
     _debounce = Timer(const Duration(milliseconds: 350), () {
-      _searched = true;
       unawaited(_runUsers(query));
       unawaited(_runReels(query));
     });
