@@ -54,6 +54,7 @@ const ROUTES = [
     ['POST',   '#^/v1/auth/logout$#',                      'auth_logout',             'required'],
 
     ['GET',    '#^/v1/me$#',                               'account_me',              'required'],
+    ['POST',   '#^/v1/me/referral$#',                      'me_claim_referral',       'required'],
     ['GET',    '#^/v1/wallet$#',                           'account_wallet',          'required'],
     ['DELETE', '#^/v1/account$#',                          'account_remove',          'required'],
     ['GET',    '#^/v1/firebase/token$#',                   'account_firebase_token',  'required'],

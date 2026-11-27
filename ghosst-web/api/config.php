@@ -26,6 +26,9 @@ define('GOOGLE_CLIENT_ID', getenv('GHOSST_GOOGLE_CLIENT_ID')
 /** Default coins kapag walang reward_amount ang SSV callback. */
 define('COINS_PER_REWARD', (int) (getenv('COINS_PER_REWARD') ?: 10));
 
+/** Fixed reward sa referral claim — hiwalay sa website referral_balance. */
+define('REFERRAL_COINS_REWARD', 100);
+
 /** AdMob reward verification keys. */
 define('ADMOB_KEY_URL', getenv('GHOSST_ADMOB_KEY_URL') ?: 'https://gstatic.com/admob/reward/verifier-keys.json');
 
