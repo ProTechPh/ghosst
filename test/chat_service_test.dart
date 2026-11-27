@@ -1,7 +1,55 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ghosst/api/api_exception.dart';
 import 'package:ghosst/services/chat_service.dart';
+import 'package:ghosst/services/worker_backend.dart';
 
 void main() {
+  group('ChatService.backendSessionActive', () {
+    test('a rejected backend session must be revoked', () {
+      expect(ChatService.backendSessionActive(null), isFalse);
+    });
+
+    test('a live backend session remains active', () {
+      const user = AppUser(id: '42', email: 'user@example.com', name: 'User');
+      expect(ChatService.backendSessionActive(user), isTrue);
+    });
+  });
+
+  group('Backend.sessionStateAfterError', () {
+    test('authentication rejection revokes even a cached session', () {
+      expect(
+        Backend.sessionStateAfterError(
+          const ApiException(
+            kind: ApiErrorKind.unauthorized,
+            message: 'expired',
+          ),
+          hasCachedUser: true,
+        ),
+        BackendSessionState.revoked,
+      );
+    });
+
+    test('a transient outage preserves a cached session as unknown', () {
+      expect(
+        Backend.sessionStateAfterError(
+          const ApiException(kind: ApiErrorKind.network, message: 'offline'),
+          hasCachedUser: true,
+        ),
+        BackendSessionState.unknown,
+      );
+    });
+
+    test('a transient outage without cache is unknown, not revoked', () {
+      expect(
+        Backend.sessionStateAfterError(
+          const ApiException(kind: ApiErrorKind.timeout, message: 'timeout'),
+          hasCachedUser: false,
+        ),
+        BackendSessionState.unknown,
+      );
+    });
+  });
+
   group('ChatService.validate', () {
     test('rejects empty text', () {
       expect(ChatService.validate(''), isNotNull);
@@ -57,11 +105,17 @@ void main() {
     });
 
     test('rejects a send inside the 5s window', () {
-      expect(ChatService.cooldownPassed(now, now.add(const Duration(seconds: 2))), isFalse);
+      expect(
+        ChatService.cooldownPassed(now, now.add(const Duration(seconds: 2))),
+        isFalse,
+      );
     });
 
     test('allows a send after the window', () {
-      expect(ChatService.cooldownPassed(now, now.add(const Duration(seconds: 6))), isTrue);
+      expect(
+        ChatService.cooldownPassed(now, now.add(const Duration(seconds: 6))),
+        isTrue,
+      );
     });
   });
 }

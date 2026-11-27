@@ -43,6 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/.kotlin/
 
 # Widget Preview related
 .widget_preview/
@@ -67,3 +68,5 @@ api/error_log
 graphify-out/
 .opencode/
 ghosst-web/
+
+/.superpowers/

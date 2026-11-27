@@ -1,6 +1,10 @@
 import 'dart:convert';
+import 'dart:math';
+
+import 'package:dio/dio.dart';
 
 import '../api/api_client.dart';
+import '../api/api_config.dart';
 import '../api/api_exception.dart';
 import 'api_backend.dart';
 import 'models.dart';
@@ -10,7 +14,12 @@ import 'session_store.dart';
 // which are re-exported so a screen needs only one import.
 export 'models.dart';
 
+/// Fixed reward credited by the API when a referral code is claimed.
+const int referralReward = 100;
+
 /// The signed-in account, as much of it as the UI shows.
+enum BackendSessionState { live, unknown, revoked }
+
 class AppUser {
   const AppUser({
     required this.id,
@@ -19,6 +28,7 @@ class AppUser {
     this.photoUrl,
     this.createdAt = '',
     this.chatMuted = false,
+    this.referralCode = '',
   });
 
   final String id;
@@ -27,6 +37,7 @@ class AppUser {
   final String? photoUrl;
   final String createdAt;
   final bool chatMuted;
+  final String referralCode;
 }
 
 /// Same surface the screens already used, served by the `ghosst-api` Worker.
@@ -38,6 +49,7 @@ class Backend {
   static final ApiBackend _apiBackend = ApiBackend(_api);
 
   static AppUser? _user;
+  static DateTime? _userCheckedAt;
   static bool? _isAdmin;
   static bool? _isModerator;
   static bool? _chatMuted;
@@ -47,15 +59,55 @@ class Backend {
 
   // ---- session ----
 
+  static AppUser? get cachedUser => _user;
+
+  static const _sessionCacheTtl = Duration(minutes: 5);
+
   static Future<AppUser?> currentUser() async {
+    final status = await sessionStatus();
+    return status.user;
+  }
+
+  /// Live = verified recently; unknown = transient failure (keep Firebase
+  /// cache); revoked = definitive authentication rejection.
+  static Future<({BackendSessionState state, AppUser? user})> sessionStatus({
+    bool refresh = false,
+  }) async {
     final cached = _user;
-    if (cached != null) return cached;
-    if (await _session.accessToken() == null) return null;
-    try {
-      return _user = await _me();
-    } on ApiException {
-      return null;
+    final checkedAt = _userCheckedAt;
+    final now = DateTime.now();
+    if (!refresh &&
+        cached != null &&
+        checkedAt != null &&
+        now.difference(checkedAt) < _sessionCacheTtl) {
+      return (state: BackendSessionState.live, user: cached);
     }
+    if (await _session.accessToken() == null) {
+      return (state: BackendSessionState.revoked, user: null);
+    }
+    try {
+      final user = await _me();
+      _user = user;
+      _userCheckedAt = DateTime.now();
+      return (state: BackendSessionState.live, user: user);
+    } on ApiException catch (e) {
+      return (
+        state: sessionStateAfterError(e, hasCachedUser: cached != null),
+        user: cached,
+      );
+    }
+  }
+
+  static BackendSessionState sessionStateAfterError(
+    ApiException? error, {
+    required bool hasCachedUser,
+  }) {
+    if (error == null) return BackendSessionState.live;
+    if (error.kind == ApiErrorKind.unauthorized ||
+        error.kind == ApiErrorKind.forbidden) {
+      return BackendSessionState.revoked;
+    }
+    return BackendSessionState.unknown;
   }
 
   static Future<void> signIn(String email, String password) =>
@@ -63,8 +115,15 @@ class Backend {
 
   /// Google ang ID token; ang server ang nagbe-verify at gumagawa ng account
   /// kung wala pa sa email.
-  static Future<void> signInWithGoogle(String idToken, {String? photoUrl}) async {
-    await _startSession('/auth/google', {'idToken': idToken});
+  static Future<void> signInWithGoogle(
+    String idToken, {
+    String? photoUrl,
+  }) async {
+    await _startSession('/auth/google', {
+      'idToken': idToken,
+      if (photoUrl != null && photoUrl.trim().isNotEmpty)
+        'photoUrl': photoUrl.trim(),
+    });
     if (photoUrl != null && photoUrl.trim().isNotEmpty) {
       await _session.writePhotoUrl(photoUrl.trim());
     }
@@ -87,6 +146,7 @@ class Backend {
       refreshToken: res['refreshToken'] as String,
     );
     _user = null;
+    _userCheckedAt = null;
     _isAdmin = null;
     _isModerator = null;
     _chatMuted = null;
@@ -95,6 +155,7 @@ class Backend {
   static Future<void> signOut() async {
     await _api.logout();
     _user = null;
+    _userCheckedAt = null;
     _isAdmin = null;
     _isModerator = null;
     _chatMuted = null;
@@ -105,10 +166,35 @@ class Backend {
   static Future<String> firebaseToken() async =>
       (await _api.get('/firebase/token'))['token'] as String;
 
+  /// Admin product image → the site's FTP storage (uploads/products).
+  static Future<String> updateBio(String bio, {String? cover}) async {
+    final data = <String, dynamic>{'bio': bio.trim()};
+    if (cover != null) data['cover'] = cover;
+    final res = await _api.post('/me/profile', data: data);
+    return (res['coverUrl'] ?? res['bio'] ?? '').toString();
+  }
+
+  static Future<String> uploadCover(String path) async {
+    final form = FormData.fromMap({'image': MultipartFile.fromFileSync(path)});
+    final res = await _api.post('/uploads/cover', data: form);
+    final url = res['url'] as String?;
+    return ApiConfig.publicUrl(
+      (url != null && url.isNotEmpty ? url : res['path']) as String,
+    );
+  }
+
+  static Future<String> uploadProductImage(String path) async {
+    final form = FormData.fromMap({'image': MultipartFile.fromFileSync(path)});
+    final res = await _api.post('/uploads/product-image', data: form);
+    final url = res['url'] as String?;
+    return (url != null && url.isNotEmpty ? url : res['path']) as String;
+  }
+
   static Future<void> deleteAccount() async {
     await _api.delete('/account', data: {'confirm': 'DELETE'});
     await _session.clear();
     _user = null;
+    _userCheckedAt = null;
     _isAdmin = null;
     _isModerator = null;
     _chatMuted = null;
@@ -127,6 +213,7 @@ class Backend {
       photoUrl: photo,
       createdAt: u['createdAt'] as String? ?? '',
       chatMuted: _chatMuted!,
+      referralCode: u['referralCode'] as String? ?? '',
     );
   }
 
@@ -160,6 +247,7 @@ class Backend {
   static Future<bool> chatMuted({bool refresh = false}) async {
     if (refresh) {
       _user = null;
+      _userCheckedAt = null;
       _chatMuted = null;
     }
     final cached = _chatMuted;
@@ -238,6 +326,38 @@ class Backend {
     }
   }
 
+  /// Client-side mirror of the API's accepted code format. Legacy codes may
+  /// contain 0/1 or lack the REF- prefix; empty string means invalid.
+  static String normalizeReferralCode(String input) {
+    final code = input.trim().toUpperCase();
+    return RegExp(r'^(REF-)?[A-Z0-9]{4,12}$').hasMatch(code) ? code : '';
+  }
+
+  /// Share copy for the Profile share button: store link + invitation + code.
+  static String referralInviteText({
+    required String referralCode,
+    required bool isPlay,
+  }) {
+    final url = isPlay
+        ? 'https://play.google.com/store/apps/details?id=com.astrixtech.ghosst'
+        : 'https://ghossthub.com';
+    // Display the code exactly as stored — older accounts may not have the
+    // REF- prefix, and a strict filter would silently drop it from invites.
+    final code = referralCode.trim();
+    final text = StringBuffer(
+      'Try Ghosst — earn coins from ads and unlock license keys and apps!\n'
+      'Download: $url',
+    );
+    if (code.isNotEmpty) text.writeln('\nUse my referral code: $code');
+    return text.toString();
+  }
+
+  /// The invitee claims someone else's code; the API credits that referrer.
+  static Future<int> claimReferral(String code) async {
+    final res = await _api.post('/me/referral', data: {'code': normalizeReferralCode(code)});
+    return res['reward'] as int? ?? referralReward;
+  }
+
   /// Remaining reward budget for the rolling 24h window. Advisory: the SSV
   /// handler still decides whether a callback is credited.
   static Future<AdsRewardStatus> adsRewardStatus() async {
@@ -296,13 +416,246 @@ class Backend {
     }
   }
 
+  /// Safe user search for starting a private conversation.
+  static Future<List<ChatUserSummary>> searchUsers(String query) async {
+    final res = await _api.get('/users/search', query: {'q': query});
+    return (res['users'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(ChatUserSummary.fromJson)
+        .toList();
+  }
+
+  static Future<ChatUserSummary> chatUser(String id) async {
+    final res = await _api.get('/users/$id');
+    return ChatUserSummary.fromJson(res['user'] as Map<String, dynamic>);
+  }
+
+  static Future<PublicUser> publicUser(String id) async {
+    final res = await _api.get('/users/$id');
+    return PublicUser.fromJson(res['user'] as Map<String, dynamic>);
+  }
+
+  static Future<FollowState> followUser(String id) async {
+    final res = await _api.post('/users/$id/follow');
+    return FollowState.fromJson(res);
+  }
+
+  static Future<FollowState> unfollowUser(String id) async {
+    final res = await _api.deleteMap('/users/$id/follow');
+    return FollowState.fromJson(res);
+  }
+
+  static Future<List<PublicUser>> followers(
+    String id, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final res = await _api.get(
+      '/users/$id/followers',
+      query: {'limit': '$limit', 'offset': '$offset'},
+    );
+    return publicUsersFromJson(res['users']);
+  }
+
+  static Future<List<PublicUser>> following(
+    String id, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final res = await _api.get(
+      '/users/$id/following',
+      query: {'limit': '$limit', 'offset': '$offset'},
+    );
+    return publicUsersFromJson(res['users']);
+  }
+
+  static Future<List<ChatUserSummary>> chatUsers(List<String> ids) async {
+    if (ids.isEmpty) return const [];
+    final res = await _api.post('/users/summaries', data: {'ids': ids});
+    return (res['users'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(ChatUserSummary.fromJson)
+        .toList();
+  }
+
+  static Future<String> submitFeedback({
+    required String comment,
+    required int rating,
+    required String idempotencyKey,
+  }) async {
+    final res = await _api.post(
+      '/feedback',
+      data: {'comment': comment.trim(), 'rating': rating},
+      headers: {'idempotency-key': idempotencyKey},
+    );
+    return (res['feedbackId'] ?? '').toString();
+  }
+
+  static Future<List<WebsiteFeedback>> publicFeedback() async {
+    final res = await _api.get('/feedback/public');
+    return (res['feedbacks'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(WebsiteFeedback.fromJson)
+        .toList();
+  }
+
+  static Future<List<AppFeedback>> myFeedback({
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final res = await _api.get(
+      '/feedback/mine',
+      query: {'limit': '$limit', 'offset': '$offset'},
+    );
+    return (res['feedbacks'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(AppFeedback.fromJson)
+        .toList();
+  }
+
+  static Future<ReelUploadTicket> startReelUpload({
+    required String caption,
+    required List<Map<String, dynamic>> images,
+    required String idempotencyKey,
+  }) async {
+    final res = await _api.post(
+      '/reels/uploads',
+      data: {'caption': caption, 'images': images},
+      headers: {'idempotency-key': '$idempotencyKey-init'},
+    );
+    return ReelUploadTicket.fromJson(res);
+  }
+
+  static Future<void> completeReelUpload({
+    required String reelId,
+    required List<Map<String, dynamic>> images,
+    required String idempotencyKey,
+  }) async {
+    await _api.post(
+      '/reels/$reelId/complete',
+      data: {'images': images},
+      headers: {'idempotency-key': '$idempotencyKey-complete'},
+    );
+    await _api.get('/reels/$reelId');
+  }
+
+  static Future<void> deleteReel(String id) => _api.delete('/reels/$id');
+
+  static Future<ReelFeedPage> reels({
+    String feed = 'for-you',
+    int limit = 10,
+    int offset = 0,
+  }) async {
+    final res = await _api.get(
+      '/reels',
+      query: {'feed': feed, 'limit': '$limit', 'offset': '$offset'},
+    );
+    return ReelFeedPage.fromJson(res);
+  }
+
+  static Future<({bool isLiked, int likeCount})> likeReel(String id) async {
+    final res = await _api.post('/reels/$id/likes');
+    return (
+      isLiked: res['isLiked'] == true,
+      likeCount: (res['likeCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  static Future<({bool isLiked, int likeCount})> unlikeReel(String id) async {
+    final res = await _api.deleteMap('/reels/$id/likes');
+    return (
+      isLiked: res['isLiked'] == true,
+      likeCount: (res['likeCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  static Future<List<ReelComment>> reelComments(
+    String id, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final res = await _api.get(
+      '/reels/$id/comments',
+      query: {'limit': '$limit', 'offset': '$offset'},
+    );
+    return (res['comments'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(ReelComment.fromJson)
+        .toList();
+  }
+
+  static Future<void> postReelComment(String id, String text) =>
+      _api.post('/reels/$id/comments', data: {'text': text});
+
+  static Future<void> deleteReelComment(String reelId, String commentId) =>
+      _api.delete('/reels/$reelId/comments/$commentId');
+
+  static Future<List<Reel>> userReels(
+    String id, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final res = await _api.get(
+      '/users/$id/reels',
+      query: {'limit': '$limit', 'offset': '$offset'},
+    );
+    return (res['reels'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(Reel.fromJson)
+        .toList();
+  }
+
+  static String newIdempotencyKey() {
+    final random = Random.secure();
+    return List.generate(
+      16,
+      (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+    ).join();
+  }
+
+  static Future<void> reportContent({
+    required String targetType,
+    required String targetId,
+    required String reason,
+    String details = '',
+    String? snapshot,
+    String? threadId,
+  }) => _api.post(
+    '/reports',
+    data: {
+      'targetType': targetType,
+      'targetId': targetId,
+      'reason': reason,
+      'details': details,
+      'snapshot': ?snapshot,
+      'threadId': ?threadId,
+    },
+  );
+
+  /// API read markers use `Y-m-d H:i:s` UTC, not Dart's ISO-8601 string.
+  static String readTimestamp(String value) {
+    final text = value.trim();
+    if (RegExp(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$').hasMatch(text)) {
+      return text;
+    }
+    final parsed = DateTime.tryParse(text);
+    if (parsed == null) return '';
+    final utc = parsed.toUtc();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${utc.year.toString().padLeft(4, '0')}-${two(utc.month)}-'
+        '${two(utc.day)} ${two(utc.hour)}:${two(utc.minute)}:${two(utc.second)}';
+  }
+
   /// Server-owned read markers. Null when signed out or the call fails.
-  static Future<({String announcementsSeenAt, int chatSeenAtMs})?> reads() async {
+  static Future<({String announcementsSeenAt, int chatSeenAtMs})?>
+  reads() async {
     try {
       if (await _session.accessToken() == null) return null;
       final res = await _api.get('/reads');
       return (
-        announcementsSeenAt: res['announcementsSeenAt'] as String? ?? '',
+        announcementsSeenAt: readTimestamp(
+          res['announcementsSeenAt'] as String? ?? '',
+        ),
         chatSeenAtMs: (res['chatSeenAtMs'] as num?)?.toInt() ?? 0,
       );
     } catch (_) {
@@ -318,10 +671,16 @@ class Backend {
   }) async {
     try {
       if (await _session.accessToken() == null) return;
-      await _api.post('/reads', data: {
-        'announcementsSeenAt': ?announcementsSeenAt,
-        'chatSeenAtMs': ?chatSeenAtMs,
-      });
+      final seen = announcementsSeenAt == null
+          ? null
+          : readTimestamp(announcementsSeenAt);
+      await _api.post(
+        '/reads',
+        data: {
+          if (seen != null && seen.isNotEmpty) 'announcementsSeenAt': seen,
+          'chatSeenAtMs': ?chatSeenAtMs,
+        },
+      );
     } catch (_) {
       // Best effort.
     }
@@ -709,7 +1068,9 @@ class Backend {
     await _api.delete('/admin/moderators/$userId');
   }
 
-  static Future<List<Map<String, dynamic>>> searchUsers(String query) async {
+  static Future<List<Map<String, dynamic>>> searchAdminUsers(
+    String query,
+  ) async {
     final res = await _api.get('/admin/users', query: {'search': query});
     final rows = (res['users'] as List?) ?? const [];
     return rows.map((e) => (e as Map).cast<String, dynamic>()).toList();
@@ -718,7 +1079,8 @@ class Backend {
   // ---- images ----
 
   /// Images are links: an absolute URL, or a key the CDN will complete.
-  static String imageUrl(String fileId, {int width = 900}) => fileId;
+  static String imageUrl(String fileId, {int width = 900}) =>
+      ApiConfig.publicUrl(fileId);
 
   static Future<void> deleteKey(String keyId) =>
       _api.delete('/admin/keys/$keyId');

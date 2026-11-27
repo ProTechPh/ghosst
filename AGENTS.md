@@ -21,6 +21,8 @@ flutter build apk --release --flavor direct
 ```
 
 Bare `flutter run` / `flutter build apk` fails because both flavors are required.
+**Do not run `flutter run` (any flavor) — verify with `flutter analyze`, `flutter test`
+and `flutter build` instead.**
 CI (`.github/workflows/build.yml`) runs `flutter analyze` then `flutter test` and
 pins Flutter 3.47.6.
 
@@ -33,7 +35,7 @@ php -S 127.0.0.1:8099 -t C:\laragon\www\api C:\laragon\www\api\index.php
 ```
 
 `api/README.md` covers deploy, env overrides (`GHOSST_DB_*`, `GHOSST_JWT_SECRET`)
-and rollback. `JWT_SECRET` and `CLOUDINARY_API_SECRET` live in `api/config.php`.
+and rollback. `JWT_SECRET` lives in `api/config.php`.
 
 ## Layout
 
@@ -54,7 +56,7 @@ and rollback. `JWT_SECRET` and `CLOUDINARY_API_SECRET` live in `api/config.php`.
   (`C:\laragon\www\api\` on this machine):
   `index.php` (router + `ROUTES`), `routes/*` (auth, account, products, keys,
   claims, ads/SSV, uploads, downloads), `lib/*` (http, db, auth, idempotency,
-  rewards, cloudinary), `config.php`.
+  rewards, uploads), `config.php`.
 - `ghosst-web/api/migrate_app_users.php` — one-shot: ang `app_users` ay na-merge
   na sa website `users` (iisang account). Ang app ay `user_id` = `users.id`
   (int, pero string ang JSON `id` — `json['id'] as String` sa Dart).
@@ -106,10 +108,14 @@ and rollback. `JWT_SECRET` and `CLOUDINARY_API_SECRET` live in `api/config.php`.
   (`aud` = `GOOGLE_CLIENT_ID`). Ang email sign-in ay para sa lumang accounts
   lang. Don't add a password change/reset inside the app — wala ito sa design;
   ang website ang may email reset.
-- Product images are Cloudinary URLs uploaded with an **unsigned** preset, so the
-  app never holds a secret. Deleting a product destroys its images server-side
-  (`CLOUDINARY_API_SECRET` in `api/config.php`) — nothing cleans up uploads that
-  were never attached to a product.
+- Product images are uploaded by the app admin through the admin-only
+  `POST /v1/uploads/product-image` endpoint and stored on the site's FTP host in
+  `uploads/products/` (reusing `includes/image_upload.php`: JPG/PNG/WebP, 5MB).
+  `PUBLIC_CDN` turns relative keys into display URLs. Deleting a product removes
+  its local file best-effort; uploads never attached to a product are not cleaned.
+- Own-profile bio and cover live on `users.bio` / `users.cover_url` (add them with
+  `ghosst-web/database/mobile_app_profile_fields.sql` on Hostinger). The app edits
+  them via `POST /v1/me/profile` and `POST /v1/uploads/cover` (FTP `uploads/covers/`).
 - Bulk key paste is chunked (`KEYS_PER_STATEMENT = 500` in `api/routes/keys.php`)
   to stay under `max_allowed_packet`; dedupe comes from the
   `UNIQUE(product_id, key_value)` index via `INSERT IGNORE`.

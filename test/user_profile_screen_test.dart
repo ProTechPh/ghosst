@@ -1,0 +1,478 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:ghosst/premium.dart';
+import 'package:ghosst/screens/user_profile_screen.dart';
+import 'package:ghosst/screens/social_list_screen.dart';
+import 'package:ghosst/services/models.dart';
+import 'package:ghosst/theme.dart';
+
+PublicUser _user({
+  String id = '42',
+  String displayName = 'Jeric',
+  String username = 'jeric',
+  String createdAt = '2026-01-01T00:00:00.000Z',
+  bool isAdmin = false,
+  bool isModerator = false,
+  bool isFollowing = false,
+  bool isSelf = false,
+  int followerCount = 12,
+}) => PublicUser(
+  id: id,
+  displayName: displayName,
+  username: username,
+  createdAt: createdAt,
+  isAdmin: isAdmin,
+  isModerator: isModerator,
+  followerCount: followerCount,
+  followingCount: 7,
+  reelCount: 3,
+  isFollowing: isFollowing,
+  isSelf: isSelf,
+);
+
+Reel _reel(String id) => Reel(
+  id: id,
+  caption: '',
+  posterUrl: 'https://example.com/$id.jpg',
+  images: [
+    ReelImage(
+      position: 1,
+      url: 'https://example.com/r.jpg',
+      sha256: 'a' * 64,
+      sizeBytes: 1,
+      mimeType: 'image/jpeg',
+    ),
+  ],
+  createdAt: '',
+  creator: _user(),
+  likeCount: 0,
+  commentCount: 0,
+);
+
+Future<void> _pump(
+  WidgetTester tester, {
+  required Future<PublicUser> Function(String id) loader,
+  Future<bool> Function(String id)? loadBlocked,
+  ValueChanged<PublicUser>? onMessage,
+  VoidCallback? onReport,
+  Future<bool> Function()? onBlock,
+  Future<bool> Function()? onUnblock,
+  Future<FollowState> Function(String id)? onFollow,
+  Future<FollowState> Function(String id)? onUnfollow,
+  ValueChanged<SocialListDirection>? onOpenSocialList,
+  Future<List<Reel>> Function(String id, int offset)? loadReels,
+  ValueChanged<Reel>? onOpenReel,
+}) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: AppTheme.dark,
+      home: Scaffold(
+        body: UserProfileScreen(
+          userId: '42',
+          loader: loader,
+          loadBlocked: loadBlocked ?? ((_) async => false),
+          onMessage: onMessage ?? (_) {},
+          onReport: onReport ?? () {},
+          onBlock: onBlock,
+          onUnblock: onUnblock,
+          onFollow: onFollow,
+          onUnfollow: onUnfollow,
+          onOpenSocialList: onOpenSocialList,
+          loadReels: loadReels ?? ((_, _) async => const []),
+          onOpenReel: onOpenReel,
+        ),
+      ),
+    ),
+  );
+  await tester.pump();
+}
+
+void main() {
+  testWidgets('profile stats open the correct social list', (tester) async {
+    SocialListDirection? opened;
+    await _pump(
+      tester,
+      loader: (_) async => _user(),
+      onOpenSocialList: (direction) => opened = direction,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Followers'));
+    expect(opened, SocialListDirection.followers);
+    await tester.tap(find.text('Following'));
+    expect(opened, SocialListDirection.following);
+  });
+
+  testWidgets('renders safe identity, badges, join date, and stats', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      loader: (_) async => _user(isAdmin: true, isModerator: true),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Jeric'), findsOneWidget);
+    expect(find.text('@jeric'), findsOneWidget);
+    expect(find.text('ADMIN'), findsOneWidget);
+    expect(find.text('MODERATOR'), findsOneWidget);
+    expect(find.text('Member since January 2026'), findsOneWidget);
+    expect(find.text('12'), findsOneWidget);
+    expect(find.text('7'), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
+    expect(find.text('Reels'), findsOneWidget);
+  });
+
+  testWidgets('uses initials and member fallback when identity is blank', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      loader: (_) async => _user(displayName: '', username: ''),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Member #42'), findsWidgets);
+    expect(find.text('M'), findsOneWidget);
+  });
+
+  testWidgets('follow is optimistic, updates count, and disables in flight', (
+    tester,
+  ) async {
+    final result = Completer<FollowState>();
+    await _pump(
+      tester,
+      loader: (_) async => _user(),
+      onFollow: (_) => result.future,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Follow'));
+    await tester.pump();
+    expect(find.widgetWithText(FilledButton, 'Following'), findsOneWidget);
+    expect(find.text('13'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Following'))
+          .onPressed,
+      isNull,
+    );
+
+    result.complete(const FollowState(isFollowing: true, followerCount: 13));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(FilledButton, 'Following'), findsOneWidget);
+  });
+
+  testWidgets('failed follow rolls back and offers Retry', (tester) async {
+    await _pump(
+      tester,
+      loader: (_) async => _user(),
+      onFollow: (_) async => throw Exception('offline'),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Follow'));
+    await tester.pumpAndSettle();
+    expect(find.text('Follow'), findsOneWidget);
+    expect(find.text('12'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+  });
+
+  testWidgets('a new follow attempt dismisses stale Retry actions', (
+    tester,
+  ) async {
+    final calls = <String>[];
+    var follows = 0;
+    await _pump(
+      tester,
+      loader: (_) async => _user(),
+      onFollow: (_) async {
+        calls.add('follow');
+        follows++;
+        if (follows == 1) throw Exception('offline');
+        return const FollowState(isFollowing: true, followerCount: 13);
+      },
+      onUnfollow: (_) async {
+        calls.add('unfollow');
+        return const FollowState(isFollowing: false, followerCount: 12);
+      },
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Follow'));
+    await tester.pumpAndSettle();
+    expect(find.text('Retry'), findsOneWidget);
+    await tester.tap(find.text('Follow'));
+    await tester.pumpAndSettle();
+
+    expect(calls, ['follow', 'follow']);
+    expect(find.text('Retry'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Following'), findsOneWidget);
+  });
+
+  testWidgets('self profile hides Follow', (tester) async {
+    await _pump(
+      tester,
+      loader: (_) async => _user(isSelf: true),
+      onFollow: (_) async =>
+          const FollowState(isFollowing: true, followerCount: 13),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(FilledButton, 'Follow'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Following'), findsNothing);
+  });
+
+  testWidgets('message and report actions invoke callbacks', (tester) async {
+    var messaged = false;
+    var reported = false;
+    await _pump(
+      tester,
+      loader: (_) async => _user(),
+      onMessage: (user) => messaged = true,
+      onReport: () => reported = true,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Message'));
+    expect(messaged, isTrue);
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Report user'));
+    expect(reported, isTrue);
+  });
+
+  testWidgets('block action invokes callback after confirmation', (
+    tester,
+  ) async {
+    var blocked = false;
+    await _pump(
+      tester,
+      loader: (_) async => _user(),
+      onBlock: () async => blocked = true,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Block user'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Block'));
+    await tester.pumpAndSettle();
+    expect(blocked, isTrue);
+  });
+
+  testWidgets('blocked profile offers Unblock', (tester) async {
+    var unblocked = false;
+    await _pump(
+      tester,
+      loader: (_) async => _user(),
+      loadBlocked: (_) async => true,
+      onUnblock: () async => unblocked = true,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Unblock user'));
+    expect(unblocked, isTrue);
+  });
+
+  testWidgets('profile renders while block state is still loading', (
+    tester,
+  ) async {
+    final blocked = Completer<bool>();
+    await _pump(
+      tester,
+      loader: (_) async => _user(),
+      loadBlocked: (_) => blocked.future,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Jeric'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets('failed block does not change the visible state', (tester) async {
+    await _pump(
+      tester,
+      loader: (_) async => _user(),
+      onBlock: () async => false,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Block user'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Block'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not block user. Try again.'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    expect(find.text('Block user'), findsOneWidget);
+  });
+
+  testWidgets('Retry passes the recovered profile to Message', (tester) async {
+    var fail = true;
+    PublicUser? messaged;
+    await _pump(
+      tester,
+      loader: (_) async {
+        if (fail) throw Exception('offline');
+        return _user();
+      },
+      onMessage: (user) => messaged = user,
+    );
+    await tester.pumpAndSettle();
+    fail = false;
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Message'));
+
+    expect(messaged?.displayName, 'Jeric');
+  });
+
+  testWidgets('loader failure shows Retry and can recover', (tester) async {
+    var fail = true;
+    await _pump(
+      tester,
+      loader: (_) async {
+        if (fail) throw Exception('offline');
+        return _user();
+      },
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Could not load profile'), findsOneWidget);
+
+    fail = false;
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(find.text('Jeric'), findsOneWidget);
+  });
+
+  testWidgets('reel grid uses posters/placeholders and opens the chosen reel', (
+    tester,
+  ) async {
+    Reel? opened;
+    await _pump(
+      tester,
+      loader: (_) async => _user(),
+      loadReels: (_, _) async => [
+        Reel(
+          id: 'r1',
+          caption: '',
+          posterUrl: 'https://example.com/r1.jpg',
+          images: const [
+            ReelImage(
+              position: 1,
+              url: 'https://example.com/r1.jpg',
+              sha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+              sizeBytes: 1,
+              mimeType: 'image/jpeg',
+            ),
+          ],
+          createdAt: '',
+          creator: _user(),
+          likeCount: 0,
+          commentCount: 0,
+        ),
+        Reel(
+          id: 'r2',
+          caption: '',
+          posterUrl: 'https://example.com/r2.jpg',
+          images: const [
+            ReelImage(
+              position: 1,
+              url: 'https://example.com/r2.jpg',
+              sha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+              sizeBytes: 1,
+              mimeType: 'image/jpeg',
+            ),
+          ],
+          createdAt: '',
+          creator: _user(),
+          likeCount: 0,
+          commentCount: 0,
+        ),
+      ],
+      onOpenReel: (reel) => opened = reel,
+    );
+    await tester.pumpAndSettle();
+    await tester.pumpAndSettle();
+    final scrollable = tester.state<ScrollableState>(
+      find
+          .descendant(
+            of: find.byType(ListView),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    scrollable.position.jumpTo(scrollable.position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('profile-reel-r1')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('profile-reel-r2')));
+    expect(opened?.id, 'r2');
+  });
+
+  testWidgets('public profile uses TikTok chrome and an edge-to-edge grid', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      loader: (_) async => _user(),
+      loadReels: (_, _) async => [_reel('r1'), _reel('r2')],
+      onOpenReel: (_) {},
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('public-profile-tiktok-header')),
+      findsOneWidget,
+    );
+    expect(find.text('Posts'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('public-profile-posts-indicator')),
+      findsOneWidget,
+    );
+    expect(find.byType(SectionHeader), findsNothing);
+    final grid = tester.widget<GridView>(find.byType(GridView));
+    final delegate =
+        grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+    expect(delegate.crossAxisCount, 3);
+    expect(delegate.crossAxisSpacing, 2);
+    expect(delegate.mainAxisSpacing, 2);
+    expect(delegate.childAspectRatio, 0.75);
+  });
+
+  testWidgets('public TikTok profile fits a 320px screen', (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _pump(
+      tester,
+      loader: (_) async => _user(isAdmin: true, isModerator: true),
+      loadReels: (_, _) async => [_reel('r1')],
+      onOpenReel: (_) {},
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('profile shows loading until the profile arrives', (
+    tester,
+  ) async {
+    final result = Completer<PublicUser>();
+    await _pump(tester, loader: (_) => result.future);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    result.complete(_user());
+    await tester.pumpAndSettle();
+    expect(find.text('Jeric'), findsOneWidget);
+  });
+}

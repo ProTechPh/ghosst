@@ -12,9 +12,12 @@ import '../services/worker_backend.dart';
 import '../services/consent_service.dart';
 import '../services/distribution.dart';
 import '../services/play_store.dart';
+import '../social_shell.dart';
 import '../theme.dart';
 import 'my_apps_screen.dart';
 import 'announcements_screen.dart';
+import 'feedback_screen.dart';
+import 'referral_sheet.dart';
 import 'tutorials_screen.dart';
 import 'wallet_screen.dart';
 
@@ -23,7 +26,7 @@ class ProfileScreen extends StatefulWidget {
     super.key,
     required this.onSignOut,
     required this.onAccountDeleted,
-    required this.onGoToTab,
+    required this.onOpenKeys,
   });
 
   /// Signs out of the session. The shell flips back to the landing page.
@@ -33,7 +36,7 @@ class ProfileScreen extends StatefulWidget {
   final VoidCallback onAccountDeleted;
 
   /// Pops this route and activates a bottom-bar tab (e.g. My Purchases).
-  final void Function(int tab) onGoToTab;
+  final VoidCallback onOpenKeys;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -238,6 +241,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ).push(MaterialPageRoute<void>(builder: (_) => const WalletScreen()));
   }
 
+  Future<void> _openReferral() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => ReferralSheet(
+        referralCode: _user?.referralCode ?? '',
+        onClaim: Backend.claimReferral,
+      ),
+    );
+  }
+
   void _openAnnouncements() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const AnnouncementsScreen()),
@@ -245,9 +259,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _openTutorials() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const TutorialsScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const TutorialsScreen()));
+  }
+
+  void _openFeedback() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const FeedbackScreen()));
   }
 
   void _openAppOwned() {
@@ -261,186 +281,169 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (_loading) {
       return Scaffold(
         backgroundColor: AppColors.bg,
-        body: Stack(
-          children: [
-            const ArcadeBackdrop(),
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CoinMedallion(size: 64),
-                  const SizedBox(height: AppSpace.lg),
-                  Text(
-                    'LOADING PROFILE',
-                    style: AppText.label.copyWith(
-                      fontSize: 10,
-                      letterSpacing: 2.6,
-                      color: AppColors.textDim,
-                    ),
-                  ),
-                ],
+        appBar: const SocialAppBar(title: 'Profile'),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CoinMedallion(size: 64),
+              const SizedBox(height: AppSpace.lg),
+              Text(
+                'LOADING PROFILE',
+                style: AppText.label.copyWith(
+                  fontSize: 10,
+                  letterSpacing: 2.6,
+                  color: AppColors.textDim,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
 
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        toolbarHeight: 64,
-        titleSpacing: AppSpace.lg,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
+      appBar: const SocialAppBar(title: 'Profile'),
+      body: SafeArea(
+        top: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpace.lg + 2,
+            AppSpace.md,
+            AppSpace.lg + 2,
+            AppSpace.huge,
+          ),
           children: [
-            const Text('Profile', style: AppText.title),
-            const SizedBox(height: 1),
-            Text(
-              'ACCOUNT',
-              style: AppText.label.copyWith(
-                fontSize: 9.5,
-                letterSpacing: 2.2,
-                color: AppColors.textDim.withValues(alpha: 0.85),
+            if (_coinsError.isNotEmpty) ...[
+              _coinsBanner(),
+              const SizedBox(height: AppSpace.lg),
+            ],
+            ScrollReveal(
+              child: CardFrame(
+                tier: RarityTier.standard,
+                radius: AppRadius.hero,
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpace.lg),
+                  child: _header(),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpace.xl),
+            ScrollReveal(
+              delay: const Duration(milliseconds: 100),
+              child: _stats(),
+            ),
+            const SizedBox(height: AppSpace.xxl),
+
+            const SectionHeader(title: 'Account'),
+            const SizedBox(height: AppSpace.sm),
+            _group([
+              _row(
+                icon: Icons.people_outline,
+                label: 'Referral',
+                hint: 'Invite · +100 coins',
+                onTap: _openReferral,
+              ),
+              _row(
+                icon: Icons.account_balance_wallet_outlined,
+                label: 'Wallet',
+                hint: '${groupDigits(_coins)} coins',
+                onTap: _openWallet,
+              ),
+              _row(
+                icon: Icons.shopping_bag_outlined,
+                label: 'My Purchases',
+                hint: '${groupDigits(_claims.length)} claimed',
+                onTap: widget.onOpenKeys,
+              ),
+              if (Distribution.showsDownloadStore)
+                _row(
+                  icon: Icons.phone_iphone_rounded,
+                  label: 'App Owned',
+                  hint: '${groupDigits(_appsOwned)} claimed',
+                  onTap: _openAppOwned,
+                ),
+              _row(
+                icon: Icons.logout_rounded,
+                label: 'Sign out',
+                onTap: _signOut,
+              ),
+            ]),
+            const SizedBox(height: AppSpace.xl),
+
+            const SectionHeader(title: 'App'),
+            const SizedBox(height: AppSpace.sm),
+            _group([
+              _row(
+                icon: Icons.campaign_outlined,
+                label: 'Announcements',
+                hint: 'News and updates',
+                onTap: _openAnnouncements,
+              ),
+              _row(
+                icon: Icons.play_circle_outline_rounded,
+                label: 'Tutorials',
+                hint: 'Guides',
+                onTap: _openTutorials,
+              ),
+              _row(
+                icon: Icons.feedback_outlined,
+                label: 'Send feedback',
+                hint: 'Private message to the team',
+                onTap: _openFeedback,
+              ),
+              _row(
+                icon: Icons.privacy_tip_outlined,
+                label: 'Privacy choices',
+                onTap: _privacyChoices,
+              ),
+              _row(
+                icon: Icons.star_outline_rounded,
+                label: 'Rate us on Play Store',
+                onTap: PlayStore.rate,
+              ),
+              _row(
+                icon: Icons.system_update_alt_rounded,
+                label: 'Check for updates',
+                onTap: _checkForUpdate,
+              ),
+            ]),
+            const SizedBox(height: AppSpace.xl),
+
+            const SectionHeader(title: 'Legal'),
+            const SizedBox(height: AppSpace.sm),
+            _group([
+              _row(
+                icon: Icons.policy_outlined,
+                label: 'Privacy policy',
+                onTap: _openPrivacyPolicy,
+              ),
+            ]),
+            const SizedBox(height: AppSpace.xxl),
+
+            // Destructive, kept apart from every other row.
+            _deleteBlock(),
+            const SizedBox(height: AppSpace.xl),
+            Center(
+              child: FutureBuilder<PackageInfo>(
+                future: PackageInfo.fromPlatform(),
+                builder: (context, snap) {
+                  final info = snap.data;
+                  return Text(
+                    info == null
+                        ? 'GHOSST'
+                        : 'GHOSST · v${info.version}+${info.buildNumber}',
+                    style: AppText.label.copyWith(
+                      fontSize: 10,
+                      color: AppColors.textDim,
+                    ),
+                  );
+                },
               ),
             ),
           ],
         ),
-      ),
-      body: Stack(
-        children: [
-          const MeshBackground(),
-          const Positioned.fill(child: IgnorePointer(child: TableSurface())),
-          SafeArea(
-            top: false,
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpace.lg + 2,
-                AppSpace.md,
-                AppSpace.lg + 2,
-                AppSpace.huge,
-              ),
-              children: [
-                if (_coinsError.isNotEmpty) ...[
-                  _coinsBanner(),
-                  const SizedBox(height: AppSpace.lg),
-                ],
-                ScrollReveal(
-                  child: CardFrame(
-                    tier: RarityTier.standard,
-                    radius: AppRadius.hero,
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppSpace.lg),
-                      child: _header(),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: AppSpace.xl),
-                ScrollReveal(
-                  delay: const Duration(milliseconds: 100),
-                  child: _stats(),
-                ),
-                const SizedBox(height: AppSpace.xxl),
-
-                const SectionHeader(title: 'Account'),
-                const SizedBox(height: AppSpace.sm),
-                _group([
-                  _row(
-                    icon: Icons.account_balance_wallet_outlined,
-                    label: 'Wallet',
-                    hint: '${groupDigits(_coins)} coins',
-                    onTap: _openWallet,
-                  ),
-                  _row(
-                    icon: Icons.shopping_bag_outlined,
-                    label: 'My Purchases',
-                    hint: '${groupDigits(_claims.length)} claimed',
-                    onTap: () => widget.onGoToTab(2),
-                  ),
-                  if (Distribution.showsDownloadStore)
-                    _row(
-                      icon: Icons.phone_iphone_rounded,
-                      label: 'App Owned',
-                      hint: '${groupDigits(_appsOwned)} claimed',
-                      onTap: _openAppOwned,
-                    ),
-                  _row(
-                    icon: Icons.logout_rounded,
-                    label: 'Sign out',
-                    onTap: _signOut,
-                  ),
-                ]),
-                const SizedBox(height: AppSpace.xl),
-
-                const SectionHeader(title: 'App'),
-                const SizedBox(height: AppSpace.sm),
-                _group([
-                  _row(
-                    icon: Icons.campaign_outlined,
-                    label: 'Announcements',
-                    hint: 'News and updates',
-                    onTap: _openAnnouncements,
-                  ),
-                  _row(
-                    icon: Icons.play_circle_outline_rounded,
-                    label: 'Tutorials',
-                    hint: 'Guides',
-                    onTap: _openTutorials,
-                  ),
-                  _row(
-                    icon: Icons.privacy_tip_outlined,
-                    label: 'Privacy choices',
-                    onTap: _privacyChoices,
-                  ),
-                  _row(
-                    icon: Icons.star_outline_rounded,
-                    label: 'Rate us on Play Store',
-                    onTap: PlayStore.rate,
-                  ),
-                  _row(
-                    icon: Icons.system_update_alt_rounded,
-                    label: 'Check for updates',
-                    onTap: _checkForUpdate,
-                  ),
-                ]),
-                const SizedBox(height: AppSpace.xl),
-
-                const SectionHeader(title: 'Legal'),
-                const SizedBox(height: AppSpace.sm),
-                _group([
-                  _row(
-                    icon: Icons.policy_outlined,
-                    label: 'Privacy policy',
-                    onTap: _openPrivacyPolicy,
-                  ),
-                ]),
-                const SizedBox(height: AppSpace.xxl),
-
-                // Destructive, kept apart from every other row.
-                _deleteBlock(),
-                const SizedBox(height: AppSpace.xl),
-                Center(
-                  child: FutureBuilder<PackageInfo>(
-                    future: PackageInfo.fromPlatform(),
-                    builder: (context, snap) {
-                      final info = snap.data;
-                      return Text(
-                        info == null
-                            ? 'GHOSST'
-                            : 'GHOSST · v${info.version}+${info.buildNumber}',
-                        style: AppText.label.copyWith(
-                          fontSize: 10,
-                          color: AppColors.textDim,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

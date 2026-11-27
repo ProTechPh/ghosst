@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/api/api_config.dart';
-import 'package:ghosst/services/cloudinary.dart';
 import 'package:ghosst/services/distribution.dart';
 import 'package:ghosst/services/install_id.dart';
 import 'package:ghosst/services/play_store.dart';
@@ -17,15 +16,19 @@ void main() {
     });
   });
 
-  group('CloudinaryUpload', () {
-    test('unsigned preset constants are set', () {
-      expect(CloudinaryUpload.cloudName, isNotEmpty);
-      expect(CloudinaryUpload.uploadPreset, isNotEmpty);
-    });
+  test('Backend exposes the FTP product-image uploader', () {
+    expect(Backend.uploadProductImage, isNotNull);
+  });
 
-    test('exception message survives toString', () {
-      expect(const CloudinaryException('nope').toString(), 'nope');
-    });
+  test('readTimestamp matches the API Y-m-d H:i:s format', () {
+    expect(
+      Backend.readTimestamp('2026-11-26T10:00:00.000Z'),
+      '2026-11-26 10:00:00',
+    );
+    expect(
+      Backend.readTimestamp('2026-11-26 10:00:00'),
+      '2026-11-26 10:00:00',
+    );
   });
 
   group('Push', () {
@@ -72,9 +75,11 @@ void main() {
           'https://cdn/x.png');
     });
 
-    test('imageUrl passes links through', () {
+    test('imageUrl passes links through and resolves relative keys', () {
       expect(Backend.imageUrl('https://cdn/x.png'), 'https://cdn/x.png');
-      expect(Backend.imageUrl('abc'), 'abc');
+      final resolved = Backend.imageUrl('uploads/covers/a.jpg');
+      expect(resolved, startsWith('https://'));
+      expect(resolved, endsWith('uploads/covers/a.jpg'));
     });
 
     test('AppUser holds its fields', () {

@@ -7,20 +7,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../premium.dart';
-import '../services/cloudinary.dart';
 import '../services/worker_backend.dart';
+import '../social_shell.dart';
 import '../theme.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 class AdminScreen extends StatefulWidget {
-  const AdminScreen({super.key, this.onAnnouncementSent, this.active = true});
+  const AdminScreen({super.key, this.onAnnouncementSent});
 
   /// Lets the shell refresh its banner right after a post or a take-down.
   final VoidCallback? onAnnouncementSent;
-
-  /// True when this tab is the selected one. The muted list reloads on
-  /// entry so a mute done in Chat shows up without a manual refresh.
-  final bool active;
 
   @override
   State<AdminScreen> createState() => _AdminScreenState();
@@ -103,26 +99,6 @@ class _AdminScreenState extends State<AdminScreen> {
     _load();
   }
 
-  @override
-  void didUpdateWidget(AdminScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.active && !oldWidget.active) {
-      _reloadMuted();
-      _reloadModerators();
-    }
-  }
-
-  /// Muted list lang ang nire-refresh pagbalik sa tab — walang spinner
-  /// flash at hindi nabubura ang message banner.
-  Future<void> _reloadMuted() async {
-    try {
-      final users = await Backend.mutedUsers();
-      if (mounted) setState(() => mutedUsers = users);
-    } catch (_) {
-      // Best-effort, tulad ng keys load — ang panel ay gumagana pa rin.
-    }
-  }
-
   Future<void> _reloadModerators() async {
     try {
       final rows = await Backend.moderators();
@@ -175,7 +151,7 @@ class _AdminScreenState extends State<AdminScreen> {
                           const Duration(milliseconds: 400),
                           () async {
                             try {
-                              final rows = await Backend.searchUsers(q);
+                              final rows = await Backend.searchAdminUsers(q);
                               if (ctx.mounted) {
                                 setD(() {
                                   searchResults = rows;
@@ -578,8 +554,8 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
-  /// Uploads the picked images to Cloudinary and returns their public URLs.
-  /// No bucket, no key: the preset is unsigned, so the app needs no secret.
+  /// Uploads the picked images to the site's FTP storage and returns their
+  /// relative paths (uploads/products/...), which the API turns into URLs.
   Future<List<String>?> _pickImages() async {
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.image,
@@ -593,7 +569,7 @@ class _AdminScreenState extends State<AdminScreen> {
       if (path == null) continue;
       if (mounted) setState(() => message = 'Uploading ${f.name}…');
       try {
-        urls.add(await CloudinaryUpload.upload(path));
+        urls.add(await Backend.uploadProductImage(path));
       } catch (e) {
         if (mounted) setState(() => message = 'Upload failed: $e');
         break;
@@ -786,13 +762,13 @@ class _AdminScreenState extends State<AdminScreen> {
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
-                        Icons.close,
-                        size: 14,
-                        color: Colors.white,
+                          Icons.close,
+                          size: 14,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),
-                ),
                 ),
               ],
             );
@@ -1977,9 +1953,18 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 
+  // ---- admin route -------------------------------------------------------
+  Widget _scaffold(Widget body) => Scaffold(
+    backgroundColor: AppColors.bg,
+    appBar: const SocialAppBar(title: 'Admin'),
+    body: body,
+  );
+
   @override
   Widget build(BuildContext context) {
-    if (loading) return const Center(child: CircularProgressIndicator());
+    if (loading) {
+      return _scaffold(const Center(child: CircularProgressIndicator()));
+    }
 
     final failed = message.toLowerCase().contains('fail');
     final messageColor = failed ? AppColors.red : AppColors.green;
@@ -1995,803 +1980,813 @@ class _AdminScreenState extends State<AdminScreen> {
       }
     }
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
-      children: [
-        // Hero header
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppColors.primary.withValues(alpha: 0.18),
-                AppColors.bgSoft.withValues(alpha: 0.6),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  gradient: kNeonGradient,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.admin_panel_settings,
-                  color: Color(0xFF04212A),
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Admin Panel',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Manage products, keys, users & more',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: AppColors.textDim,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        // Dashboard KPIs
-        Row(
-          children: [
-            _dashTile(
-              'Products',
-              '${products.length}',
-              Icons.inventory_2_outlined,
-            ),
-            const SizedBox(width: 8),
-            _dashTile('Keys', '${keys.length}', Icons.vpn_key_outlined),
-            const SizedBox(width: 8),
-            _dashTile('Muted', '${mutedUsers.length}', Icons.block),
-          ],
-        ),
-        const SizedBox(height: 12),
-        // Bar chart: keys per product
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppColors.bgSoft.withValues(alpha: 0.72),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Keys per product',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                height: 100,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    for (final p in products.take(6))
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 2),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              Container(
-                                height: (availCount[p.id] ?? 0)
-                                    .clamp(4, 70)
-                                    .toDouble(),
-                                decoration: BoxDecoration(
-                                  gradient: kNeonGradient,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                p.name.length > 6
-                                    ? '${p.name.substring(0, 6)}…'
-                                    : p.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 8,
-                                  color: AppColors.textDim,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        // Recent activity
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppColors.bgSoft.withValues(alpha: 0.72),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Recent activity',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              if (mutedUsers.isEmpty)
-                const Text(
-                  'No recent activity.',
-                  style: TextStyle(color: AppColors.textDim, fontSize: 11),
-                ),
-              for (final u in mutedUsers.take(3))
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.block, size: 14, color: AppColors.red),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          u.name.isNotEmpty ? u.name : u.email,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                      ),
-                      const Text(
-                        'muted',
-                        style: TextStyle(
-                          fontSize: 9,
-                          color: AppColors.red,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        const SectionLabel('Admin panel'),
-        const SizedBox(height: 8),
-
-        if (message.isNotEmpty) ...[
+    return _scaffold(
+      ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
+        children: [
+          // Hero header
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: messageColor.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: messageColor.withValues(alpha: 0.35)),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppColors.primary.withValues(alpha: 0.18),
+                  AppColors.bgSoft.withValues(alpha: 0.6),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: AppColors.primary.withValues(alpha: 0.3),
+              ),
             ),
             child: Row(
               children: [
-                Icon(
-                  failed ? Icons.error_outline : Icons.check_circle_outline,
-                  size: 18,
-                  color: messageColor,
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    gradient: kNeonGradient,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.admin_panel_settings,
+                    color: Color(0xFF04212A),
+                    size: 24,
+                  ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    message,
-                    style: TextStyle(
-                      color: messageColor,
-                      fontSize: 13.5,
-                      height: 1.4,
-                    ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Admin Panel',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Manage products, keys, users & more',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: AppColors.textDim,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 14),
-        ],
-
-        _Accordion(
-          title: 'Announcement',
-          icon: Icons.campaign_outlined,
-          child: Column(
+          // Dashboard KPIs
+          Row(
             children: [
-              // ---- Announcement ----
-              SectionLabel('Announcement'),
-              GlowCard(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    TextField(
-                      controller: announcementTitle,
-                      maxLength: 120,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
-                        hintText: 'Title (e.g. New stock: Netflix)',
-                        counterText: '',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: announcementBody,
-                      maxLines: 3,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
-                        hintText:
-                            'Message shown in the app and in the notification',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    FilledButton(
-                      onPressed: busy ? null : _sendAnnouncement,
-                      child: const Text('Send announcement'),
-                    ),
-                  ],
-                ),
+              _dashTile(
+                'Products',
+                '${products.length}',
+                Icons.inventory_2_outlined,
               ),
-              const SizedBox(height: 18),
-              SectionLabel('Live announcements (${announcements.length})'),
-              if (announcements.isEmpty)
+              const SizedBox(width: 8),
+              _dashTile('Keys', '${keys.length}', Icons.vpn_key_outlined),
+              const SizedBox(width: 8),
+              _dashTile('Muted', '${mutedUsers.length}', Icons.block),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Bar chart: keys per product
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.bgSoft.withValues(alpha: 0.72),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppColors.border.withValues(alpha: 0.7),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 const Text(
-                  'No live announcements.',
-                  style: TextStyle(color: AppColors.textDim),
+                  'Keys per product',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
                 ),
-              for (final a in announcements)
-                GlowCard(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 100,
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              a.title,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              a.createdAt.isEmpty
-                                  ? a.body
-                                  : '${a.createdAt} · ${a.body}',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: AppColors.textDim,
-                                fontSize: 12.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      TextButton(
-                        onPressed: busy ? null : () => _deleteAnnouncement(a),
-                        child: const Text('Delete'),
-                      ),
-                    ],
-                  ),
-                ),
-              const SizedBox(height: 18),
-            ],
-          ),
-        ),
-
-        _Accordion(
-          title: 'Muted users',
-          icon: Icons.block,
-          child: Column(
-            children: [
-              // ---- Moderators ----
-              SectionLabel('Moderators (${moderators.length})'),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: _manageModerators,
-                  icon: const Icon(Icons.shield_outlined),
-                  label: const Text('Manage moderators'),
-                ),
-              ),
-              const SizedBox(height: 8),
-              // ---- Muted chat users ----
-              SectionLabel('Muted chat users (${mutedUsers.length})'),
-              if (mutedUsers.isEmpty)
-                const Text(
-                  'No muted users.',
-                  style: TextStyle(color: AppColors.textDim),
-                ),
-              for (final u in mutedUsers)
-                GlowCard(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.block, size: 20, color: AppColors.red),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              u.name.isNotEmpty ? u.name : u.email,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              '${u.email} · ${u.id.length > 8 ? u.id.substring(0, 8) : u.id}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: AppColors.textDim,
-                                fontSize: 12.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      TextButton(
-                        onPressed: busy ? null : () => _unmuteUser(u),
-                        child: const Text('Unmute'),
-                      ),
-                    ],
-                  ),
-                ),
-              const SizedBox(height: 18),
-            ],
-          ),
-        ),
-
-        _Accordion(
-          title: 'Banned words',
-          icon: Icons.gavel,
-          child: Column(
-            children: [
-              // ---- Banned words ----
-              SectionLabel('Banned words (${bannedWords.length})'),
-              if (bannedWords.isEmpty)
-                const Text(
-                  'No banned words.',
-                  style: TextStyle(color: AppColors.textDim),
-                ),
-              for (final w in bannedWords)
-                GlowCard(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.block, size: 20, color: AppColors.red),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          w.word,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      TextButton(
-                        onPressed: busy ? null : () => _deleteBannedWord(w.id),
-                        child: const Text('Delete'),
-                      ),
-                    ],
-                  ),
-                ),
-              const SizedBox(height: 12),
-              GlowCard(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: bannedWordInput,
-                        textCapitalization: TextCapitalization.none,
-                        decoration: const InputDecoration(
-                          hintText: 'Word to ban',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    FilledButton(
-                      onPressed: busy ? null : _addBannedWord,
-                      child: const Text('Add word'),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-            ],
-          ),
-        ),
-
-        _Accordion(
-          title: 'Moderation',
-          icon: Icons.tune,
-          child: Column(
-            children: [
-              // ---- Moderation ----
-              const SectionLabel('Moderation'),
-              GlowCard(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Block links in chat'),
-                      subtitle: const Text(
-                        'Messages with links are deleted and the sender is auto-muted.',
-                        style: TextStyle(
-                          color: AppColors.textDim,
-                          fontSize: 12.5,
-                        ),
-                      ),
-                      value: blockLinks,
-                      onChanged: (v) => setState(() => blockLinks = v),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: muteHoursInput,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        hintText: 'Auto-mute duration (hours)',
-                        suffixText: 'hours',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    FilledButton(
-                      onPressed: busy ? null : _saveModeration,
-                      child: const Text('Save settings'),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-            ],
-          ),
-        ),
-
-        _Accordion(
-          title: 'Products',
-          icon: Icons.inventory_2_outlined,
-          child: Column(
-            children: [
-              // ---- Products ----
-              SectionLabel('Products (${products.length})'),
-              if (products.isEmpty)
-                const Text(
-                  'No products yet.',
-                  style: TextStyle(color: AppColors.textDim),
-                ),
-              for (final p in products) ...[
-                GlowCard(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            p.active ? Icons.check_circle : Icons.cancel,
-                            color: p.active ? AppColors.green : AppColors.red,
-                            size: 22,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
+                      for (final p in products.take(6))
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 2),
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.end,
                               children: [
-                                Text(
-                                  p.name,
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
+                                Container(
+                                  height: (availCount[p.id] ?? 0)
+                                      .clamp(4, 70)
+                                      .toDouble(),
+                                  decoration: BoxDecoration(
+                                    gradient: kNeonGradient,
+                                    borderRadius: BorderRadius.circular(4),
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                const SizedBox(height: 3),
+                                const SizedBox(height: 4),
                                 Text(
-                                  '${p.cost} coins · ${p.type.toUpperCase()}'
-                                  '${p.isKey ? ' · ${availCount[p.id] ?? 0} in stock' : ''}'
-                                  '${p.isKey && (claimedCount[p.id] ?? 0) > 0 ? ' · ${claimedCount[p.id]} claimed' : ''}'
-                                  '${p.imageIds.isNotEmpty ? ' · ${p.imageIds.length} img' : ''}',
+                                  p.name.length > 6
+                                      ? '${p.name.substring(0, 6)}…'
+                                      : p.name,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
+                                    fontSize: 8,
                                     color: AppColors.textDim,
-                                    fontSize: 12.5,
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          IconButton(
-                            tooltip: 'Delete product',
-                            visualDensity: VisualDensity.compact,
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Recent activity
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.bgSoft.withValues(alpha: 0.72),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppColors.border.withValues(alpha: 0.7),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Recent activity',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                if (mutedUsers.isEmpty)
+                  const Text(
+                    'No recent activity.',
+                    style: TextStyle(color: AppColors.textDim, fontSize: 11),
+                  ),
+                for (final u in mutedUsers.take(3))
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.block, size: 14, color: AppColors.red),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            u.name.isNotEmpty ? u.name : u.email,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                        ),
+                        const Text(
+                          'muted',
+                          style: TextStyle(
+                            fontSize: 9,
                             color: AppColors.red,
-                            icon: const Icon(Icons.delete_outline, size: 21),
-                            onPressed: busy ? null : () => _deleteProduct(p),
+                            fontWeight: FontWeight.w600,
                           ),
-                        ],
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          const SectionLabel('Admin panel'),
+          const SizedBox(height: 8),
+
+          if (message.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: messageColor.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: messageColor.withValues(alpha: 0.35)),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    failed ? Icons.error_outline : Icons.check_circle_outline,
+                    size: 18,
+                    color: messageColor,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      message,
+                      style: TextStyle(
+                        color: messageColor,
+                        fontSize: 13.5,
+                        height: 1.4,
                       ),
-                      // Actions get their own row — cramming them beside the name
-                      // squeezed the buttons on narrow phones.
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+
+          _Accordion(
+            title: 'Announcement',
+            icon: Icons.campaign_outlined,
+            child: Column(
+              children: [
+                // ---- Announcement ----
+                SectionLabel('Announcement'),
+                GlowCard(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextField(
+                        controller: announcementTitle,
+                        maxLength: 120,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: const InputDecoration(
+                          hintText: 'Title (e.g. New stock: Netflix)',
+                          counterText: '',
+                        ),
+                      ),
                       const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: NeonButton(
-                              dense: true,
-                              outline: true,
-                              glow: false,
-                              onPressed: busy ? null : () => _editProduct(p),
-                              child: const Text('Edit'),
-                            ),
+                      TextField(
+                        controller: announcementBody,
+                        maxLines: 3,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: const InputDecoration(
+                          hintText:
+                              'Message shown in the app and in the notification',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton(
+                        onPressed: busy ? null : _sendAnnouncement,
+                        child: const Text('Send announcement'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                SectionLabel('Live announcements (${announcements.length})'),
+                if (announcements.isEmpty)
+                  const Text(
+                    'No live announcements.',
+                    style: TextStyle(color: AppColors.textDim),
+                  ),
+                for (final a in announcements)
+                  GlowCard(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                a.title,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                a.createdAt.isEmpty
+                                    ? a.body
+                                    : '${a.createdAt} · ${a.body}',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: AppColors.textDim,
+                                  fontSize: 12.5,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: NeonButton(
-                              dense: true,
-                              outline: p.active,
-                              glow: !p.active,
-                              onPressed: busy ? null : () => _toggleActive(p),
-                              child: Text(p.active ? 'Disable' : 'Enable'),
-                            ),
+                        ),
+                        const SizedBox(width: 12),
+                        TextButton(
+                          onPressed: busy ? null : () => _deleteAnnouncement(a),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 18),
+              ],
+            ),
+          ),
+
+          _Accordion(
+            title: 'Muted users',
+            icon: Icons.block,
+            child: Column(
+              children: [
+                // ---- Moderators ----
+                SectionLabel('Moderators (${moderators.length})'),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _manageModerators,
+                    icon: const Icon(Icons.shield_outlined),
+                    label: const Text('Manage moderators'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // ---- Muted chat users ----
+                SectionLabel('Muted chat users (${mutedUsers.length})'),
+                if (mutedUsers.isEmpty)
+                  const Text(
+                    'No muted users.',
+                    style: TextStyle(color: AppColors.textDim),
+                  ),
+                for (final u in mutedUsers)
+                  GlowCard(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.block, size: 20, color: AppColors.red),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                u.name.isNotEmpty ? u.name : u.email,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                '${u.email} · ${u.id.length > 8 ? u.id.substring(0, 8) : u.id}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: AppColors.textDim,
+                                  fontSize: 12.5,
+                                ),
+                              ),
+                            ],
                           ),
-                          if (p.isKey) ...[
-                            const SizedBox(width: 10),
+                        ),
+                        const SizedBox(width: 12),
+                        TextButton(
+                          onPressed: busy ? null : () => _unmuteUser(u),
+                          child: const Text('Unmute'),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 18),
+              ],
+            ),
+          ),
+
+          _Accordion(
+            title: 'Banned words',
+            icon: Icons.gavel,
+            child: Column(
+              children: [
+                // ---- Banned words ----
+                SectionLabel('Banned words (${bannedWords.length})'),
+                if (bannedWords.isEmpty)
+                  const Text(
+                    'No banned words.',
+                    style: TextStyle(color: AppColors.textDim),
+                  ),
+                for (final w in bannedWords)
+                  GlowCard(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.block, size: 20, color: AppColors.red),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            w.word,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        TextButton(
+                          onPressed: busy
+                              ? null
+                              : () => _deleteBannedWord(w.id),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                GlowCard(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: bannedWordInput,
+                          textCapitalization: TextCapitalization.none,
+                          decoration: const InputDecoration(
+                            hintText: 'Word to ban',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton(
+                        onPressed: busy ? null : _addBannedWord,
+                        child: const Text('Add word'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+              ],
+            ),
+          ),
+
+          _Accordion(
+            title: 'Moderation',
+            icon: Icons.tune,
+            child: Column(
+              children: [
+                // ---- Moderation ----
+                const SectionLabel('Moderation'),
+                GlowCard(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Block links in chat'),
+                        subtitle: const Text(
+                          'Messages with links are deleted and the sender is auto-muted.',
+                          style: TextStyle(
+                            color: AppColors.textDim,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                        value: blockLinks,
+                        onChanged: (v) => setState(() => blockLinks = v),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: muteHoursInput,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          hintText: 'Auto-mute duration (hours)',
+                          suffixText: 'hours',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton(
+                        onPressed: busy ? null : _saveModeration,
+                        child: const Text('Save settings'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+              ],
+            ),
+          ),
+
+          _Accordion(
+            title: 'Products',
+            icon: Icons.inventory_2_outlined,
+            child: Column(
+              children: [
+                // ---- Products ----
+                SectionLabel('Products (${products.length})'),
+                if (products.isEmpty)
+                  const Text(
+                    'No products yet.',
+                    style: TextStyle(color: AppColors.textDim),
+                  ),
+                for (final p in products) ...[
+                  GlowCard(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              p.active ? Icons.check_circle : Icons.cancel,
+                              color: p.active ? AppColors.green : AppColors.red,
+                              size: 22,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    p.name,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    '${p.cost} coins · ${p.type.toUpperCase()}'
+                                    '${p.isKey ? ' · ${availCount[p.id] ?? 0} in stock' : ''}'
+                                    '${p.isKey && (claimedCount[p.id] ?? 0) > 0 ? ' · ${claimedCount[p.id]} claimed' : ''}'
+                                    '${p.imageIds.isNotEmpty ? ' · ${p.imageIds.length} img' : ''}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: AppColors.textDim,
+                                      fontSize: 12.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Delete product',
+                              visualDensity: VisualDensity.compact,
+                              color: AppColors.red,
+                              icon: const Icon(Icons.delete_outline, size: 21),
+                              onPressed: busy ? null : () => _deleteProduct(p),
+                            ),
+                          ],
+                        ),
+                        // Actions get their own row — cramming them beside the name
+                        // squeezed the buttons on narrow phones.
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
                             Expanded(
                               child: NeonButton(
                                 dense: true,
                                 outline: true,
                                 glow: false,
-                                onPressed: busy ? null : () => _showKeys(p),
-                                child: const Text('Keys'),
+                                onPressed: busy ? null : () => _editProduct(p),
+                                child: const Text('Edit'),
                               ),
                             ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: NeonButton(
+                                dense: true,
+                                outline: p.active,
+                                glow: !p.active,
+                                onPressed: busy ? null : () => _toggleActive(p),
+                                child: Text(p.active ? 'Disable' : 'Enable'),
+                              ),
+                            ),
+                            if (p.isKey) ...[
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: NeonButton(
+                                  dense: true,
+                                  outline: true,
+                                  glow: false,
+                                  onPressed: busy ? null : () => _showKeys(p),
+                                  child: const Text('Keys'),
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+
+          _Accordion(
+            title: 'New product',
+            icon: Icons.add_box_outlined,
+            child: Column(
+              children: [
+                // ---- New product — the form stays collapsed behind its toggle ----
+                NeonButton(
+                  expand: true,
+                  dense: true,
+                  outline: showNewForm,
+                  glow: !showNewForm,
+                  onPressed: busy
+                      ? null
+                      : () => setState(() => showNewForm = !showNewForm),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        showNewForm ? Icons.close_rounded : Icons.add_rounded,
+                        size: 17,
+                        color: showNewForm
+                            ? AppColors.cyan
+                            : const Color(0xFF04212A),
                       ),
+                      const SizedBox(width: 7),
+                      Text(showNewForm ? 'Close' : 'New product'),
                     ],
                   ),
                 ),
-                const SizedBox(height: 10),
-              ],
-
-              const SizedBox(height: 16),
-            ],
-          ),
-        ),
-
-        _Accordion(
-          title: 'New product',
-          icon: Icons.add_box_outlined,
-          child: Column(
-            children: [
-              // ---- New product — the form stays collapsed behind its toggle ----
-              NeonButton(
-                expand: true,
-                dense: true,
-                outline: showNewForm,
-                glow: !showNewForm,
-                onPressed: busy
-                    ? null
-                    : () => setState(() => showNewForm = !showNewForm),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      showNewForm ? Icons.close_rounded : Icons.add_rounded,
-                      size: 17,
-                      color: showNewForm
-                          ? AppColors.cyan
-                          : const Color(0xFF04212A),
-                    ),
-                    const SizedBox(width: 7),
-                    Text(showNewForm ? 'Close' : 'New product'),
-                  ],
-                ),
-              ),
-              if (showNewForm) ...[
-                const SizedBox(height: 12),
-                GlowCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _typePicker(
-                        productType,
-                        (v) => setState(() => productType = v),
-                      ),
-                      const SizedBox(height: 14),
-                      TextField(
-                        controller: productName,
-                        decoration: const InputDecoration(
-                          hintText: 'Product name',
-                          prefixIcon: Icon(Icons.label_outline),
+                if (showNewForm) ...[
+                  const SizedBox(height: 12),
+                  GlowCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _typePicker(
+                          productType,
+                          (v) => setState(() => productType = v),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: productCost,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          hintText: 'Cost in coins',
-                          prefixIcon: Icon(Icons.monetization_on_rounded),
+                        const SizedBox(height: 14),
+                        TextField(
+                          controller: productName,
+                          decoration: const InputDecoration(
+                            hintText: 'Product name',
+                            prefixIcon: Icon(Icons.label_outline),
+                          ),
                         ),
-                      ),
-                      if (productType == 'key') ...[
                         const SizedBox(height: 12),
                         TextField(
-                          controller: productDurations,
+                          controller: productCost,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            hintText: 'Cost in coins',
+                            prefixIcon: Icon(Icons.monetization_on_rounded),
+                          ),
+                        ),
+                        if (productType == 'key') ...[
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: productDurations,
+                            maxLines: 3,
+                            decoration: const InputDecoration(
+                              hintText:
+                                  'Duration options, one per line — '
+                                  'e.g. 1 Hour: 10 / 1 Day: 25 (optional)',
+                              prefixIcon: Icon(Icons.timelapse_rounded),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Each line is "Label: coins". Buyers pick a duration on '
+                            'the product page; keys pasted in the Keys dialog belong '
+                            'to the selected pool. Leave empty for one flat price.',
+                            style: TextStyle(
+                              color: AppColors.textDim,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: productDesc,
                           maxLines: 3,
                           decoration: const InputDecoration(
-                            hintText:
-                                'Duration options, one per line — '
-                                'e.g. 1 Hour: 10 / 1 Day: 25 (optional)',
-                            prefixIcon: Icon(Icons.timelapse_rounded),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        const Text(
-                          'Each line is "Label: coins". Buyers pick a duration on '
-                          'the product page; keys pasted in the Keys dialog belong '
-                          'to the selected pool. Leave empty for one flat price.',
-                          style: TextStyle(
-                            color: AppColors.textDim,
-                            fontSize: 11.5,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: productDesc,
-                        maxLines: 3,
-                        decoration: const InputDecoration(
-                          hintText: 'Description (optional)',
-                          prefixIcon: Icon(Icons.notes_rounded),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: productYoutube,
-                        decoration: const InputDecoration(
-                          hintText: 'YouTube link (optional)',
-                          prefixIcon: Icon(Icons.ondemand_video_outlined),
-                        ),
-                      ),
-                      if (productType != 'key') ...[
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: productVersion,
-                          decoration: const InputDecoration(
-                            hintText: 'Version, e.g. 1.2.0 (optional)',
-                            prefixIcon: Icon(Icons.tag_rounded),
+                            hintText: 'Description (optional)',
+                            prefixIcon: Icon(Icons.notes_rounded),
                           ),
                         ),
                         const SizedBox(height: 12),
                         TextField(
-                          controller: productFileSize,
+                          controller: productYoutube,
                           decoration: const InputDecoration(
-                            hintText: 'Size label, e.g. 24 MB (optional)',
-                            prefixIcon: Icon(Icons.data_usage_rounded),
+                            hintText: 'YouTube link (optional)',
+                            prefixIcon: Icon(Icons.ondemand_video_outlined),
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: productLink,
-                          decoration: const InputDecoration(
-                            hintText: 'MediaFire link buyers will unlock',
-                            prefixIcon: Icon(Icons.cloud_download_outlined),
+                        if (productType != 'key') ...[
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: productVersion,
+                            decoration: const InputDecoration(
+                              hintText: 'Version, e.g. 1.2.0 (optional)',
+                              prefixIcon: Icon(Icons.tag_rounded),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 6),
-                        const Text(
-                          'Paste the mediafire.com/file/… page link (or a direct '
-                          'download link). Buyers only get it after paying.',
-                          style: TextStyle(
-                            color: AppColors.textDim,
-                            fontSize: 11.5,
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: productFileSize,
+                            decoration: const InputDecoration(
+                              hintText: 'Size label, e.g. 24 MB (optional)',
+                              prefixIcon: Icon(Icons.data_usage_rounded),
+                            ),
                           ),
-                        ),
-                      ],
-                      if (pickedPaths.isNotEmpty) ...[
-                        const SizedBox(height: 14),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              for (final path in [...pickedPaths])
-                                _pathThumb(
-                                  path,
-                                  () => setState(
-                                    () => pickedPaths = pickedPaths
-                                        .where((x) => x != path)
-                                        .toList(),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: productLink,
+                            decoration: const InputDecoration(
+                              hintText: 'MediaFire link buyers will unlock',
+                              prefixIcon: Icon(Icons.cloud_download_outlined),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Paste the mediafire.com/file/… page link (or a direct '
+                            'download link). Buyers only get it after paying.',
+                            style: TextStyle(
+                              color: AppColors.textDim,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                        ],
+                        if (pickedPaths.isNotEmpty) ...[
+                          const SizedBox(height: 14),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                for (final path in [...pickedPaths])
+                                  _pathThumb(
+                                    path,
+                                    () => setState(
+                                      () => pickedPaths = pickedPaths
+                                          .where((x) => x != path)
+                                          .toList(),
+                                    ),
                                   ),
-                                ),
-                            ],
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        NeonButton(
+                          dense: true,
+                          outline: true,
+                          expand: true,
+                          onPressed: busy
+                              ? null
+                              : () async {
+                                  final picked = await _pickImages();
+                                  if (picked != null && picked.isNotEmpty) {
+                                    setState(
+                                      () => pickedPaths = [
+                                        ...pickedPaths,
+                                        ...picked,
+                                      ],
+                                    );
+                                  }
+                                },
+                          child: Text(
+                            pickedPaths.isEmpty
+                                ? 'Add product images'
+                                : 'Add more images (${pickedPaths.length})',
                           ),
                         ),
-                      ],
-                      const SizedBox(height: 12),
-                      NeonButton(
-                        dense: true,
-                        outline: true,
-                        expand: true,
-                        onPressed: busy
-                            ? null
-                            : () async {
-                                final picked = await _pickImages();
-                                if (picked != null && picked.isNotEmpty) {
-                                  setState(
-                                    () => pickedPaths = [
-                                      ...pickedPaths,
-                                      ...picked,
-                                    ],
-                                  );
-                                }
-                              },
-                        child: Text(
-                          pickedPaths.isEmpty
-                              ? 'Add product images'
-                              : 'Add more images (${pickedPaths.length})',
+                        const SizedBox(height: 14),
+                        NeonButton(
+                          expand: true,
+                          onPressed: busy ? null : _addProduct,
+                          child: const Text('Create product'),
                         ),
-                      ),
-                      const SizedBox(height: 14),
-                      NeonButton(
-                        expand: true,
-                        onPressed: busy ? null : _addProduct,
-                        child: const Text('Create product'),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
+                ],
               ],
-            ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

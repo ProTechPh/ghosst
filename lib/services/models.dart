@@ -1,5 +1,7 @@
 // Data the screens render. Nothing here reaches the network.
 
+import '../api/api_config.dart';
+
 /// One selectable duration option for a key product (e.g. `1 Hour` @ 10
 /// coins). The Worker stores these as JSON on the product.
 class ProductDuration {
@@ -18,6 +20,410 @@ ProductType productTypeOf(String? raw) => switch (raw) {
   'file' => ProductType.file,
   _ => ProductType.key,
 };
+
+/// Safe identity returned by user search and embedded in social responses.
+class ChatUserSummary {
+  const ChatUserSummary({required this.id, required this.name, this.avatarUrl});
+
+  final String id;
+  final String name;
+  final String? avatarUrl;
+
+  String get initial {
+    final value = name.trim();
+    return value.isEmpty ? 'G' : String.fromCharCode(value.runes.first);
+  }
+
+  factory ChatUserSummary.fromJson(Map<String, dynamic> json) {
+    final id = (json['id'] ?? '').toString();
+    final username = json['username'] as String? ?? '';
+    final displayName = (json['displayName'] as String? ?? '').trim();
+    final avatar = (json['avatarUrl'] as String? ?? '').trim();
+    return ChatUserSummary(
+      id: id,
+      name: displayName.isNotEmpty
+          ? displayName
+          : (username.isNotEmpty ? username : 'Member #$id'),
+      avatarUrl: avatar.isEmpty ? null : avatar,
+    );
+  }
+}
+
+class PublicUser {
+  const PublicUser({
+    required this.id,
+    required this.displayName,
+    required this.username,
+    required this.createdAt,
+    required this.followerCount,
+    required this.followingCount,
+    required this.reelCount,
+    this.likeCount = 0,
+    this.avatarUrl,
+    this.bio = '',
+    this.coverUrl,
+    this.isAdmin = false,
+    this.isModerator = false,
+    this.isFollowing = false,
+    this.isSelf = false,
+  });
+
+  final String id;
+  final String displayName;
+  final String username;
+  final String createdAt;
+  final String? avatarUrl;
+  final String bio;
+  final String? coverUrl;
+  final bool isAdmin;
+  final bool isModerator;
+  final int followerCount;
+  final int followingCount;
+  final int reelCount;
+  final int likeCount;
+  final bool isFollowing;
+  final bool isSelf;
+
+  String get initial {
+    final value = displayName.trim();
+    return value.isEmpty ? 'G' : String.fromCharCode(value.runes.first);
+  }
+
+  factory PublicUser.fromJson(Map<String, dynamic> json) {
+    int count(String key) {
+      final parsed = int.tryParse((json[key] ?? '').toString());
+      return parsed == null || parsed < 0 ? 0 : parsed;
+    }
+
+    final id = (json['id'] ?? '').toString();
+    final username = json['username'] as String? ?? '';
+    final displayName = (json['displayName'] as String? ?? '').trim();
+    final avatar = (json['avatarUrl'] as String? ?? '').trim();
+    final cover = (json['coverUrl'] as String? ?? '').trim();
+    return PublicUser(
+      id: id,
+      displayName: displayName.isNotEmpty
+          ? displayName
+          : (username.isNotEmpty ? username : 'Member #$id'),
+      username: username,
+      createdAt: json['createdAt'] as String? ?? '',
+      avatarUrl: avatar.isEmpty ? null : avatar,
+      bio: (json['bio'] as String? ?? '').trim(),
+      coverUrl: cover.isEmpty ? null : ApiConfig.publicUrl(cover),
+      isAdmin: json['isAdmin'] == true,
+      isModerator: json['isModerator'] == true,
+      followerCount: count('followerCount'),
+      followingCount: count('followingCount'),
+      reelCount: count('reelCount'),
+      likeCount: count('likeCount'),
+      isFollowing: json['isFollowing'] == true,
+      isSelf: json['isSelf'] == true,
+    );
+  }
+}
+
+class FollowState {
+  const FollowState({required this.isFollowing, required this.followerCount});
+
+  final bool isFollowing;
+  final int followerCount;
+
+  factory FollowState.fromJson(Map<String, dynamic> json) {
+    final count = int.tryParse((json['followerCount'] ?? '').toString()) ?? 0;
+    return FollowState(
+      isFollowing: json['isFollowing'] == true,
+      followerCount: count < 0 ? 0 : count,
+    );
+  }
+}
+
+List<PublicUser> publicUsersFromJson(Object? raw) => raw is List
+    ? [
+        for (final item in raw)
+          if (item is Map<String, dynamic>) PublicUser.fromJson(item),
+      ]
+    : const [];
+
+class ReelImage {
+  const ReelImage({
+    required this.position,
+    required this.url,
+    required this.sha256,
+    required this.sizeBytes,
+    required this.mimeType,
+    this.width,
+    this.height,
+  });
+
+  final int position;
+  final String url;
+  final String sha256;
+  final int sizeBytes;
+  final String mimeType;
+  final int? width;
+  final int? height;
+
+  factory ReelImage.fromJson(Map<String, dynamic> json) {
+    int parseInt(Object? value) => int.tryParse((value ?? '').toString()) ?? 0;
+    int? parseNullableInt(Object? value) {
+      final parsed = int.tryParse((value ?? '').toString());
+      return parsed == null || parsed <= 0 ? null : parsed;
+    }
+
+    return ReelImage(
+      position: parseInt(json['position']),
+      url: json['url'] as String? ?? '',
+      sha256: (json['sha256'] as String? ?? '').toLowerCase(),
+      sizeBytes: parseInt(json['sizeBytes']),
+      mimeType: json['mimeType'] as String? ?? '',
+      width: parseNullableInt(json['width']),
+      height: parseNullableInt(json['height']),
+    );
+  }
+}
+
+class Reel {
+  const Reel({
+    required this.id,
+    required this.caption,
+    required this.createdAt,
+    required this.creator,
+    required this.likeCount,
+    required this.commentCount,
+    this.posterUrl,
+    this.images = const [],
+    this.isLiked = false,
+    this.isFollowing = false,
+    this.isMine = false,
+  });
+
+  final String id;
+  final String caption;
+  final String createdAt;
+  final String? posterUrl;
+  final List<ReelImage> images;
+  final PublicUser creator;
+  final int likeCount;
+  final int commentCount;
+  final bool isLiked;
+  final bool isFollowing;
+  final bool isMine;
+
+  factory Reel.fromJson(Map<String, dynamic> json) {
+    int count(String key) {
+      final value = int.tryParse((json[key] ?? '').toString()) ?? 0;
+      return value < 0 ? 0 : value;
+    }
+
+    final rawCreator = json['creator'];
+    final images = [
+      for (final item in json['images'] as List? ?? const [])
+        if (item is Map<String, dynamic>) ReelImage.fromJson(item),
+    ]..sort((a, b) => a.position.compareTo(b.position));
+    final poster = (json['posterUrl'] as String? ?? '').trim();
+    return Reel(
+      id: (json['id'] ?? '').toString(),
+      caption: json['caption'] as String? ?? '',
+      createdAt: json['createdAt'] as String? ?? '',
+      posterUrl: poster.isNotEmpty
+          ? poster
+          : (images.isNotEmpty ? images.first.url : null),
+      images: images,
+      creator: PublicUser.fromJson(
+        rawCreator is Map<String, dynamic> ? rawCreator : const {},
+      ),
+      likeCount: count('likeCount'),
+      commentCount: count('commentCount'),
+      isLiked: json['isLiked'] == true,
+      isFollowing: json['isFollowing'] == true,
+      isMine: json['isMine'] == true,
+    );
+  }
+}
+
+class ReelComment {
+  const ReelComment({
+    required this.id,
+    required this.text,
+    required this.createdAt,
+    required this.user,
+  });
+
+  final String id;
+  final String text;
+  final String createdAt;
+  final PublicUser user;
+
+  factory ReelComment.fromJson(Map<String, dynamic> json) {
+    final rawUser = json['user'];
+    return ReelComment(
+      id: (json['id'] ?? '').toString(),
+      text: json['text'] as String? ?? '',
+      createdAt: json['createdAt'] as String? ?? '',
+      user: PublicUser.fromJson(
+        rawUser is Map<String, dynamic> ? rawUser : const {},
+      ),
+    );
+  }
+}
+
+class ReelFeedPage {
+  const ReelFeedPage({required this.reels, required this.nextOffset});
+
+  final List<Reel> reels;
+  final int nextOffset;
+
+  factory ReelFeedPage.fromJson(Map<String, dynamic> json) => ReelFeedPage(
+    reels: [
+      for (final item in json['reels'] as List? ?? const [])
+        if (item is Map<String, dynamic>) Reel.fromJson(item),
+    ],
+    nextOffset: int.tryParse((json['nextOffset'] ?? '').toString()) ?? 0,
+  );
+}
+
+class ReelUploadImage {
+  const ReelUploadImage({
+    required this.fileName,
+    required this.sizeBytes,
+    required this.sha256,
+    required this.mimeType,
+  });
+
+  final String fileName;
+  final int sizeBytes;
+  final String sha256;
+  final String mimeType;
+}
+
+class ReelImageUploadTicket {
+  const ReelImageUploadTicket({
+    required this.position,
+    required this.uploadUrl,
+    required this.token,
+    required this.sha256,
+    required this.storageKey,
+    required this.maxBytes,
+  });
+
+  final int position;
+  final String uploadUrl;
+  final String token;
+  final String sha256;
+  final String storageKey;
+  final int maxBytes;
+
+  factory ReelImageUploadTicket.fromJson(Map<String, dynamic> json) =>
+      ReelImageUploadTicket(
+        position: int.tryParse((json['position'] ?? '').toString()) ?? 0,
+        uploadUrl: json['url'] as String? ?? '',
+        token: json['token'] as String? ?? '',
+        sha256: (json['sha256'] as String? ?? '').toLowerCase(),
+        storageKey: json['storageKey'] as String? ?? '',
+        maxBytes: int.tryParse((json['maxBytes'] ?? '').toString()) ?? 0,
+      );
+}
+
+class ReelUploadTicket {
+  const ReelUploadTicket({
+    required this.reelId,
+    required this.expiresAt,
+    required this.uploads,
+  });
+
+  final String reelId;
+  final DateTime expiresAt;
+  final List<ReelImageUploadTicket> uploads;
+
+  factory ReelUploadTicket.fromJson(Map<String, dynamic> json) {
+    final reel = json['reel'] as Map<String, dynamic>? ?? const {};
+    final uploads = [
+      for (final item in json['uploads'] as List? ?? const [])
+        if (item is Map<String, dynamic>) ReelImageUploadTicket.fromJson(item),
+    ]..sort((a, b) => a.position.compareTo(b.position));
+    DateTime? expiresAt;
+    for (final item in json['uploads'] as List? ?? const []) {
+      if (item is Map<String, dynamic>) {
+        expiresAt = DateTime.tryParse(item['expiresAt'] as String? ?? '');
+        if (expiresAt != null) break;
+      }
+    }
+    expiresAt ??= DateTime.tryParse(json['expiresAt'] as String? ?? '');
+    return ReelUploadTicket(
+      reelId: (reel['id'] ?? '').toString(),
+      expiresAt: expiresAt ?? DateTime.now().add(const Duration(minutes: 15)),
+      uploads: uploads,
+    );
+  }
+}
+
+class AppFeedback {
+  const AppFeedback({
+    required this.id,
+    required this.comment,
+    required this.rating,
+    required this.status,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String comment;
+  final int rating;
+  final String status;
+  final String createdAt;
+
+  factory AppFeedback.fromJson(Map<String, dynamic> json) => AppFeedback(
+    id: (json['id'] ?? '').toString(),
+    comment: json['comment'] as String? ?? '',
+    rating: int.tryParse((json['rating'] ?? '').toString()) ?? 0,
+    status: json['status'] as String? ?? 'hidden',
+    createdAt: json['createdAt'] as String? ?? '',
+  );
+}
+
+/// One public entry from the website feedback page (feedback.php).
+class WebsiteFeedback {
+  const WebsiteFeedback({
+    required this.id,
+    required this.username,
+    required this.comment,
+    required this.rating,
+    required this.createdAt,
+    this.imageUrl,
+  });
+
+  final String id;
+  final String username;
+  final String comment;
+  final int rating;
+  final String createdAt;
+  final String? imageUrl;
+
+  factory WebsiteFeedback.fromJson(Map<String, dynamic> json) {
+    final image = (json['imageUrl'] as String? ?? '').trim();
+    return WebsiteFeedback(
+      id: (json['id'] ?? '').toString(),
+      username: json['username'] as String? ?? '',
+      comment: json['comment'] as String? ?? '',
+      rating: int.tryParse((json['rating'] ?? '').toString()) ?? 0,
+      createdAt: json['createdAt'] as String? ?? '',
+      imageUrl: image.isEmpty ? null : ApiConfig.publicUrl(image),
+    );
+  }
+}
+
+String? validateAppFeedback(String comment, int rating) {
+  final value = comment.trim();
+  if (value.runes.length < 10) return 'Comment must be at least 10 characters.';
+  if (value.runes.length > 1000) {
+    return 'Comment must be 1000 characters or less.';
+  }
+  if (RegExp(r'<[a-zA-Z/!]').hasMatch(value)) {
+    return 'HTML tags are not allowed.';
+  }
+  if (rating < 1 || rating > 5) return 'Rating must be 1-5.';
+  return null;
+}
 
 class Product {
   Product({
@@ -185,32 +591,28 @@ class Announcement {
   final String createdAt;
 
   factory Announcement.fromJson(Map<String, dynamic> json) => Announcement(
-        id: json['id'] as String? ?? '',
-        title: json['title'] as String? ?? '',
-        body: json['body'] as String? ?? '',
-        createdAt: json['createdAt'] as String? ?? '',
-      );
+    id: json['id'] as String? ?? '',
+    title: json['title'] as String? ?? '',
+    body: json['body'] as String? ?? '',
+    createdAt: json['createdAt'] as String? ?? '',
+  );
 }
 
 /// Isang user na naka-mute sa world chat (admin "Muted chat users" list).
 /// Ang list ay nasa Admin screen — hindi depende sa chat messages na
 /// mag-e-expire, kaya laging may paraan mag-unmute.
 class MutedUser {
-  const MutedUser({
-    required this.id,
-    required this.name,
-    required this.email,
-  });
+  const MutedUser({required this.id, required this.name, required this.email});
 
   final String id;
   final String name;
   final String email;
 
   factory MutedUser.fromJson(Map<String, dynamic> json) => MutedUser(
-        id: json['id'] as String? ?? '',
-        name: json['displayName'] as String? ?? '',
-        email: json['email'] as String? ?? '',
-      );
+    id: json['id'] as String? ?? '',
+    name: json['displayName'] as String? ?? '',
+    email: json['email'] as String? ?? '',
+  );
 }
 
 /// Isang banned word sa auto-moderation.
@@ -221,9 +623,9 @@ class BannedWord {
   final String word;
 
   factory BannedWord.fromJson(Map<String, dynamic> json) => BannedWord(
-        id: (json['id'] as num?)?.toInt() ?? 0,
-        word: json['word'] as String? ?? '',
-      );
+    id: (json['id'] as num?)?.toInt() ?? 0,
+    word: json['word'] as String? ?? '',
+  );
 }
 
 /// Ang moderation settings: block links ba, at gaano katagal ang auto-mute.
@@ -234,9 +636,9 @@ class Moderation {
   final int muteHours;
 
   factory Moderation.fromJson(Map<String, dynamic> json) => Moderation(
-        blockLinks: json['blockLinks'] as bool? ?? false,
-        muteHours: (json['muteHours'] as num?)?.toInt() ?? 24,
-      );
+    blockLinks: json['blockLinks'] as bool? ?? false,
+    muteHours: (json['muteHours'] as num?)?.toInt() ?? 24,
+  );
 }
 
 /// Null when there is nothing to show or the user already closed this one.
@@ -360,7 +762,9 @@ class ShopGame {
       slug: json['slug'] as String? ?? '',
       description: json['description'] as String? ?? '',
       image: json['image'] as String? ?? '',
-      images: (json['images'] as List? ?? const []).whereType<String>().toList(),
+      images: (json['images'] as List? ?? const [])
+          .whereType<String>()
+          .toList(),
       price: (json['price'] as num?)?.toDouble() ?? 0,
       priceMax: (json['priceMax'] as num?)?.toDouble() ?? 0,
       stock: (json['stock'] as num?)?.toInt() ?? 0,
@@ -431,11 +835,11 @@ class AppConfig {
   final String directUrl;
 
   factory AppConfig.fromJson(Map<String, dynamic> json) => AppConfig(
-        minVersionCode: (json['minVersionCode'] as num?)?.toInt() ?? 0,
-        latestVersionCode: (json['latestVersionCode'] as num?)?.toInt() ?? 0,
-        playUrl: json['playUrl'] as String? ?? '',
-        directUrl: json['directUrl'] as String? ?? '',
-      );
+    minVersionCode: (json['minVersionCode'] as num?)?.toInt() ?? 0,
+    latestVersionCode: (json['latestVersionCode'] as num?)?.toInt() ?? 0,
+    playUrl: json['playUrl'] as String? ?? '',
+    directUrl: json['directUrl'] as String? ?? '',
+  );
 
   /// True when this install must update before it can be used. A min of 0
   /// means the gate is off (nothing published yet).
@@ -472,15 +876,15 @@ class Tutorial {
   final String createdAt;
 
   factory Tutorial.fromJson(Map<String, dynamic> json) => Tutorial(
-        id: (json['id'] as num?)?.toInt() ?? 0,
-        title: json['title'] as String? ?? '',
-        slug: json['slug'] as String? ?? '',
-        category: json['category'] as String? ?? '',
-        videoUrl: json['videoUrl'] as String? ?? '',
-        content: json['content'] as String? ?? '',
-        views: (json['views'] as num?)?.toInt() ?? 0,
-        createdAt: json['createdAt'] as String? ?? '',
-      );
+    id: (json['id'] as num?)?.toInt() ?? 0,
+    title: json['title'] as String? ?? '',
+    slug: json['slug'] as String? ?? '',
+    category: json['category'] as String? ?? '',
+    videoUrl: json['videoUrl'] as String? ?? '',
+    content: json['content'] as String? ?? '',
+    views: (json['views'] as num?)?.toInt() ?? 0,
+    createdAt: json['createdAt'] as String? ?? '',
+  );
 }
 
 /// `₱620`, `₱99.50`, or `₱620 – ₱1,200` when keys are priced differently.
@@ -489,10 +893,7 @@ String shopPriceLabel(String currency, double price, double priceMax) {
     final digits = v == v.roundToDouble()
         ? v.toStringAsFixed(0)
         : v.toStringAsFixed(2);
-    return digits.replaceAllMapped(
-      RegExp(r'\B(?=(\d{3})+(?!\d))'),
-      (m) => ',',
-    );
+    return digits.replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
   }
 
   final low = '$currency${money(price)}';

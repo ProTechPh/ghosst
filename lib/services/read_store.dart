@@ -37,9 +37,10 @@ class ReadStore {
   }
 
   static Future<void> markAnnouncementsSeen(String createdAt) async {
-    if (createdAt.isEmpty) return;
-    await _writeAnnouncements(createdAt);
-    unawaited(Backend.markReads(announcementsSeenAt: createdAt));
+    final seen = Backend.readTimestamp(createdAt);
+    if (seen.isEmpty) return;
+    await _writeAnnouncements(seen);
+    unawaited(Backend.markReads(announcementsSeenAt: seen));
   }
 
   static Future<void> markChatSeen(int tsMillis) async {

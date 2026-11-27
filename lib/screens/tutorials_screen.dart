@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../premium.dart';
 import '../services/worker_backend.dart';
 import '../services/youtube.dart';
+import '../social_shell.dart';
 import '../theme.dart';
 
 /// 16:9 YouTube poster (or a text-guide fallback) with a play affordance.
@@ -211,7 +212,7 @@ class _TutorialsScreenState extends State<TutorialsScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(title: const Text('Tutorials')),
+      appBar: const SocialAppBar(title: 'Tutorials'),
       body: body,
     );
   }
@@ -238,7 +239,7 @@ class TutorialDetailScreen extends StatelessWidget {
     final hasVideo = youtubeId(tutorial.videoUrl) != null;
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(title: const Text('Tutorial')),
+      appBar: const SocialAppBar(title: 'Tutorial'),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(
           AppSpace.lg,

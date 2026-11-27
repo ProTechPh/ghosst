@@ -182,14 +182,14 @@ class _ScrollDownPillState extends State<_ScrollDownPill>
             color: AppColors.bgSoft.withValues(alpha: 0.88),
             borderRadius: BorderRadius.circular(AppRadius.pill),
             border: Border.all(
-              color: AppColors.primary.withValues(alpha: 0.28),
+              color: AppColors.primary.withValues(alpha: 0.18),
             ),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.18),
-                blurRadius: 18,
+                color: AppColors.primary.withValues(alpha: 0.08),
+                blurRadius: 12,
                 spreadRadius: -6,
-                offset: const Offset(0, 6),
+                offset: const Offset(0, 3),
               ),
             ],
           ),
@@ -381,7 +381,7 @@ class DoubleBezel extends StatelessWidget {
         // Inset top highlight — the core reads as a separate pane of glass.
         boxShadow: [
           BoxShadow(
-            color: Colors.white.withValues(alpha: 0.10),
+            color: Colors.white.withValues(alpha: 0.06),
             offset: const Offset(0, 1),
             blurRadius: 2,
             blurStyle: BlurStyle.inner,
@@ -406,9 +406,9 @@ class DoubleBezel extends StatelessWidget {
       width: double.infinity,
       padding: outerPadding,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
+        color: Colors.white.withValues(alpha: 0.02),
         border: Border.all(
-          color: borderColor ?? Colors.white.withValues(alpha: 0.10),
+          color: borderColor ?? Colors.white.withValues(alpha: 0.08),
           width: 1,
         ),
         borderRadius: BorderRadius.circular(radius),
@@ -416,9 +416,9 @@ class DoubleBezel extends StatelessWidget {
             ? null
             : [
                 BoxShadow(
-                  color: glowColor!.withValues(alpha: 0.20),
-                  blurRadius: 48,
-                  spreadRadius: -12,
+                  color: glowColor!.withValues(alpha: 0.10),
+                  blurRadius: 28,
+                  spreadRadius: -10,
                 ),
               ],
       ),
@@ -538,14 +538,14 @@ class _IslandButtonState extends State<IslandButton> {
         boxShadow: [
           if (!isOutline && widget.glow && _enabled)
             BoxShadow(
-              color: AppColors.primary.withValues(alpha: 0.30),
-              blurRadius: 28,
+              color: AppColors.primary.withValues(alpha: 0.12),
+              blurRadius: 18,
               spreadRadius: -8,
             ),
           // Top sheen — glass, not drop shadow.
           if (!isOutline)
             BoxShadow(
-              color: Colors.white.withValues(alpha: 0.22),
+              color: Colors.white.withValues(alpha: 0.12),
               offset: const Offset(0, 1),
               blurRadius: 1,
               blurStyle: BlurStyle.inner,
@@ -624,22 +624,26 @@ class _IslandButtonState extends State<IslandButton> {
       ),
     );
 
-    final Widget wrapped = GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: _enabled ? (_) => setState(() => _down = true) : null,
-      onTapUp: _enabled ? (_) => setState(() => _down = false) : null,
-      onTapCancel: _enabled ? () => setState(() => _down = false) : null,
-      onTap: _enabled
-          ? () {
-              HapticFeedback.selectionClick().ignore();
-              widget.onPressed!();
-            }
-          : null,
-      child: AnimatedScale(
-        scale: pressed ? 0.97 : 1,
-        duration: kMotionFast,
-        curve: kPremiumCurve,
-        child: Opacity(opacity: _enabled ? 1 : 0.45, child: button),
+    final Widget wrapped = Semantics(
+      button: true,
+      enabled: _enabled,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: _enabled ? (_) => setState(() => _down = true) : null,
+        onTapUp: _enabled ? (_) => setState(() => _down = false) : null,
+        onTapCancel: _enabled ? () => setState(() => _down = false) : null,
+        onTap: _enabled
+            ? () {
+                HapticFeedback.selectionClick().ignore();
+                widget.onPressed!();
+              }
+            : null,
+        child: AnimatedScale(
+          scale: pressed ? 0.97 : 1,
+          duration: kMotionFast,
+          curve: kPremiumCurve,
+          child: Opacity(opacity: _enabled ? 1 : 0.45, child: button),
+        ),
       ),
     );
 
@@ -839,7 +843,9 @@ class StatCell extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              ExcludeSemantics(child: Icon(icon, size: AppIcon.sm, color: tone)),
+              ExcludeSemantics(
+                child: Icon(icon, size: AppIcon.sm, color: tone),
+              ),
               const SizedBox(width: AppSpace.xs + 2),
             ],
             Flexible(
