@@ -9,9 +9,13 @@ ReelComment _comment(
   String name = 'Jeric',
   String createdAt = '',
   String? avatarUrl,
+  String parentId = '',
+  String replyTo = '',
 }) => ReelComment(
   id: text,
   text: text,
+  parentId: parentId,
+  replyTo: replyTo,
   createdAt: createdAt,
   user: PublicUser(
     id: '42',
@@ -29,6 +33,7 @@ Future<void> _pump(
   WidgetTester tester, {
   required Future<List<ReelComment>> Function(int) load,
   Future<void> Function(String)? submit,
+  Future<void> Function(String parentId, String text)? submitReply,
   ValueChanged<String>? onOpenProfile,
   Size size = const Size(800, 600),
   EdgeInsets viewInsets = EdgeInsets.zero,
@@ -47,6 +52,7 @@ Future<void> _pump(
             reelId: 'r1',
             load: load,
             submit: submit,
+            submitReply: submitReply,
             onOpenProfile: onOpenProfile,
           ),
         ),
@@ -131,7 +137,10 @@ void main() {
     expect(find.text('Comments'), findsOneWidget);
     expect(find.text('VeryLongDisplayNameForComments'), findsOneWidget);
     expect(find.text(longText), findsOneWidget);
-    expect(find.text('Reply'), findsNothing);
+    expect(
+      find.byKey(ValueKey('comment-reply-$longText')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey('reel-comments-composer')),
       findsOneWidget,
@@ -185,5 +194,88 @@ void main() {
       find.byKey(const ValueKey('reel-comments-composer')),
     ).dy;
     expect(composerBottom, lessThanOrEqualTo(640 - 200));
+  });
+
+  testWidgets('reply action sets a target and submits with parentId', (
+    tester,
+  ) async {
+    String? plain;
+    String? replyParent;
+    String? replyText;
+    var replyCalls = 0;
+    await _pump(
+      tester,
+      load: (_) async => [_comment('Nice')],
+      submit: (text) async => plain = text,
+      submitReply: (parent, text) async {
+        replyParent = parent;
+        replyText = text;
+        replyCalls++;
+      },
+    );
+
+    await tester.tap(find.byKey(const ValueKey('comment-reply-Nice')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('comment-reply-banner')), findsOneWidget);
+    expect(find.textContaining('@Jeric'), findsWidgets);
+
+    await tester.enterText(find.byType(TextField), 'hello');
+    await tester.tap(find.byKey(const ValueKey('reel-comments-send')));
+    await tester.pumpAndSettle();
+
+    expect(replyCalls, 1);
+    expect(replyParent, 'Nice');
+    expect(replyText, 'hello');
+    expect(plain, isNull);
+  });
+
+  testWidgets('cancel clears the reply target', (tester) async {
+    String? plain;
+    var replyCalls = 0;
+    await _pump(
+      tester,
+      load: (_) async => [_comment('Nice')],
+      submit: (text) async => plain = text,
+      submitReply: (parent, text) async => replyCalls++,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('comment-reply-Nice')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('comment-reply-cancel')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('comment-reply-banner')), findsNothing);
+
+    await tester.enterText(find.byType(TextField), 'plain');
+    await tester.tap(find.byKey(const ValueKey('reel-comments-send')));
+    await tester.pumpAndSettle();
+    expect(plain, 'plain');
+    expect(replyCalls, 0);
+  });
+
+  testWidgets('inline reply label uses server replyTo', (tester) async {
+    await _pump(
+      tester,
+      load: (_) async => [_comment('Nice reply', replyTo: 'Jeric')],
+    );
+    expect(
+      find.byKey(const ValueKey('comment-reply-label-Nice reply')),
+      findsOneWidget,
+    );
+    expect(find.text('Replying to @Jeric'), findsOneWidget);
+  });
+
+  testWidgets('missing submitReply falls back to plain submit', (tester) async {
+    String? plain;
+    await _pump(
+      tester,
+      load: (_) async => [_comment('Nice')],
+      submit: (text) async => plain = text,
+    );
+    await tester.tap(find.byKey(const ValueKey('comment-reply-Nice')));
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), 'still plain');
+    await tester.tap(find.byKey(const ValueKey('reel-comments-send')));
+    await tester.pumpAndSettle();
+    expect(plain, 'still plain');
   });
 }

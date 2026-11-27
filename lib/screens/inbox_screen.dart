@@ -20,10 +20,23 @@ class InboxScreen extends StatefulWidget {
     this.onOpenWorldChat,
     this.onUnreadChanged,
     this.loadAnnouncements,
+    this.loadReelNotifications,
+    this.markReelNotificationsRead,
+    this.onOpenReelNotification,
   });
 
   /// Latest app announcements, shown as the Inbox notification card.
   final Future<List<Announcement>> Function()? loadAnnouncements;
+
+  /// Reel activity on the separate Activity page of this inbox.
+  final Future<
+    ({List<ReelNotification> notifications, int unreadCount, int nextOffset})
+  >
+  Function()?
+  loadReelNotifications;
+  final Future<int> Function({String? id})? markReelNotificationsRead;
+  final void Function(String reelId, {required bool openComments})?
+  onOpenReelNotification;
 
   final DirectChatClient? client;
   final Future<List<ChatUserSummary>> Function(List<String> ids)? loadUsers;
@@ -47,12 +60,112 @@ class _InboxScreenState extends State<InboxScreen> {
   bool _failed = false;
   List<Announcement> _notifications = const [];
   String _notificationsSeenAt = '';
+  String _page = 'messages';
+  List<ReelNotification> _activity = const [];
+  int _activityUnread = 0;
+  bool _activityLoading = true;
+  bool _activityFailed = false;
 
   @override
   void initState() {
     super.initState();
     _subscribe();
     unawaited(_loadNotifications());
+    unawaited(_loadActivity());
+  }
+
+  Future<void> _loadActivity() async {
+    setState(() {
+      _activityLoading = true;
+      _activityFailed = false;
+    });
+    try {
+      final page =
+          await (widget.loadReelNotifications ?? Backend.reelNotifications)();
+      if (!mounted) return;
+      setState(() {
+        _activity = page.notifications;
+        _activityUnread = page.unreadCount;
+        _activityLoading = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _activityLoading = false;
+          _activityFailed = true;
+        });
+      }
+    }
+  }
+
+  void _openActivityNotification(ReelNotification item) {
+    widget.onOpenReelNotification?.call(
+      item.reelId,
+      openComments: item.type != 'like',
+    );
+    unawaited(_markActivityNotificationRead(item));
+  }
+
+  Future<void> _markActivityNotificationRead(ReelNotification item) async {
+    try {
+      final unread =
+          await (widget.markReelNotificationsRead ??
+              Backend.markReelNotificationsRead)(id: item.id);
+      if (!mounted) return;
+      setState(() {
+        _activityUnread = unread;
+        _activity = [
+          for (final row in _activity)
+            row.id == item.id
+                ? ReelNotification(
+                    id: row.id,
+                    type: row.type,
+                    actor: row.actor,
+                    reelId: row.reelId,
+                    commentId: row.commentId,
+                    text: row.text,
+                    createdAt: row.createdAt,
+                    isRead: true,
+                  )
+                : row,
+        ];
+      });
+    } catch (_) {
+      // Best effort: the row stays unread until the next reload.
+    }
+  }
+
+  Future<void> _markActivityRead() async {
+    try {
+      final unread =
+          await (widget.markReelNotificationsRead ??
+              Backend.markReelNotificationsRead)();
+      if (mounted) {
+        setState(() {
+          _activityUnread = unread;
+          _activity = [
+            for (final row in _activity)
+              ReelNotification(
+                id: row.id,
+                type: row.type,
+                actor: row.actor,
+                reelId: row.reelId,
+                commentId: row.commentId,
+                text: row.text,
+                createdAt: row.createdAt,
+                isRead: true,
+              ),
+          ];
+        });
+      }
+      final now = DateTime.now().toUtc().toIso8601String();
+      await Backend.markReads(
+        announcementsSeenAt: now,
+      ).catchError((Object _) {});
+      if (mounted) setState(() => _notificationsSeenAt = now);
+    } catch (_) {
+      // Best effort: the page keeps its unread state for the next retry.
+    }
   }
 
   bool _announcementUnread(Announcement item, String seen) {
@@ -235,183 +348,112 @@ class _InboxScreenState extends State<InboxScreen> {
     String? initial,
     IconData? icon,
     Color ring = AppColors.primary,
+    double itemWidth = 68,
   }) => GestureDetector(
     key: key,
     onTap: onTap,
     child: SizedBox(
-      width: 68,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 60,
-            height: 60,
-            padding: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: ring, width: 2),
+      width: itemWidth,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpace.xs),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 60,
+              height: 60,
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: ring, width: 2),
+              ),
+              child: CircleAvatar(
+                backgroundColor: AppColors.surfaceHigh,
+                backgroundImage: avatarUrl == null || avatarUrl.isEmpty
+                    ? null
+                    : CachedNetworkImageProvider(avatarUrl),
+                child: icon != null
+                    ? Icon(icon, color: AppColors.primary, size: 24)
+                    : Text(initial ?? '?', style: AppText.subtitle),
+              ),
             ),
-            child: CircleAvatar(
-              backgroundColor: AppColors.surfaceHigh,
-              backgroundImage: avatarUrl == null || avatarUrl.isEmpty
-                  ? null
-                  : CachedNetworkImageProvider(avatarUrl),
-              child: icon != null
-                  ? Icon(icon, color: AppColors.primary, size: 24)
-                  : Text(initial ?? '?', style: AppText.subtitle),
+            const SizedBox(height: AppSpace.xs),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppText.caption,
             ),
-          ),
-          const SizedBox(height: AppSpace.xs),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppText.caption,
-          ),
-        ],
+          ],
+        ),
       ),
     ),
   );
 
-  Widget _circleShelf() => SizedBox(
+  Widget _circleShelf() => LayoutBuilder(
     key: const ValueKey('inbox-circles'),
-    height: 104,
-    child: ListView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpace.lg,
-        vertical: AppSpace.sm,
-      ),
-      children: [
-        _circle(
-          label: 'Create',
-          icon: Icons.add,
-          onTap: _newMessage,
-        ),
-        _circle(
-          key: const ValueKey('inbox-world'),
-          label: 'World chat',
-          icon: Icons.public,
-          ring: AppColors.tiktokCoral,
-          onTap: widget.onOpenWorldChat ?? () {},
-        ),
-        for (final thread in _threads.take(12)) ...[
-          _circle(
-            label: _users[thread.peerId(_myId ?? '')]?.name ?? 'Member',
-            avatarUrl: _users[thread.peerId(_myId ?? '')]?.avatarUrl,
-            initial: () {
-              final name = _users[thread.peerId(_myId ?? '')]?.name ?? 'M';
-              return name.isEmpty ? 'M' : name.substring(0, 1).toUpperCase();
-            }(),
-            ring: AppColors.tiktokCoral,
-            onTap: () => _openThread(
-              thread,
-              _users[thread.peerId(_myId ?? '')] ??
-                  ChatUserSummary(
-                    id: thread.peerId(_myId ?? ''),
-                    name: 'Member',
-                  ),
-            ),
+    builder: (context, constraints) {
+      final raw = (constraints.maxWidth - AppSpace.lg * 2) / 4;
+      final itemWidth = raw < 72 ? 72.0 : raw;
+      return SizedBox(
+        height: 104,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpace.lg,
+            vertical: AppSpace.sm,
           ),
-        ],
-      ],
-    ),
+          children: [
+            _circle(
+              label: 'Create',
+              icon: Icons.add,
+              onTap: _newMessage,
+              itemWidth: itemWidth,
+            ),
+            _circle(
+              key: const ValueKey('inbox-world'),
+              label: 'World chat',
+              icon: Icons.public,
+              ring: AppColors.tiktokCoral,
+              onTap: widget.onOpenWorldChat ?? () {},
+              itemWidth: itemWidth,
+            ),
+            for (final thread in _threads.take(12)) ...[
+              _circle(
+                label: _users[thread.peerId(_myId ?? '')]?.name ?? 'Member',
+                avatarUrl: _users[thread.peerId(_myId ?? '')]?.avatarUrl,
+                initial: () {
+                  final name = _users[thread.peerId(_myId ?? '')]?.name ?? 'M';
+                  return name.isEmpty
+                      ? 'M'
+                      : name.substring(0, 1).toUpperCase();
+                }(),
+                ring: AppColors.tiktokCoral,
+                itemWidth: itemWidth,
+                onTap: () => _openThread(
+                  thread,
+                  _users[thread.peerId(_myId ?? '')] ??
+                      ChatUserSummary(
+                        id: thread.peerId(_myId ?? ''),
+                        name: 'Member',
+                      ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    },
   );
 
   @override
   Widget build(BuildContext context) {
     final body = Column(
       children: [
-        _circleShelf(),
-        if (_notifications.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpace.lg,
-              AppSpace.md,
-              AppSpace.lg,
-              AppSpace.sm,
-            ),
-            child: Column(
-              key: const ValueKey('inbox-notifications'),
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'NOTIFICATIONS',
-                  style: AppText.caption.copyWith(color: AppColors.primary),
-                ),
-                const SizedBox(height: AppSpace.xs),
-                for (final item in _notifications)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpace.xs),
-                    child: GlowCard(
-                      key: ValueKey('inbox-notification-${item.id}'),
-                      onTap: () => unawaited(_openNotification(item)),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(
-                                AppRadius.input,
-                              ),
-                            ),
-                            child: const Icon(
-                              Icons.campaign_outlined,
-                              color: AppColors.primary,
-                              size: 20,
-                            ),
-                          ),
-                          const SizedBox(width: AppSpace.md),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  item.title,
-                                  style: AppText.subtitle.copyWith(
-                                    fontSize: 14,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                Text(
-                                  item.body,
-                                  style: AppText.caption,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (_announcementUnread(
-                            item,
-                            _notificationsSeenAt,
-                          ))
-                            Container(
-                              width: 8,
-                              height: 8,
-                              margin: const EdgeInsets.only(
-                                right: AppSpace.sm,
-                              ),
-                              decoration: const BoxDecoration(
-                                color: AppColors.primary,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          const Icon(
-                            Icons.chevron_right,
-                            color: AppColors.textDim,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        Expanded(child: _threadContent()),
+        _pageTabs(),
+        Expanded(
+          child: _page == 'activity' ? _activityContent() : _messagesContent(),
+        ),
       ],
     );
     if (widget.embedded) return body;
@@ -430,11 +472,7 @@ class _InboxScreenState extends State<InboxScreen> {
           children: [
             const Text('Inbox'),
             const SizedBox(width: 6),
-            Icon(
-              Icons.arrow_drop_down,
-              size: 18,
-              color: AppColors.textDim,
-            ),
+            Icon(Icons.arrow_drop_down, size: 18, color: AppColors.textDim),
           ],
         ),
         actions: [
@@ -450,27 +488,358 @@ class _InboxScreenState extends State<InboxScreen> {
     );
   }
 
+  Widget _messagesContent() {
+    return Column(
+      children: [
+        _circleShelf(),
+        Expanded(child: _threadContent()),
+      ],
+    );
+  }
+
+  Widget _announcementSection() => Padding(
+    key: const ValueKey('inbox-notifications'),
+    padding: const EdgeInsets.fromLTRB(
+      AppSpace.lg,
+      AppSpace.md,
+      AppSpace.lg,
+      AppSpace.xs,
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'ANNOUNCEMENTS',
+          style: AppText.caption.copyWith(color: AppColors.primary),
+        ),
+        const SizedBox(height: AppSpace.xs),
+        for (final item in _notifications) _announcementCard(item),
+      ],
+    ),
+  );
+
+  Widget _announcementCard(Announcement item) => Padding(
+    padding: const EdgeInsets.only(bottom: AppSpace.xs),
+    child: GlowCard(
+      key: ValueKey('inbox-notification-${item.id}'),
+      onTap: () => unawaited(_openNotification(item)),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(AppRadius.input),
+            ),
+            child: const Icon(
+              Icons.campaign_outlined,
+              color: AppColors.primary,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: AppSpace.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.title,
+                  style: AppText.subtitle.copyWith(fontSize: 14),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  item.body,
+                  style: AppText.caption,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          if (_announcementUnread(item, _notificationsSeenAt))
+            Container(
+              width: 8,
+              height: 8,
+              margin: const EdgeInsets.only(right: AppSpace.sm),
+              decoration: const BoxDecoration(
+                color: AppColors.primary,
+                shape: BoxShape.circle,
+              ),
+            ),
+          const Icon(Icons.chevron_right, color: AppColors.textDim),
+        ],
+      ),
+    ),
+  );
+
+  Widget _pageTabs() {
+    return Container(
+      key: const ValueKey('inbox-page-tabs'),
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      child: Row(
+        children: [
+          for (final page in ['messages', 'activity'])
+            Expanded(
+              child: Semantics(
+                key: ValueKey('inbox-tab-$page'),
+                button: true,
+                selected: _page == page,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    setState(() => _page = page);
+                    if (page == 'activity') unawaited(_loadActivity());
+                  },
+                  child: SizedBox(
+                    height: kTouchMin,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          page == 'messages' ? 'Messages' : 'Activity',
+                          style: AppText.subtitle.copyWith(
+                            fontSize: 14,
+                            fontWeight: _page == page
+                                ? FontWeight.w800
+                                : FontWeight.w600,
+                            color: _page == page
+                                ? Colors.white
+                                : AppColors.textDim,
+                          ),
+                        ),
+                        if (page == 'activity' && _activityUnread > 0) ...[
+                          const SizedBox(width: AppSpace.xs),
+                          Container(
+                            key: const ValueKey('inbox-activity-badge'),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1,
+                            ),
+                            decoration: const BoxDecoration(
+                              color: AppColors.tiktokCoral,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Text(
+                              '$_activityUnread',
+                              style: AppText.caption.copyWith(
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _activityContent() {
+    if (_activity.isEmpty &&
+        _notifications.isEmpty &&
+        !_activityLoading &&
+        !_activityFailed) {
+      return EmptyState(
+        key: const ValueKey('inbox-notifications-empty'),
+        icon: Icons.favorite_border,
+        title: 'No activity yet',
+        message: 'Announcements and likes on your reels show up here.',
+      );
+    }
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpace.lg,
+            AppSpace.md,
+            AppSpace.lg,
+            AppSpace.xs,
+          ),
+          child: Row(
+            children: [
+              Text(
+                'ACTIVITY',
+                style: AppText.caption.copyWith(color: AppColors.primary),
+              ),
+              const Spacer(),
+              TextButton(
+                key: const ValueKey('inbox-notifications-read-all'),
+                onPressed: () => unawaited(_markActivityRead()),
+                child: const Text('Mark all read'),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpace.lg,
+              AppSpace.xs,
+              AppSpace.lg,
+              AppSpace.xxl,
+            ),
+            children: [
+              if (_notifications.isNotEmpty) _announcementSection(),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  0,
+                  AppSpace.md,
+                  0,
+                  AppSpace.xs,
+                ),
+                child: Text(
+                  'REEL ACTIVITY',
+                  style: AppText.caption.copyWith(color: AppColors.primary),
+                ),
+              ),
+              if (_activityLoading && _activity.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(AppSpace.md),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_activityFailed)
+                Padding(
+                  padding: const EdgeInsets.all(AppSpace.md),
+                  child: Column(
+                    children: [
+                      const Text('Could not load activity'),
+                      TextButton(
+                        key: const ValueKey('inbox-notifications-retry'),
+                        onPressed: () => unawaited(_loadActivity()),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                )
+              else if (_activity.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(AppSpace.md),
+                  child: Text('No reel activity yet.'),
+                )
+              else
+                for (final item in _activity) _activityRow(item),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _activityTime(String iso) {
+    final parsed = DateTime.tryParse(iso);
+    if (parsed == null) return '';
+    final age = DateTime.now().difference(parsed.toLocal());
+    if (age.inDays >= 7) return '${age.inDays ~/ 7}w';
+    if (age.inDays > 0) return '${age.inDays}d';
+    if (age.inHours > 0) return '${age.inHours}h';
+    if (age.inMinutes > 0) return '${age.inMinutes}m';
+    return 'now';
+  }
+
+  Widget _activityRow(ReelNotification item) {
+    final name = item.actor.displayName.isEmpty
+        ? 'Member'
+        : item.actor.displayName;
+    final action = switch (item.type) {
+      'like' => 'liked your reel',
+      'comment' => 'commented on your reel',
+      'reply' => 'replied to your comment',
+      _ => 'posted on your reel',
+    };
+    return GlowCard(
+      key: ValueKey('inbox-notification-${item.id}'),
+      onTap: () => _openActivityNotification(item),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: AppColors.surfaceHigh,
+            backgroundImage:
+                item.actor.avatarUrl == null || item.actor.avatarUrl!.isEmpty
+                ? null
+                : CachedNetworkImageProvider(item.actor.avatarUrl!),
+            child: Text(
+              name.substring(0, 1).toUpperCase(),
+              style: AppText.caption,
+            ),
+          ),
+          const SizedBox(width: AppSpace.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name, style: AppText.subtitle.copyWith(fontSize: 14)),
+                Text(action, style: AppText.caption),
+                if (item.text.isNotEmpty && item.type != 'like')
+                  Text(
+                    item.text,
+                    style: AppText.caption,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpace.xs),
+          Text(
+            _activityTime(item.createdAt),
+            style: AppText.caption.copyWith(
+              fontSize: 11,
+              color: AppColors.textDim,
+            ),
+          ),
+          if (!item.isRead)
+            Semantics(
+              label: 'Unread activity',
+              child: Container(
+                key: ValueKey('inbox-notification-unread-${item.id}'),
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: AppColors.tiktokCoral,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _threadContent() {
     return _loading
         ? const Center(child: CircularProgressIndicator())
         : _failed
-        ? EmptyState(
-            icon: Icons.cloud_off_outlined,
-            title: 'Could not load messages',
-            message: 'Check your connection and try again.',
-            action: TextButton(
-              onPressed: _subscribe,
-              child: const Text('Retry'),
+        ? SingleChildScrollView(
+            child: EmptyState(
+              icon: Icons.cloud_off_outlined,
+              title: 'Could not load messages',
+              message: 'Check your connection and try again.',
+              action: TextButton(
+                onPressed: _subscribe,
+                child: const Text('Retry'),
+              ),
             ),
           )
         : _threads.isEmpty
-        ? EmptyState(
-            icon: Icons.forum_outlined,
-            title: 'No private messages yet',
-            message: 'Start a conversation with another Ghosst member.',
-            action: TextButton(
-              onPressed: _newMessage,
-              child: const Text('New message'),
+        ? SingleChildScrollView(
+            child: EmptyState(
+              icon: Icons.forum_outlined,
+              title: 'No private messages yet',
+              message: 'Start a conversation with another Ghosst member.',
+              action: TextButton(
+                onPressed: _newMessage,
+                child: const Text('New message'),
+              ),
             ),
           )
         : ListView.separated(

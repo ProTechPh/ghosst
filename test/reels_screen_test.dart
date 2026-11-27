@@ -66,13 +66,16 @@ Future<void> _pump(
   Future<List<Tutorial>> Function()? loadTutorials,
   Future<List<WebsiteFeedback>> Function()? loadSiteFeedback,
   ValueChanged<Tutorial>? onOpenTutorial,
+  String? initialReelId,
+  bool openCommentsOnLoad = false,
+  Key? screenKey,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
       theme: AppTheme.dark,
       home: Scaffold(
         body: ReelsScreen(
-          key: UniqueKey(),
+          key: screenKey ?? UniqueKey(),
           load: load,
           onLike: onLike,
           onUnlike: onUnlike,
@@ -90,6 +93,8 @@ Future<void> _pump(
           loadTutorials: loadTutorials,
           loadSiteFeedback: loadSiteFeedback,
           onOpenTutorial: onOpenTutorial,
+          initialReelId: initialReelId,
+          openCommentsOnLoad: openCommentsOnLoad,
           loadComments: (_, _) async => const [],
           submitComment: (_, _) async {},
         ),
@@ -592,6 +597,44 @@ void main() {
     expect(selectedDot.properties.selected, isTrue);
   });
 
+  testWidgets('tapping a reel image opens a full-screen viewer', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      load: (_, _) async => ReelFeedPage(
+        reels: [_reel('r1', 'One', imageCount: 2)],
+        nextOffset: 1,
+      ),
+    );
+    await _settle(tester);
+
+    expect(find.byKey(const ValueKey('reel-image-viewer')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('reel-image-open-r1')));
+    await _settle(tester);
+
+    expect(find.byKey(const ValueKey('reel-image-viewer')), findsOneWidget);
+    final fullImage = tester.widget<CachedNetworkImage>(
+      find.byKey(const ValueKey('reel-viewer-image-r1-1')),
+    );
+    expect(fullImage.fit, BoxFit.contain);
+    expect(find.text('1 of 2'), findsOneWidget);
+
+    await tester.drag(
+      find.byKey(const ValueKey('reel-viewer-pages')),
+      const Offset(-400, 0),
+    );
+    await _settle(tester);
+    expect(
+      find.byKey(const ValueKey('reel-viewer-image-r1-2')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('reel-image-viewer-close')));
+    await _settle(tester);
+    expect(find.byKey(const ValueKey('reel-image-viewer')), findsNothing);
+  });
+
   testWidgets('empty and error states support Retry', (tester) async {
     await _pump(
       tester,
@@ -792,5 +835,50 @@ void main() {
     );
     await _settle(tester);
     expect(find.text('Caption selected'), findsOneWidget);
+  });
+
+  testWidgets('notifications open the requested reel comments once', (
+    tester,
+  ) async {
+    final key = ValueKey('reels-screen-activity');
+    Future<ReelFeedPage> loader(_, _) async => ReelFeedPage(
+      reels: [_reel('r1', 'One')],
+      nextOffset: 1,
+    );
+    await _pump(
+      tester,
+      load: loader,
+      initialReelId: 'r1',
+      openCommentsOnLoad: true,
+      screenKey: key,
+    );
+    await _settle(tester);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('reel-comments-sheet')), findsOneWidget);
+
+    await _pump(
+      tester,
+      load: loader,
+      initialReelId: 'r1',
+      openCommentsOnLoad: true,
+      refreshToken: 1,
+      screenKey: key,
+    );
+    await _settle(tester);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('reel-comments-sheet')), findsOneWidget);
+  });
+
+  testWidgets('no comments sheet without the activity flag', (tester) async {
+    await _pump(
+      tester,
+      load: (_, _) async => ReelFeedPage(
+        reels: [_reel('r1', 'One')],
+        nextOffset: 1,
+      ),
+      initialReelId: 'r1',
+    );
+    await _settle(tester);
+    expect(find.byKey(const ValueKey('reel-comments-sheet')), findsNothing);
   });
 }

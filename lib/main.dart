@@ -874,7 +874,7 @@ class _HomeShellState extends State<HomeShell> {
     }
   }
 
-  Future<void> _openCreatorReel(Reel reel) async {
+  Future<void> _openCreatorReel(Reel reel, {bool openComments = false}) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => Scaffold(
@@ -890,6 +890,7 @@ class _HomeShellState extends State<HomeShell> {
             onOpenFeedback: _openWebsiteFeedback,
             initialReelId: reel.id,
             initialCreatorId: reel.creator.id,
+            openCommentsOnLoad: openComments,
             load: (feed, offset) async {
               final page = await Backend.reels(feed: feed, offset: offset);
               final index = page.reels.indexWhere((item) => item.id == reel.id);
@@ -911,6 +912,23 @@ class _HomeShellState extends State<HomeShell> {
         ),
       ),
     );
+  }
+
+  Future<void> _openReelFromActivity(
+    String reelId, {
+    required bool openComments,
+  }) async {
+    try {
+      final reel = await Backend.reel(reelId);
+      if (!mounted) return;
+      await _openCreatorReel(reel, openComments: openComments);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Could not open reel.')));
+      }
+    }
   }
 
   Future<void> _openSocialList(String userId, SocialListDirection direction) {
@@ -1085,6 +1103,9 @@ class _HomeShellState extends State<HomeShell> {
           peerName: peer.name,
           peerAvatarUrl: peer.avatarUrl,
         ),
+        onOpenReelNotification: (reelId, {required bool openComments}) {
+          unawaited(_openReelFromActivity(reelId, openComments: openComments));
+        },
       ),
       ProfileHubScreen(
         key: ValueKey('profile-hub-$_reelRefresh'),

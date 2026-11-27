@@ -584,11 +584,45 @@ class Backend {
         .toList();
   }
 
-  static Future<void> postReelComment(String id, String text) =>
-      _api.post('/reels/$id/comments', data: {'text': text});
+  static Future<void> postReelComment(
+    String id,
+    String text, {
+    String? parentId,
+  }) => _api.post(
+    '/reels/$id/comments',
+    data: {'text': text, 'parentId': ?parentId},
+  );
 
   static Future<void> deleteReelComment(String reelId, String commentId) =>
       _api.delete('/reels/$reelId/comments/$commentId');
+
+  static Future<Reel> reel(String id) async {
+    final res = await _api.get('/reels/$id');
+    return Reel.fromJson(
+      (res['reel'] as Map<String, dynamic>?) ?? const <String, dynamic>{},
+    );
+  }
+
+  static Future<({List<ReelNotification> notifications, int unreadCount, int nextOffset})>
+  reelNotifications({int limit = 20, int offset = 0}) async {
+    final res = await _api.get(
+      '/me/reel-notifications',
+      query: {'limit': '$limit', 'offset': '$offset'},
+    );
+    return (
+      notifications: (res['notifications'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(ReelNotification.fromJson)
+          .toList(),
+      unreadCount: (res['unreadCount'] as num?)?.toInt() ?? 0,
+      nextOffset: (res['nextOffset'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  static Future<int> markReelNotificationsRead({String? id}) async {
+    final res = await _api.post('/me/reel-notifications/read', data: {'id': ?id});
+    return (res['unreadCount'] as num?)?.toInt() ?? 0;
+  }
 
   static Future<List<Reel>> userReels(
     String id, {

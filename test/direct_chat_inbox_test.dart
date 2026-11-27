@@ -70,6 +70,31 @@ DirectThread _thread({
   updatedAt: lastMessageAt,
 );
 
+ReelNotification _notif(
+  String id,
+  String type, {
+  String reelId = 'r1',
+  bool isRead = false,
+  String? createdAt,
+}) => ReelNotification(
+  id: id,
+  type: type,
+  actor: PublicUser(
+    id: '7',
+    displayName: 'Juan',
+    username: 'juan',
+    createdAt: '',
+    followerCount: 0,
+    followingCount: 0,
+    reelCount: 0,
+  ),
+  reelId: reelId,
+  commentId: 'c1',
+  text: 'Nice reel',
+  createdAt: createdAt ?? '2026-11-27T10:00:00Z',
+  isRead: isRead,
+);
+
 Future<void> _pump(
   WidgetTester tester,
   _FakeDirectChatClient client, {
@@ -80,7 +105,20 @@ Future<void> _pump(
   VoidCallback? onOpenWorldChat,
   ValueChanged<int>? onUnreadChanged,
   Future<List<Announcement>> Function()? loadAnnouncements,
+  Future<
+    ({List<ReelNotification> notifications, int unreadCount, int nextOffset})
+  >
+  Function()?
+  loadReelNotifications,
+  Future<int> Function({String? id})? markReelNotificationsRead,
+  void Function(String reelId, {required bool openComments})?
+  onOpenReelNotification,
+  Size size = const Size(800, 600),
 }) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(
     MaterialApp(
       theme: AppTheme.dark,
@@ -104,6 +142,16 @@ Future<void> _pump(
           onUnreadChanged: onUnreadChanged,
           loadAnnouncements:
               loadAnnouncements ?? () async => const <Announcement>[],
+          loadReelNotifications:
+              loadReelNotifications ??
+              () async => (
+                notifications: const <ReelNotification>[],
+                unreadCount: 0,
+                nextOffset: 0,
+              ),
+          markReelNotificationsRead:
+              markReelNotificationsRead ?? ({id}) async => 0,
+          onOpenReelNotification: onOpenReelNotification,
         ),
       ),
     ),
@@ -148,15 +196,17 @@ void main() {
     expect(find.byKey(const ValueKey('inbox-add')), findsOneWidget);
     expect(find.byKey(const ValueKey('inbox-search')), findsOneWidget);
     expect(find.byKey(const ValueKey('inbox-circles')), findsOneWidget);
-    expect(find.byKey(const ValueKey('inbox-notifications')), findsOneWidget);
+    expect(find.byKey(const ValueKey('inbox-notifications')), findsNothing);
     expect(find.byKey(const ValueKey('inbox-world')), findsOneWidget);
     expect(find.byKey(const ValueKey('thread-me__old')), findsOneWidget);
     expect(unread, 1);
+
+    await tester.tap(find.byKey(const ValueKey('inbox-tab-activity')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('inbox-notifications')), findsOneWidget);
   });
 
-  testWidgets('inbox shows all announcements as notifications', (
-    tester,
-  ) async {
+  testWidgets('inbox shows all announcements as notifications', (tester) async {
     final client = _FakeDirectChatClient();
     await _pump(
       tester,
@@ -178,6 +228,8 @@ void main() {
       ],
     );
     client.emit(const []);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('inbox-tab-activity')));
     await tester.pumpAndSettle();
 
     expect(find.text('New drop'), findsOneWidget);
@@ -314,5 +366,369 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(opened?.id, 'me__new');
+  });
+
+  testWidgets('activity tab lists notifications with unread dots and badge', (
+    tester,
+  ) async {
+    final client = _FakeDirectChatClient();
+    await _pump(
+      tester,
+      client,
+      loadReelNotifications: () async => (
+        notifications: [
+          _notif('n1', 'comment'),
+          _notif('n2', 'like', reelId: 'r2', isRead: true),
+        ],
+        unreadCount: 1,
+        nextOffset: 2,
+      ),
+    );
+    client.emit(const []);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('inbox-tab-activity')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('inbox-activity-badge')), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
+    expect(find.byKey(const ValueKey('inbox-notification-n1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('inbox-notification-n2')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('inbox-notification-unread-n1')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('inbox-notification-unread-n2')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('mark all read clears unread state', (tester) async {
+    final client = _FakeDirectChatClient();
+    String? markedId;
+    var calls = 0;
+    await _pump(
+      tester,
+      client,
+      loadReelNotifications: () async => (
+        notifications: [_notif('n1', 'comment')],
+        unreadCount: 1,
+        nextOffset: 1,
+      ),
+      markReelNotificationsRead: ({id}) async {
+        markedId = id;
+        calls++;
+        return 0;
+      },
+    );
+    client.emit(const []);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('inbox-tab-activity')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('inbox-notifications-read-all')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(calls, 1);
+    expect(markedId, isNull);
+    expect(find.byKey(const ValueKey('inbox-activity-badge')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('inbox-notification-unread-n1')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('tapping a comment notification routes to reel comments', (
+    tester,
+  ) async {
+    final client = _FakeDirectChatClient();
+    String? reelId;
+    bool? routedComments;
+    await _pump(
+      tester,
+      client,
+      loadReelNotifications: () async => (
+        notifications: [
+          _notif('n1', 'comment'),
+          _notif('n2', 'like', reelId: 'r2', isRead: true),
+        ],
+        unreadCount: 1,
+        nextOffset: 2,
+      ),
+      onOpenReelNotification: (id, {required bool openComments}) {
+        reelId = id;
+        routedComments = openComments;
+      },
+    );
+    client.emit(const []);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('inbox-tab-activity')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('inbox-notification-n1')));
+    expect(reelId, 'r1');
+    expect(routedComments, isTrue);
+    await tester.tap(find.byKey(const ValueKey('inbox-notification-n2')));
+    expect(reelId, 'r2');
+    expect(routedComments, isFalse);
+  });
+
+  testWidgets('activity load failure shows retry without breaking messages', (
+    tester,
+  ) async {
+    final client = _FakeDirectChatClient();
+    var fail = true;
+    await _pump(
+      tester,
+      client,
+      loadReelNotifications: () async {
+        if (fail) throw StateError('offline');
+        return (
+          notifications: [_notif('n1', 'comment')],
+          unreadCount: 1,
+          nextOffset: 1,
+        );
+      },
+    );
+    client.emit([
+      _thread(
+        id: 'me__old',
+        lastSenderId: 'old',
+        lastMessageAt: 2000,
+        lastMessage: 'hello',
+      ),
+    ]);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('inbox-tab-activity')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('inbox-notifications-retry')),
+      findsOneWidget,
+    );
+    fail = false;
+    await tester.tap(find.byKey(const ValueKey('inbox-notifications-retry')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('inbox-notification-n1')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('inbox-tab-messages')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('thread-me__old')), findsOneWidget);
+  });
+
+  testWidgets('activity reloads when the tab is entered again', (tester) async {
+    final client = _FakeDirectChatClient();
+    var rows = <ReelNotification>[_notif('n1', 'comment')];
+    await _pump(
+      tester,
+      client,
+      loadReelNotifications: () async => (
+        notifications: rows,
+        unreadCount: rows.length,
+        nextOffset: rows.length,
+      ),
+    );
+    client.emit(const []);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('inbox-tab-activity')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('inbox-notification-n1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('inbox-notification-n2')), findsNothing);
+
+    rows = [
+      _notif('n1', 'comment'),
+      _notif('n2', 'like', reelId: 'r2', isRead: true),
+    ];
+    await tester.tap(find.byKey(const ValueKey('inbox-tab-messages')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('inbox-tab-activity')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('inbox-notification-n2')), findsOneWidget);
+  });
+
+  testWidgets('activity rows show when the action happened', (tester) async {
+    final client = _FakeDirectChatClient();
+    await _pump(
+      tester,
+      client,
+      loadReelNotifications: () async => (
+        notifications: [
+          _notif(
+            'n1',
+            'comment',
+            createdAt: DateTime.now()
+                .subtract(const Duration(hours: 2))
+                .toIso8601String(),
+          ),
+        ],
+        unreadCount: 1,
+        nextOffset: 1,
+      ),
+    );
+    client.emit(const []);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('inbox-tab-activity')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2h'), findsOneWidget);
+  });
+
+  testWidgets('opening a notification does not wait for read receipt', (
+    tester,
+  ) async {
+    final client = _FakeDirectChatClient();
+    final never = Completer<int>();
+    String? routed;
+    await _pump(
+      tester,
+      client,
+      loadReelNotifications: () async => (
+        notifications: [_notif('n1', 'comment')],
+        unreadCount: 1,
+        nextOffset: 1,
+      ),
+      markReelNotificationsRead: ({id}) => never.future,
+      onOpenReelNotification: (id, {required bool openComments}) => routed = id,
+    );
+    client.emit(const []);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('inbox-tab-activity')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('inbox-notification-n1')));
+    await tester.pump();
+    expect(routed, 'r1');
+  });
+
+  testWidgets('circle shelf labels do not collide on a narrow screen', (
+    tester,
+  ) async {
+    final client = _FakeDirectChatClient();
+    DirectThread thread(String peer) => DirectThread(
+      id: 'me__$peer',
+      participants: ['me', peer],
+      lastMessage: 'hi',
+      lastMessageAt: 2000,
+      lastSenderId: peer,
+      lastReadAt: const {},
+      createdAt: 1000,
+      updatedAt: 2000,
+    );
+    await _pump(
+      tester,
+      client,
+      size: const Size(320, 640),
+      loadUsers: (ids) async => [
+        for (final id in ids)
+          ChatUserSummary(
+            id: id,
+            name: id == 'sophie' ? 'Sophie Sophie G.' : 'Sylvie',
+          ),
+      ],
+    );
+    client.emit([thread('sophie'), thread('sylvie')]);
+    await tester.pumpAndSettle();
+
+    final shelf = find.byKey(const ValueKey('inbox-circles'));
+    final world = tester.getRect(
+      find.descendant(of: shelf, matching: find.text('World chat')),
+    );
+    final sophie = tester.getRect(
+      find.descendant(of: shelf, matching: find.text('Sophie Sophie G.')),
+    );
+    expect(
+      world.right,
+      lessThan(sophie.left),
+      reason: 'top circles must not run their labels together',
+    );
+  });
+
+  testWidgets('circle shelf uses the available width', (tester) async {
+    final client = _FakeDirectChatClient();
+    await _pump(tester, client, size: const Size(320, 640));
+    client.emit(const []);
+    await tester.pumpAndSettle();
+    final narrow = tester
+        .getRect(find.byKey(const ValueKey('inbox-world')))
+        .width;
+
+    await _pump(tester, client, size: const Size(800, 600));
+    client.emit(const []);
+    await tester.pumpAndSettle();
+    final wide = tester
+        .getRect(find.byKey(const ValueKey('inbox-world')))
+        .width;
+
+    expect(wide, greaterThan(narrow + 40));
+  });
+
+  testWidgets('announcements and reel activity share the Activity tab', (
+    tester,
+  ) async {
+    final client = _FakeDirectChatClient();
+    await _pump(
+      tester,
+      client,
+      loadAnnouncements: () async => [
+        const Announcement(
+          id: 'a1',
+          title: 'New drop',
+          body: 'Fresh keys are live.',
+          createdAt: '2026-11-26T10:00:00.000Z',
+        ),
+      ],
+      loadReelNotifications: () async => (
+        notifications: [_notif('n1', 'like')],
+        unreadCount: 1,
+        nextOffset: 1,
+      ),
+    );
+    client.emit(const []);
+    await tester.pumpAndSettle();
+
+    expect(find.text('New drop'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('inbox-tab-activity')));
+    await tester.pumpAndSettle();
+    expect(find.text('New drop'), findsOneWidget);
+    expect(find.byKey(const ValueKey('inbox-notification-n1')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('inbox-tab-messages')));
+    await tester.pumpAndSettle();
+    expect(find.text('New drop'), findsNothing);
+  });
+
+  testWidgets('announcements remain visible when reel activity fails', (
+    tester,
+  ) async {
+    final client = _FakeDirectChatClient();
+    await _pump(
+      tester,
+      client,
+      loadAnnouncements: () async => [
+        const Announcement(
+          id: 'a1',
+          title: 'New drop',
+          body: 'Fresh keys are live.',
+          createdAt: '2026-11-26T10:00:00.000Z',
+        ),
+      ],
+      loadReelNotifications: () async {
+        throw StateError('offline');
+      },
+    );
+    client.emit(const []);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('inbox-tab-activity')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('New drop'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('inbox-notifications-retry')),
+      findsOneWidget,
+    );
   });
 }
