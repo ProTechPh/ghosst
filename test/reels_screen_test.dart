@@ -592,6 +592,44 @@ void main() {
     expect(selectedDot.properties.selected, isTrue);
   });
 
+  testWidgets('tapping a reel image opens a full-screen viewer', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      load: (_, _) async => ReelFeedPage(
+        reels: [_reel('r1', 'One', imageCount: 2)],
+        nextOffset: 1,
+      ),
+    );
+    await _settle(tester);
+
+    expect(find.byKey(const ValueKey('reel-image-viewer')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('reel-image-open-r1')));
+    await _settle(tester);
+
+    expect(find.byKey(const ValueKey('reel-image-viewer')), findsOneWidget);
+    final fullImage = tester.widget<CachedNetworkImage>(
+      find.byKey(const ValueKey('reel-viewer-image-r1-1')),
+    );
+    expect(fullImage.fit, BoxFit.contain);
+    expect(find.text('1 of 2'), findsOneWidget);
+
+    await tester.drag(
+      find.byKey(const ValueKey('reel-viewer-pages')),
+      const Offset(-400, 0),
+    );
+    await _settle(tester);
+    expect(
+      find.byKey(const ValueKey('reel-viewer-image-r1-2')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('reel-image-viewer-close')));
+    await _settle(tester);
+    expect(find.byKey(const ValueKey('reel-image-viewer')), findsNothing);
+  });
+
   testWidgets('empty and error states support Retry', (tester) async {
     await _pump(
       tester,

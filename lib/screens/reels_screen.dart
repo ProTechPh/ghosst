@@ -900,60 +900,156 @@ class _PostCarousel extends StatefulWidget {
 class _PostCarouselState extends State<_PostCarousel> {
   int _index = 0;
 
+  void _openViewer() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => _ReelImageViewer(
+          reelId: widget.reel.id,
+          images: widget.reel.images,
+          initialIndex: _index,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final reel = widget.reel;
     final images = reel.images;
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppRadius.card),
-      child: AspectRatio(
-        aspectRatio: 16 / 9,
-        child: Stack(
-          alignment: Alignment.bottomCenter,
-          children: [
-            PageView.builder(
-              key: ValueKey('reel-carousel-${reel.id}'),
-              itemCount: images.length,
-              onPageChanged: (i) => setState(() => _index = i),
-              itemBuilder: (_, i) => CachedNetworkImage(
-                key: ValueKey('reel-image-${reel.id}-${images[i].position}'),
-                imageUrl: images[i].url,
-                fit: BoxFit.cover,
-                errorWidget: (_, _, _) => const Center(
-                  child: Icon(
-                    Icons.broken_image_outlined,
-                    color: Colors.white54,
+      child: Semantics(
+        key: ValueKey('reel-image-open-${reel.id}'),
+        button: true,
+        label: 'View image ${_index + 1} of ${images.length} full screen',
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _openViewer,
+          child: AspectRatio(
+            aspectRatio: 16 / 9,
+            child: Stack(
+              alignment: Alignment.bottomCenter,
+              children: [
+                PageView.builder(
+                  key: ValueKey('reel-carousel-${reel.id}'),
+                  itemCount: images.length,
+                  onPageChanged: (i) => setState(() => _index = i),
+                  itemBuilder: (_, i) => CachedNetworkImage(
+                    key: ValueKey(
+                      'reel-image-${reel.id}-${images[i].position}',
+                    ),
+                    imageUrl: images[i].url,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, _, _) => const Center(
+                      child: Icon(
+                        Icons.broken_image_outlined,
+                        color: Colors.white54,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-            if (images.length > 1)
-              Padding(
-                padding: const EdgeInsets.only(bottom: AppSpace.xs),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    for (var i = 0; i < images.length; i++)
-                      Semantics(
-                        key: ValueKey('reel-dot-semantics-${reel.id}-$i'),
-                        label:
-                            'Image ${images[i].position} of ${images.length}',
-                        selected: i == _index,
-                        child: Container(
-                          key: ValueKey('reel-dot-${reel.id}-$i'),
-                          width: 6,
-                          height: 6,
-                          margin: const EdgeInsets.symmetric(horizontal: 3),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: i == _index ? Colors.white : Colors.white38,
+                if (images.length > 1)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpace.xs),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        for (var i = 0; i < images.length; i++)
+                          Semantics(
+                            key: ValueKey('reel-dot-semantics-${reel.id}-$i'),
+                            label:
+                                'Image ${images[i].position} of ${images.length}',
+                            selected: i == _index,
+                            child: Container(
+                              key: ValueKey('reel-dot-${reel.id}-$i'),
+                              width: 6,
+                              height: 6,
+                              margin: const EdgeInsets.symmetric(horizontal: 3),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: i == _index
+                                    ? Colors.white
+                                    : Colors.white38,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-          ],
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReelImageViewer extends StatefulWidget {
+  const _ReelImageViewer({
+    required this.reelId,
+    required this.images,
+    required this.initialIndex,
+  });
+
+  final String reelId;
+  final List<ReelImage> images;
+  final int initialIndex;
+
+  @override
+  State<_ReelImageViewer> createState() => _ReelImageViewerState();
+}
+
+class _ReelImageViewerState extends State<_ReelImageViewer> {
+  late final PageController _controller = PageController(
+    initialPage: widget.initialIndex,
+  );
+  int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final images = widget.images;
+    return Scaffold(
+      key: const ValueKey('reel-image-viewer'),
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text('${_index + 1} of ${images.length}'),
+        leading: IconButton(
+          key: const ValueKey('reel-image-viewer-close'),
+          icon: const Icon(Icons.close),
+          tooltip: 'Close',
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: PageView.builder(
+        key: const ValueKey('reel-viewer-pages'),
+        controller: _controller,
+        itemCount: images.length,
+        onPageChanged: (i) => setState(() => _index = i),
+        itemBuilder: (_, i) => Semantics(
+          label: 'Image ${i + 1} of ${images.length}',
+          child: CachedNetworkImage(
+            key: ValueKey('reel-viewer-image-${widget.reelId}-${i + 1}'),
+            imageUrl: images[i].url,
+            fit: BoxFit.contain,
+            errorWidget: (_, _, _) => const Center(
+              child: Icon(Icons.broken_image_outlined, color: Colors.white54),
+            ),
+          ),
         ),
       ),
     );
