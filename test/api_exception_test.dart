@@ -82,6 +82,25 @@ void main() {
       expect(api.retryable, isFalse);
     });
 
+    test('reel post ban keeps its friendly in-app message', () {
+      final api = ApiException.fromDio(_error(
+        status: 403,
+        data: {
+          'ok': false,
+          'error': {
+            'code': 'reels_post_banned',
+            'message': 'Posting reels is temporarily disabled for your account.',
+          },
+        },
+      ));
+
+      expect(api.kind, ApiErrorKind.forbidden);
+      expect(
+        api.userMessage,
+        'You cannot post reels right now. You can still browse and chat.',
+      );
+    });
+
     test('connection error is a retryable network failure', () {
       final api = ApiException.fromDio(_error(
         type: DioExceptionType.connectionError,
