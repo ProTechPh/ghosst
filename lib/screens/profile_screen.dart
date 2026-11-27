@@ -17,6 +17,7 @@ import '../theme.dart';
 import 'my_apps_screen.dart';
 import 'announcements_screen.dart';
 import 'feedback_screen.dart';
+import 'referral_sheet.dart';
 import 'tutorials_screen.dart';
 import 'wallet_screen.dart';
 
@@ -240,6 +241,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ).push(MaterialPageRoute<void>(builder: (_) => const WalletScreen()));
   }
 
+  Future<void> _openReferral() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => ReferralSheet(
+        referralCode: _user?.referralCode ?? '',
+        onClaim: Backend.claimReferral,
+      ),
+    );
+  }
+
   void _openAnnouncements() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const AnnouncementsScreen()),
@@ -327,6 +339,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SectionHeader(title: 'Account'),
             const SizedBox(height: AppSpace.sm),
             _group([
+              _row(
+                icon: Icons.people_outline,
+                label: 'Referral',
+                hint: 'Invite · +100 coins',
+                onTap: _openReferral,
+              ),
               _row(
                 icon: Icons.account_balance_wallet_outlined,
                 label: 'Wallet',
