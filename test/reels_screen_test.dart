@@ -69,6 +69,8 @@ Future<void> _pump(
   String? initialReelId,
   bool openCommentsOnLoad = false,
   Key? screenKey,
+  VoidCallback? onOpenSearch,
+  Future<Reel> Function(String)? loadReel,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -95,6 +97,8 @@ Future<void> _pump(
           onOpenTutorial: onOpenTutorial,
           initialReelId: initialReelId,
           openCommentsOnLoad: openCommentsOnLoad,
+          onOpenSearch: onOpenSearch,
+          loadReel: loadReel,
           loadComments: (_, _) async => const [],
           submitComment: (_, _) async {},
         ),
@@ -880,5 +884,42 @@ void main() {
     );
     await _settle(tester);
     expect(find.byKey(const ValueKey('reel-comments-sheet')), findsNothing);
+  });
+
+  testWidgets('reels search button appears only when wired', (tester) async {
+    var taps = 0;
+    Future<ReelFeedPage> loader(_, _) async => ReelFeedPage(
+      reels: [_reel('r1', 'One')],
+      nextOffset: 1,
+    );
+    await _pump(
+      tester,
+      load: loader,
+      onOpenSearch: () => taps++,
+    );
+    await _settle(tester);
+
+    expect(find.byKey(const ValueKey('reels-search')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('reels-search')));
+    expect(taps, 1);
+
+    await _pump(tester, load: loader);
+    await _settle(tester);
+    expect(find.byKey(const ValueKey('reels-search')), findsNothing);
+  });
+
+  testWidgets('missing selected reel is fetched by id', (tester) async {
+    await _pump(
+      tester,
+      load: (_, _) async => ReelFeedPage(
+        reels: [_reel('r1', 'Other')],
+        nextOffset: 1,
+      ),
+      initialReelId: 'selected',
+      loadReel: (id) async => _reel('selected', 'Creator'),
+    );
+    await _settle(tester);
+
+    expect(find.text('Caption selected'), findsOneWidget);
   });
 }
