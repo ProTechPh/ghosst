@@ -35,7 +35,8 @@ function me_claim_referral(array $ctx): array
     if ($uid === '') throw new ApiError(401, 'auth', 'Not signed in');
 
     $code = strtoupper(trim((string) (read_json()['code'] ?? '')));
-    if (!preg_match('/^REF-[A-Z2-9]{6}$/', $code)) {
+    // Lumang codes ay may 0/1 o walang REF- prefix — tanggapin ang mga yun.
+    if (!preg_match('/^(REF-)?[A-Z0-9]{4,12}$/', $code)) {
         throw new ApiError(400, 'invalid_referral_code', 'Invalid referral code');
     }
 

@@ -4,11 +4,13 @@ import 'package:ghosst/screens/referral_sheet.dart';
 import 'package:ghosst/services/worker_backend.dart';
 
 void main() {
-  test('normalizes a referral code and rejects malformed ones', () {
+  test('normalizes legacy and new referral codes, rejects malformed ones', () {
     expect(Backend.normalizeReferralCode(' ref-abcd23 '), 'REF-ABCD23');
-    expect(Backend.normalizeReferralCode('REF-000000'), '');
+    expect(Backend.normalizeReferralCode('REF-000000'), 'REF-000000');
+    expect(Backend.normalizeReferralCode(' abc123 '), 'ABC123');
     expect(Backend.normalizeReferralCode(''), '');
-    expect(Backend.normalizeReferralCode('REF-ABCDEFG'), '');
+    expect(Backend.normalizeReferralCode('REF-AB'), '');
+    expect(Backend.normalizeReferralCode('REF-ABCDEFGHIJKLM'), '');
   });
 
   test('invite text keeps a legacy referral code as stored', () {

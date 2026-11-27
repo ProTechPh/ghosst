@@ -326,11 +326,11 @@ class Backend {
     }
   }
 
-  /// Client-side mirror of the API's REF-[A-Z2-9]{6} format, so a typo never
-  /// costs a round-trip. Empty string means invalid.
+  /// Client-side mirror of the API's accepted code format. Legacy codes may
+  /// contain 0/1 or lack the REF- prefix; empty string means invalid.
   static String normalizeReferralCode(String input) {
     final code = input.trim().toUpperCase();
-    return RegExp(r'^REF-[A-Z2-9]{6}$').hasMatch(code) ? code : '';
+    return RegExp(r'^(REF-)?[A-Z0-9]{4,12}$').hasMatch(code) ? code : '';
   }
 
   /// Share copy for the Profile share button: store link + invitation + code.
