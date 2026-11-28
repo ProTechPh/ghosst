@@ -503,6 +503,59 @@ void main() {
     expect(find.text('Caption r1'), findsOneWidget);
   });
 
+  testWidgets('inline tutorials stay compact on narrow and wide screens', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    Future<void> openTutorialsAt(Size size) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      await _pump(
+        tester,
+        load: (_, _) async => const ReelFeedPage(reels: [], nextOffset: 0),
+        loadTutorials: () async => const [
+          Tutorial(
+            id: 1,
+            title:
+                'A very long tutorial title that should stay limited in the feed preview',
+            slug: 'long-guide',
+            category: 'Guide',
+            videoUrl: 'https://youtu.be/abc123',
+            content:
+                'Complete guide with enough details to fill several lines. '
+                'Follow every step carefully and keep your account safe. '
+                'The full guide remains available when you open this tutorial.\n'
+                'Features:\n'
+                '- First feature with a longer explanation\n'
+                '- Second feature with another explanation\n'
+                '- Third feature with more details',
+            views: 0,
+            createdAt: '',
+          ),
+        ],
+      );
+      await _settle(tester);
+      final tutorialsTab = find.byKey(const ValueKey('reel-feed-tutorials'));
+      await tester.ensureVisible(tutorialsTab);
+      await tester.pump();
+      await tester.tap(tutorialsTab);
+      await _settle(tester);
+    }
+
+    await openTutorialsAt(const Size(320, 640));
+    final narrowCard = find.byKey(const ValueKey('reel-tutorial-1'));
+    expect(narrowCard, findsOneWidget);
+    expect(tester.getSize(narrowCard).height, lessThanOrEqualTo(360));
+
+    await openTutorialsAt(const Size(768, 1024));
+    final wideCard = find.byKey(const ValueKey('reel-tutorial-1'));
+    expect(wideCard, findsOneWidget);
+    expect(tester.getSize(wideCard).width, lessThanOrEqualTo(480));
+    expect(tester.getSize(wideCard).height, lessThanOrEqualTo(420));
+  });
+
   testWidgets('top-area drag does not switch reel tabs', (tester) async {
     await _pump(
       tester,
