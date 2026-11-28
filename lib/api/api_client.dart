@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 
 import '../services/session_store.dart';
@@ -18,6 +20,9 @@ import 'api_exception.dart';
 /// resolves on every network). An HTTP status from the primary — including a
 /// 403 — is never retried against the fallback, so a mobile-data IP that the
 /// origin serves fine never accidentally lands on Cloudflare's WAF.
+///
+/// API sockets prefer IPv4: some Wi-Fi routers hand out a broken IPv6 route,
+/// while IPv6-only networks still fall back to their IPv6 answer.
 class ApiClient {
   // Hindi browser ang app (Dart HttpClient): isang spoofed Chrome UA ang
   // nagti-trigger ng Cloudflare Browser Integrity Check na nagbibigay ng 403
@@ -55,7 +60,7 @@ class ApiClient {
           'user-agent': userAgent,
         },
       ),
-    );
+    )..httpClientAdapter = IOHttpClientAdapter(createHttpClient: _apiHttpClient);
     _primary.interceptors.add(_AuthInterceptor(
       dio: _primary,
       refreshDio: _refreshDio,
@@ -175,7 +180,8 @@ class ApiClient {
       e.type == DioExceptionType.unknown;
 
   static Dio _buildDio(String baseUrl) {
-    final dio = Dio();
+    final dio = Dio()
+      ..httpClientAdapter = IOHttpClientAdapter(createHttpClient: _apiHttpClient);
     dio.options = BaseOptions(
       baseUrl: baseUrl,
       connectTimeout: ApiConfig.connectTimeout,
@@ -190,6 +196,39 @@ class ApiClient {
       },
     );
     return dio;
+  }
+
+  static HttpClient _apiHttpClient() {
+    final client = HttpClient();
+    client.connectionFactory = (url, proxyHost, proxyPort) async {
+      final address = await preferredApiAddress(proxyHost ?? url.host);
+      final tcp = await Socket.startConnect(address, proxyPort ?? url.port);
+      final socket = await tcp.socket;
+      if (url.scheme != 'https' || proxyHost != null) return tcp;
+
+      Socket? current = socket;
+      final secure = SecureSocket.secure(socket, host: url.host).then((value) {
+        current = value;
+        return value;
+      });
+      return ConnectionTask.fromSocket(secure, () => current?.close());
+    };
+    return client;
+  }
+
+  @visibleForTesting
+  static Future<InternetAddress> preferredApiAddress(
+    String host, {
+    Future<List<InternetAddress>> Function(String)? resolve,
+  }) async {
+    final addresses = await (resolve ?? InternetAddress.lookup)(host);
+    if (addresses.isEmpty) {
+      throw SocketException('No address for $host');
+    }
+    for (final address in addresses) {
+      if (address.type == InternetAddressType.IPv4) return address;
+    }
+    return addresses.first;
   }
 
   static Map<String, dynamic> _asMap(dynamic data) =>
