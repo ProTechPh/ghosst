@@ -1,0 +1,12 @@
+{
+  "description": "Allow Ghosst app API clients past Browser Integrity Check only",
+  "position": {"before": ""},
+  "expression": "http.host eq \"ghossthub.com\" and http.request.uri.path starts_with \"/api/v1/\" and http.user_agent eq \"GhosstApp/1.0 (Android)\"",
+  "action": "skip",
+  "action_parameters": {
+    "products": ["bic"]
+  },
+  "logging": {
+    "enabled": true
+  }
+}

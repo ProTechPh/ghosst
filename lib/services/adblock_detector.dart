@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../api/api_client.dart';
 import '../api/api_config.dart';
 import 'security.dart';
 
@@ -190,7 +191,8 @@ class AdblockDetector {
   /// health page — a 404 still proves no filter stood in the way).
   static Future<bool> _probe(Uri url) async {
     final client = HttpClient()
-      ..connectionTimeout = const Duration(milliseconds: 2500);
+      ..connectionTimeout = const Duration(milliseconds: 2500)
+      ..userAgent = ApiClient.userAgent;
     try {
       final request = await client.getUrl(url).timeout(
         const Duration(milliseconds: 2500),
