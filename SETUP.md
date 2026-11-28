@@ -336,9 +336,8 @@ The API broadcasts straight to FCM (HTTP v1, one `messages:send` topic message);
 there is no Novu hop and no subscriber table. The app joins the topic itself with
 `FirebaseMessaging.subscribeToTopic('ghosst')`, so nothing is posted on launch
 and no FCM token is stored anywhere. Everything here is optional: with a blank
-service account, or on a host outside the `PUSH_HOST` list (`ghossthub.com`,
-`mail.ghossthub.com` — the app's base URL), `push_send()` logs `push skipped`
-and the feature is off.
+service account, or on a host outside the `PUSH_HOST` list (`ghossthub.com` —
+the app's only API host), `push_send()` logs `push skipped` and the feature is off.
 
 **One-time setup (owner):**
 

@@ -13,14 +13,6 @@ import 'api_exception.dart';
 /// One Dio, three interceptors: auth (401 → single-flight refresh) → retry
 /// (429/5xx/network) → log. Everything thrown at call sites is an [ApiException].
 ///
-/// Two hosts are kept: [ApiConfig.baseUrl] (origin, bypasses Cloudflare's DDoS
-/// L7) is tried first; if it cannot be reached at the transport level (DNS
-/// resolution failure, refused connection, timeout) the request is retried
-/// against [ApiConfig.fallbackBaseUrl] (the Cloudflare-proxied host, which
-/// resolves on every network). An HTTP status from the primary — including a
-/// 403 — is never retried against the fallback, so a mobile-data IP that the
-/// origin serves fine never accidentally lands on Cloudflare's WAF.
-///
 /// API sockets prefer IPv4: some Wi-Fi routers hand out a broken IPv6 route,
 /// while IPv6-only networks still fall back to their IPv6 answer.
 class ApiClient {
@@ -71,27 +63,10 @@ class ApiClient {
     if (kDebugMode) {
       _primary.interceptors.add(LogInterceptor(requestBody: true, responseBody: true));
     }
-
-    _fallback = (dio != null)
-        ? _primary
-        : _buildDio(ApiConfig.fallbackBaseUrl);
-    if (dio == null) {
-      _fallback.interceptors.add(_AuthInterceptor(
-        dio: _fallback,
-        refreshDio: _refreshDio,
-        session: _session,
-        onSignedOut: () => onSignedOut?.call(),
-      ));
-      _fallback.interceptors.add(_RetryInterceptor(_fallback));
-      if (kDebugMode) {
-        _fallback.interceptors.add(LogInterceptor(requestBody: true, responseBody: true));
-      }
-    }
   }
 
   final SessionStore _session;
   late final Dio _primary;
-  late final Dio _fallback;
   late final Dio _refreshDio;
 
   /// Set once by main.dart: fires when the refresh token is dead and the UI
@@ -160,24 +135,9 @@ class ApiClient {
     try {
       return await op(_primary);
     } on DioException catch (e) {
-      if (_isTransportFailure(e)) {
-        try {
-          return await op(_fallback);
-        } on DioException catch (e2) {
-          throw ApiException.fromDio(e2);
-        }
-      }
       throw ApiException.fromDio(e);
     }
   }
-
-  static bool _isTransportFailure(DioException e) =>
-      e.response == null ||
-      e.type == DioExceptionType.connectionError ||
-      e.type == DioExceptionType.connectionTimeout ||
-      e.type == DioExceptionType.sendTimeout ||
-      e.type == DioExceptionType.receiveTimeout ||
-      e.type == DioExceptionType.unknown;
 
   static Dio _buildDio(String baseUrl) {
     final dio = Dio()
