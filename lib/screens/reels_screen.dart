@@ -290,31 +290,6 @@ class _ReelsScreenState extends State<ReelsScreen> {
     }
   }
 
-  double? _swipeStartX;
-  double? _swipeStartY;
-
-  void _onSwipeDown(PointerDownEvent e) {
-    _swipeStartX = e.localPosition.dx;
-    _swipeStartY = e.localPosition.dy;
-  }
-
-  void _onSwipeUp(PointerUpEvent e) {
-    final startX = _swipeStartX;
-    final startY = _swipeStartY;
-    _swipeStartX = null;
-    _swipeStartY = null;
-    if (startX == null || startY == null || startY > 112) return;
-    final dx = e.localPosition.dx - startX;
-    if (dx.abs() < 60) return;
-    const sections = ['tutorials', 'feedback', 'following', 'for-you'];
-    final index = sections.indexOf(_section);
-    if (index < 0) return;
-    var nextIndex = dx < 0 ? index + 1 : index - 1;
-    if (nextIndex < 0) nextIndex = 0;
-    if (nextIndex >= sections.length) nextIndex = sections.length - 1;
-    _switchSection(sections[nextIndex]);
-  }
-
   void _switchSection(String section) {
     if (_section == section) return;
     setState(() {
@@ -559,131 +534,125 @@ class _ReelsScreenState extends State<ReelsScreen> {
               top: 0,
               left: 0,
               right: 0,
-              child: Listener(
-                key: const ValueKey('reels-swipe-area'),
-                behavior: HitTestBehavior.translucent,
-                onPointerDown: _onSwipeDown,
-                onPointerUp: _onSwipeUp,
-                child: SizedBox(
-                  height: kTouchMin + AppSpace.xl,
-                  child: Stack(
-                    children: [
-                      const Positioned.fill(
-                        child: IgnorePointer(
-                          child: DecoratedBox(
-                            key: ValueKey('reels-top-scrim'),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Colors.black54,
-                                  Colors.black26,
-                                  Colors.transparent,
-                                ],
-                                stops: [0, 0.55, 1],
-                              ),
+              child: SizedBox(
+                height: kTouchMin + AppSpace.xl,
+                child: Stack(
+                  children: [
+                    const Positioned.fill(
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          key: ValueKey('reels-top-scrim'),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black54,
+                                Colors.black26,
+                                Colors.transparent,
+                              ],
+                              stops: [0, 0.55, 1],
                             ),
                           ),
                         ),
                       ),
-                      SafeArea(
-                        bottom: false,
-                        child: SizedBox(
-                          height: kTouchMin + AppSpace.md,
-                          child: Stack(
-                            children: [
-                              Positioned(
-                                left: AppSpace.sm,
-                                right: widget.onOpenSearch != null
-                                    ? kTouchMin + AppSpace.sm
-                                    : AppSpace.sm,
-                                top: 0,
-                                bottom: 0,
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: SizedBox(
-                                    height: kTouchMin,
-                                    child: SingleChildScrollView(
-                                      key: const ValueKey('reels-tabs-scroll'),
-                                      scrollDirection: Axis.horizontal,
-                                      physics:
-                                          const AlwaysScrollableScrollPhysics(),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          _FeedTab(
-                                            feedKey: 'tutorials',
-                                            label: 'Tutorials',
-                                            selected: _section == 'tutorials',
-                                            onTap: () =>
-                                                _switchSection('tutorials'),
-                                          ),
-                                          _FeedTab(
-                                            feedKey: 'feedback',
-                                            label: 'Feedback',
-                                            selected: _section == 'feedback',
-                                            onTap: () =>
-                                                _switchSection('feedback'),
-                                          ),
-                                          _FeedTab(
-                                            feedKey: 'following',
-                                            label: 'Following',
-                                            selected: _section == 'following',
-                                            onTap: () {
-                                              if (_section == 'following') {
-                                                return;
-                                              }
-                                              setState(() {
-                                                _section = 'following';
-                                                _feed = 'following';
-                                              });
-                                              unawaited(_load(reset: true));
-                                            },
-                                          ),
-                                          _FeedTab(
-                                            feedKey: 'for-you',
-                                            label: 'For You',
-                                            showChevron: true,
-                                            selected: _section == 'for-you',
-                                            onTap: () {
-                                              if (_section == 'for-you') return;
-                                              setState(() {
-                                                _section = 'for-you';
-                                                _feed = 'for-you';
-                                              });
-                                              unawaited(_load(reset: true));
-                                            },
-                                          ),
-                                        ],
-                                      ),
+                    ),
+                    SafeArea(
+                      bottom: false,
+                      child: SizedBox(
+                        height: kTouchMin + AppSpace.md,
+                        child: Stack(
+                          children: [
+                            Positioned(
+                              left: AppSpace.sm,
+                              right: widget.onOpenSearch != null
+                                  ? kTouchMin + AppSpace.sm
+                                  : AppSpace.sm,
+                              top: 0,
+                              bottom: 0,
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: SizedBox(
+                                  height: kTouchMin,
+                                  child: SingleChildScrollView(
+                                    key: const ValueKey('reels-tabs-scroll'),
+                                    scrollDirection: Axis.horizontal,
+                                    physics:
+                                        const AlwaysScrollableScrollPhysics(),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        _FeedTab(
+                                          feedKey: 'for-you',
+                                          label: 'For You',
+                                          showChevron: true,
+                                          selected: _section == 'for-you',
+                                          onTap: () {
+                                            if (_section == 'for-you') return;
+                                            setState(() {
+                                              _section = 'for-you';
+                                              _feed = 'for-you';
+                                            });
+                                            unawaited(_load(reset: true));
+                                          },
+                                        ),
+                                        _FeedTab(
+                                          feedKey: 'following',
+                                          label: 'Following',
+                                          selected: _section == 'following',
+                                          onTap: () {
+                                            if (_section == 'following') {
+                                              return;
+                                            }
+                                            setState(() {
+                                              _section = 'following';
+                                              _feed = 'following';
+                                            });
+                                            unawaited(_load(reset: true));
+                                          },
+                                        ),
+                                        _FeedTab(
+                                          feedKey: 'tutorials',
+                                          label: 'Tutorials',
+                                          selected: _section == 'tutorials',
+                                          onTap: () =>
+                                              _switchSection('tutorials'),
+                                        ),
+                                        _FeedTab(
+                                          feedKey: 'feedback',
+                                          label: 'Feedback',
+                                          selected: _section == 'feedback',
+                                          onTap: () =>
+                                              _switchSection('feedback'),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
                               ),
-                              if (widget.onOpenSearch != null)
-                                Positioned(
-                                  right: AppSpace.sm,
-                                  top: 0,
-                                  child: SizedBox(
-                                    height: kTouchMin,
-                                    child: IconButton(
-                                      key: const ValueKey('reels-search'),
-                                      tooltip: 'Search',
-                                      icon: const Icon(
-                                        Icons.search,
-                                        color: Colors.white,
-                                      ),
-                                      onPressed: widget.onOpenSearch,
+                            ),
+                            if (widget.onOpenSearch != null)
+                              Positioned(
+                                right: AppSpace.sm,
+                                top: 0,
+                                child: SizedBox(
+                                  height: kTouchMin,
+                                  child: IconButton(
+                                    key: const ValueKey('reels-search'),
+                                    tooltip: 'Search',
+                                    icon: const Icon(
+                                      Icons.search,
+                                      color: Colors.white,
                                     ),
+                                    onPressed: widget.onOpenSearch,
                                   ),
                                 ),
-                            ],
-                          ),
+                              ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
