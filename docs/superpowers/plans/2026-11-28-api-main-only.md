@@ -139,10 +139,10 @@ git commit -m "fix: use ghossthub.com as the only API host"
 - Consumes: verified Task 6 release candidate and Cloudflare dashboard access.
 - Produces: no `mail.ghossthub.com` DNS record; `ghossthub.com` remains proxied and healthy.
 
-- [ ] Delete only the `mail.ghossthub.com` A record pointing to `18.136.157.239`.
-- [ ] Do not change the `ghossthub.com` proxy, SSL/TLS mode, or certificate.
-- [ ] Verify public resolvers return NXDOMAIN for `mail.ghossthub.com`.
-- [ ] Verify `ghossthub.com` still resolves to Cloudflare and `GET https://ghossthub.com/api/v1/products` returns 200 JSON.
+- [x] Delete only the `mail.ghossthub.com` A record pointing to `18.136.157.239`.
+- [x] Do not change the `ghossthub.com` proxy, SSL/TLS mode, or certificate.
+- [x] Verify public resolvers return NXDOMAIN for `mail.ghossthub.com`.
+- [x] Verify `ghossthub.com` still resolves to Cloudflare and `GET https://ghossthub.com/api/v1/products` returns 200 JSON.
 
 ### Task 8: Distribute and monitor
 
@@ -152,7 +152,7 @@ git commit -m "fix: use ghossthub.com as the only API host"
 **Interfaces:**
 - Consumes: Tasks 6–7.
 
-- [ ] Distribute the verified main-only APK.
-- [ ] Check PHP device logs for successful `host=ghossthub.com` requests from the new app.
-- [ ] Check Cloudflare security analytics for new `/api/v1/` 403s or mitigations.
-- [ ] Report any regression immediately; there is no origin-host fallback by design.
+- [ ] Owner: distribute the verified main-only APK.
+- [x] Check PHP device logs for successful `host=ghossthub.com` requests from the new app.
+- [x] Check Cloudflare security analytics for new `/api/v1/` 403s or mitigations.
+- [x] Report any regression immediately; there is no origin-host fallback by design.
