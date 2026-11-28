@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 
 import '../services/session_store.dart';
@@ -11,13 +13,8 @@ import 'api_exception.dart';
 /// One Dio, three interceptors: auth (401 → single-flight refresh) → retry
 /// (429/5xx/network) → log. Everything thrown at call sites is an [ApiException].
 ///
-/// Two hosts are kept: [ApiConfig.baseUrl] (origin, bypasses Cloudflare's DDoS
-/// L7) is tried first; if it cannot be reached at the transport level (DNS
-/// resolution failure, refused connection, timeout) the request is retried
-/// against [ApiConfig.fallbackBaseUrl] (the Cloudflare-proxied host, which
-/// resolves on every network). An HTTP status from the primary — including a
-/// 403 — is never retried against the fallback, so a mobile-data IP that the
-/// origin serves fine never accidentally lands on Cloudflare's WAF.
+/// API sockets prefer IPv4: some Wi-Fi routers hand out a broken IPv6 route,
+/// while IPv6-only networks still fall back to their IPv6 answer.
 class ApiClient {
   // Hindi browser ang app (Dart HttpClient): isang spoofed Chrome UA ang
   // nagti-trigger ng Cloudflare Browser Integrity Check na nagbibigay ng 403
@@ -55,7 +52,7 @@ class ApiClient {
           'user-agent': userAgent,
         },
       ),
-    );
+    )..httpClientAdapter = IOHttpClientAdapter(createHttpClient: _apiHttpClient);
     _primary.interceptors.add(_AuthInterceptor(
       dio: _primary,
       refreshDio: _refreshDio,
@@ -66,27 +63,10 @@ class ApiClient {
     if (kDebugMode) {
       _primary.interceptors.add(LogInterceptor(requestBody: true, responseBody: true));
     }
-
-    _fallback = (dio != null)
-        ? _primary
-        : _buildDio(ApiConfig.fallbackBaseUrl);
-    if (dio == null) {
-      _fallback.interceptors.add(_AuthInterceptor(
-        dio: _fallback,
-        refreshDio: _refreshDio,
-        session: _session,
-        onSignedOut: () => onSignedOut?.call(),
-      ));
-      _fallback.interceptors.add(_RetryInterceptor(_fallback));
-      if (kDebugMode) {
-        _fallback.interceptors.add(LogInterceptor(requestBody: true, responseBody: true));
-      }
-    }
   }
 
   final SessionStore _session;
   late final Dio _primary;
-  late final Dio _fallback;
   late final Dio _refreshDio;
 
   /// Set once by main.dart: fires when the refresh token is dead and the UI
@@ -155,27 +135,13 @@ class ApiClient {
     try {
       return await op(_primary);
     } on DioException catch (e) {
-      if (_isTransportFailure(e)) {
-        try {
-          return await op(_fallback);
-        } on DioException catch (e2) {
-          throw ApiException.fromDio(e2);
-        }
-      }
       throw ApiException.fromDio(e);
     }
   }
 
-  static bool _isTransportFailure(DioException e) =>
-      e.response == null ||
-      e.type == DioExceptionType.connectionError ||
-      e.type == DioExceptionType.connectionTimeout ||
-      e.type == DioExceptionType.sendTimeout ||
-      e.type == DioExceptionType.receiveTimeout ||
-      e.type == DioExceptionType.unknown;
-
   static Dio _buildDio(String baseUrl) {
-    final dio = Dio();
+    final dio = Dio()
+      ..httpClientAdapter = IOHttpClientAdapter(createHttpClient: _apiHttpClient);
     dio.options = BaseOptions(
       baseUrl: baseUrl,
       connectTimeout: ApiConfig.connectTimeout,
@@ -190,6 +156,127 @@ class ApiClient {
       },
     );
     return dio;
+  }
+
+  static HttpClient _apiHttpClient() {
+    final client = HttpClient()..idleTimeout = const Duration(seconds: 3);
+    client.connectionFactory = (url, proxyHost, proxyPort) => connectApiSocket(
+      url,
+      proxyHost: proxyHost,
+      proxyPort: proxyPort,
+    );
+    return client;
+  }
+
+  @visibleForTesting
+  static Future<ConnectionTask<Socket>> connectApiSocket(
+    Uri url, {
+    String? proxyHost,
+    int? proxyPort,
+    Future<List<InternetAddress>> Function(String)? resolve,
+    Future<ConnectionTask<Socket>> Function(InternetAddress, int)? startConnect,
+    Future<SecureSocket> Function(Socket, String)? secure,
+  }) async {
+    final host = proxyHost ?? url.host;
+    final port = proxyPort ?? url.port;
+    final resolver = resolve ?? InternetAddress.lookup;
+    final connector = startConnect ?? Socket.startConnect;
+    final secureSocket = secure ??
+        (Socket socket, String host) => SecureSocket.secure(socket, host: host);
+
+    var cancelled = false;
+    ConnectionTask<Socket>? tcpTask;
+    Socket? currentSocket;
+    final result = Completer<Socket>();
+
+    void cancelTcp() {
+      final task = tcpTask;
+      if (task == null) return;
+      unawaited(task.socket.then<void>(
+        (_) {},
+        onError: (Object _, StackTrace _) {},
+      ));
+      task.cancel();
+    }
+
+    void cancel() {
+      if (cancelled) return;
+      cancelled = true;
+      cancelTcp();
+      currentSocket?.close();
+      if (!result.isCompleted) {
+        result.completeError(const SocketException('Connection cancelled'));
+      }
+    }
+
+    Future<Socket> connect() async {
+      final addresses = orderedApiAddresses(await resolver(host));
+      if (addresses.isEmpty) throw SocketException('No address for $host');
+
+      Object? lastError;
+      for (final address in addresses) {
+        if (cancelled) throw const SocketException('Connection cancelled');
+        tcpTask = null;
+        currentSocket = null;
+        try {
+          final task = await connector(address, port);
+          tcpTask = task;
+          if (cancelled) {
+            cancelTcp();
+            throw const SocketException('Connection cancelled');
+          }
+
+          final socket = await task.socket;
+          currentSocket = socket;
+          if (cancelled) {
+            socket.close();
+            throw const SocketException('Connection cancelled');
+          }
+
+          if (url.scheme == 'https' && proxyHost == null) {
+            final secure = await secureSocket(socket, url.host);
+            currentSocket = secure;
+            if (cancelled) {
+              secure.close();
+              throw const SocketException('Connection cancelled');
+            }
+            tcpTask = null;
+            return secure;
+          }
+
+          tcpTask = null;
+          return socket;
+        } catch (error) {
+          cancelTcp();
+          tcpTask = null;
+          currentSocket?.close();
+          currentSocket = null;
+          if (cancelled) throw const SocketException('Connection cancelled');
+          lastError = error;
+        }
+      }
+      throw lastError ?? SocketException('Could not connect to $host:$port');
+    }
+
+    unawaited(connect().then(
+      (socket) {
+        if (!result.isCompleted) result.complete(socket);
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (!result.isCompleted) result.completeError(error, stackTrace);
+      },
+    ));
+
+    return ConnectionTask.fromSocket(result.future, cancel);
+  }
+
+  @visibleForTesting
+  static List<InternetAddress> orderedApiAddresses(
+    List<InternetAddress> addresses,
+  ) {
+    final ipv4 = addresses.where((address) => address.type == InternetAddressType.IPv4);
+    final other = addresses.where((address) => address.type != InternetAddressType.IPv4);
+    return [...ipv4, ...other];
   }
 
   static Map<String, dynamic> _asMap(dynamic data) =>

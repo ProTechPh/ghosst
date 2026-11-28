@@ -417,7 +417,7 @@ void main() {
     expect(find.byKey(const ValueKey('reel-follow-badge-r2')), findsOneWidget);
   });
 
-  testWidgets('tutorials and feedback are tabs in the same feed', (
+  testWidgets('reel tabs start with For You and keep tap navigation', (
     tester,
   ) async {
     String? openedTutorial;
@@ -454,21 +454,27 @@ void main() {
     await _settle(tester);
 
     final tabs = [
+      const ValueKey('reel-feed-for-you'),
+      const ValueKey('reel-feed-following'),
       const ValueKey('reel-feed-tutorials'),
       const ValueKey('reel-feed-feedback'),
-      const ValueKey('reel-feed-following'),
-      const ValueKey('reel-feed-for-you'),
     ];
     final centers = <double>[];
+    final horizontalCenters = <double>[];
     for (final key in tabs) {
       expect(find.byKey(key), findsOneWidget);
-      centers.add(tester.getCenter(find.byKey(key)).dy);
+      final center = tester.getCenter(find.byKey(key));
+      centers.add(center.dy);
+      horizontalCenters.add(center.dx);
     }
-    for (final label in ['Tutorials', 'Feedback', 'Following', 'For You']) {
+    for (final label in ['For You', 'Following', 'Tutorials', 'Feedback']) {
       expect(find.text(label), findsOneWidget);
     }
     expect(find.byKey(const ValueKey('reels-tabs-scroll')), findsOneWidget);
     expect(centers.every((dy) => (dy - centers.first).abs() < 1), isTrue);
+    for (var i = 0; i < horizontalCenters.length - 1; i++) {
+      expect(horizontalCenters[i], lessThan(horizontalCenters[i + 1]));
+    }
 
     await tester.tap(find.byKey(const ValueKey('reel-feed-tutorials')));
     await _settle(tester);
@@ -497,7 +503,7 @@ void main() {
     expect(find.text('Caption r1'), findsOneWidget);
   });
 
-  testWidgets('horizontal drag cycles all four reel tabs', (tester) async {
+  testWidgets('top-area drag does not switch reel tabs', (tester) async {
     await _pump(
       tester,
       load: (feed, _) async => ReelFeedPage(
@@ -509,8 +515,10 @@ void main() {
     );
     await _settle(tester);
 
-    final area = find.byKey(const ValueKey('reels-swipe-area'));
-    expect(area, findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('reels-swipe-area')),
+      findsNothing,
+    );
     expect(
       tester.widget<Semantics>(
         find.byKey(const ValueKey('reel-feed-for-you')),
@@ -518,27 +526,15 @@ void main() {
       isTrue,
     );
 
-    Future<void> swipeRight() async {
-      await tester.dragFrom(const Offset(60, 30), const Offset(300, 0));
-      await _settle(tester);
-    }
-
-    Future<void> expectSelected(String key) async {
-      expect(
-        tester.widget<Semantics>(find.byKey(ValueKey(key))).properties.selected,
-        isTrue,
-      );
-    }
-
-    await swipeRight();
-    await expectSelected('reel-feed-following');
-    await swipeRight();
-    await expectSelected('reel-feed-feedback');
-    await swipeRight();
-    await expectSelected('reel-feed-tutorials');
-    await tester.dragFrom(const Offset(360, 30), const Offset(-300, 0));
+    await tester.dragFrom(const Offset(60, 30), const Offset(300, 0));
     await _settle(tester);
-    await expectSelected('reel-feed-feedback');
+
+    expect(
+      tester.widget<Semantics>(
+        find.byKey(const ValueKey('reel-feed-for-you')),
+      ).properties.selected,
+      isTrue,
+    );
   });
 
   testWidgets('plus badge follows the creator', (tester) async {
