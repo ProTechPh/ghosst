@@ -41,16 +41,17 @@
 **Interfaces:**
 - Produces: `referral_identity_hash(?string $email): ?string`
 - Produces: `ensure_referral_identity_column(): void`
-- Consumes: existing `db()`, `scalar()`, `run_sql()`, `sha256_hex()`, `T_USERS`
+- Consumes: existing `db()`, `one()`, `all_rows()`, `scalar()`, `run_sql()`, `sha256_hex()`, `T_USERS`
 
 - [ ] **Step 1: Write failing PHP identity tests**
 
 Create `ghosst-web/api/tests/referral_test.php` with minimal DB/API stubs and assertions:
 
 ```php
-check(referral_identity_hash(' User@Example.com ') === sha256('user@example.com'), 'email hash is normalized');
+check(referral_identity_hash(' User@Example.com ') === hash('sha256', 'user@example.com'), 'email hash is normalized');
 check(referral_identity_hash(null) === null, 'missing email has no identity');
 check(referral_identity_hash('user@example.com') !== 'user@example.com', 'raw email is not stored');
+// Migration exception and invalid index definition must both return 503 referral_unavailable.
 ```
 
 Run: `php ghosst-web/api/tests/referral_test.php`
@@ -61,13 +62,13 @@ Expected: FAIL because `referral_identity_hash()` does not exist.
 Create `ghosst-web/database/mobile_app_referral_identity.sql`:
 - Add `referrals_tracker.referred_email_hash CHAR(64) NULL` if missing.
 - Add unique index `uq_referred_email` if missing.
-- Backfill active tracker rows with `LOWER(SHA2(LOWER(TRIM(users.email)), 256))`.
+- Leave backfill to the API so claims and migration use the same PHP Unicode canonicalizer.
 
 - [ ] **Step 3: Implement the helpers**
 
 In `ghosst-web/api/routes/account.php`:
-- `referral_identity_hash(?string $email): ?string` returns null for empty email, otherwise `sha256_hex(strtolower(trim($email)))`.
-- `ensure_referral_identity_column(): void` checks `information_schema`, adds the column/index lazily, and backfills active rows. DDL must run before any claim transaction.
+- `referral_identity_hash(?string $email): ?string` returns null for empty email, otherwise `sha256_hex(mb_strtolower(trim($email), 'UTF-8'))`.
+- `ensure_referral_identity_column(): void` verifies the exact unique index, adds it lazily if missing, backfills active rows with the PHP canonicalizer, and throws `503 referral_unavailable` on failure. `$done` is set only after success; DDL runs before any claim/deletion transaction.
 
 Run: `php ghosst-web/api/tests/referral_test.php`
 Expected: PASS.
@@ -83,6 +84,7 @@ Confirm the migration, route helper, and PHP self-check exist under the gitignor
 **Files:**
 - Modify: `ghosst-web/api/routes/account.php`
 - Test: `ghosst-web/api/tests/referral_test.php`
+- Create: `ghosst-web/api/tests/referral_integration_test.php`
 
 **Interfaces:**
 - Consumes: Task 1 helpers and existing `POST /v1/me/referral` route.
@@ -94,6 +96,7 @@ Extend the fake DB test harness to cover:
 - Valid claim: tracker row has `referrer_reward = 5`, `referred_reward = 5`, and the caller email hash; both users gain 5 coins.
 - Existing `referred_id`: `409 referral_already_claimed`, no coin update.
 - Existing `referred_email_hash` under another user id: `409 referral_already_claimed`, no coin update.
+- Unique-key `23000` race: `409 referral_already_claimed`, rollback, no coin update.
 - Self code: `404 referral_code_not_found`.
 - Deleted referrer: `404 referral_code_not_found`.
 - Malformed code: `400 invalid_referral_code`.
@@ -108,9 +111,10 @@ In `ghosst-web/api/routes/account.php`:
 1. Validate code and load active caller/referrer before locking.
 2. Lock both ids with one ascending `ORDER BY id FOR UPDATE` query; revalidate active rows and referrer code.
 3. Compute the caller email hash and reject an existing tracker row matching either `referred_id` or `referred_email_hash`.
-4. Insert both reward values as `REFERRAL_COINS_REWARD`.
+4. Insert both reward values as `REFERRAL_COINS_REWARD`; translate a unique-key `23000` to `409 referral_already_claimed`.
 5. Update referrer and invitee coins inside the same transaction.
 6. Commit or roll back; return the configured reward.
+7. Add an opt-in live integration script for concurrent duplicate, reciprocal claims, and delete/re-register reuse against a dedicated multi-worker test API.
 
 - [ ] **Step 3: Run backend referral tests**
 
@@ -144,10 +148,10 @@ Re-run the PHP self-check and syntax check; leave the updated backend files in t
 
 - [ ] **Step 1: Write failing deletion-identity test**
 
-Assert that `referral_preserve_identity($uid)`:
-- Reads the current email.
-- Updates matching tracker rows with its normalized hash.
-- Does not delete the tracker row.
+Exercise `account_remove()` with the fake DB and assert:
+- The tracker row still exists after deletion.
+- Its normalized hash is written before the user email is anonymized.
+- `ensure_referral_identity_column()` appears before the deletion transaction starts.
 
 Run: `php ghosst-web/api/tests/referral_test.php`
 Expected: FAIL because the helper does not exist.
@@ -236,4 +240,5 @@ git commit -m "feat(app): display server referral reward for both users"
 - [ ] Confirm `referrals_tracker` has `referred_email_hash` and unique index `uq_referred_email`.
 - [ ] Two-user smoke: both balances increase by 5; replay is blocked.
 - [ ] Delete/re-register smoke with the same email: second claim is blocked.
+- [ ] Run `ghosst-web/api/tests/referral_integration_test.php` against a dedicated multi-worker test API for concurrent duplicate, reciprocal, and delete/re-register cases.
 - [ ] Confirm website `referral_balance` checkout behavior is unchanged.

@@ -43,17 +43,17 @@ Ang bawat valid referral claim ay magbigay ng **5 app coins sa referrer at 5 app
 1. Normalize at validate ang referral code.
 2. Hanapin ang active caller at active referrer mula sa code.
 3. I-lock ang dalawang user rows sa ascending `users.id` order; i-revalidate ang caller, referrer, at code pagkatapos ng lock.
-4. Compute `referred_email_hash = sha256(lower(trim(caller.email)))`.
+4. Compute `referred_email_hash = sha256(mb_strtolower(trim(caller.email), UTF-8))`.
 5. Block kung may existing tracker row para sa `referred_id` o `referred_email_hash`.
-6. Iinsert ang tracker row na may `referrer_reward = referred_reward = REFERRAL_COINS_REWARD` at ang email hash.
+6. Iinsert ang tracker row na may `referrer_reward = referred_reward = REFERRAL_COINS_REWARD` at ang email hash; ang unique-key race ay `409 referral_already_claimed`.
 7. I-update ang coins ng referrer at invitee sa iisang transaction.
-8. Icommit; rollback sa anumang error.
+8. Icommit; rollback sa anumang error. Ang migration/index failure ay `503 referral_unavailable` at hindi nagpapatuloy sa claim.
 
 ### Persistent identity / migration
 - Idagdag ang `referrals_tracker.referred_email_hash CHAR(64) NULL`.
 - Idagdag ang unique index `uq_referred_email`.
-- Backfill ng active accounts gamit ang `SHA2(LOWER(TRIM(email)),256)`.
-- Lazy safeguard sa API bago ang claim transaction at bago anonymize sa account deletion.
+- Backfill ng active accounts gamit ang parehong PHP `mb_strtolower()` canonicalizer na ginagamit sa claim.
+- Lazy safeguard sa API bago ang claim transaction at bago anonymize sa account deletion; fail closed kung hindi mave-verify ang column o unique index.
 - Sa deletion, panatilihin ang tracker row at siguraduhing may hash ang mga lumang claim rows bago mawala ang email.
 - Hindi mahuhuli nang lubos ang mga deleted accounts bago ang deployment na wala nang orihinal na email at wala ring `app_ad_rewards.email_hash`; ito ay kilalang limitation.
 
@@ -63,7 +63,8 @@ Ang bawat valid referral claim ay magbigay ng **5 app coins sa referrer at 5 app
 - Walang local coin write o optimistic reward credit.
 
 ## Tests
-- PHP self-check: equal credit values, email-hash normalization, duplicate-by-id, duplicate-by-hash, invalid/self/deleted referrer, deterministic lock ordering, at deletion preserves tracker/hash.
+- PHP self-check: equal credit values, email-hash normalization, duplicate-by-id, duplicate-by-hash, unique-key race, migration failure, invalid/self/deleted referrer, deterministic lock ordering, at `account_remove()` preserves tracker/hash before anonymization.
+- Opt-in live integration script: concurrent duplicate, reciprocal claims, at delete/re-register reuse sa dedicated multi-worker test API.
 - Flutter referral tests: server-provided reward amount ang ipinapakita; walang hardcoded amount.
 - Existing PHP tests, `flutter test`, `flutter analyze`, at PHP syntax checks.
 
