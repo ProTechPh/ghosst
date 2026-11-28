@@ -14,9 +14,6 @@ import 'session_store.dart';
 // which are re-exported so a screen needs only one import.
 export 'models.dart';
 
-/// Fixed reward credited by the API when a referral code is claimed.
-const int referralReward = 100;
-
 /// The signed-in account, as much of it as the UI shows.
 enum BackendSessionState { live, unknown, revoked }
 
@@ -352,10 +349,10 @@ class Backend {
     return text.toString();
   }
 
-  /// The invitee claims someone else's code; the API credits that referrer.
+  /// The API credits both participants and returns the reward for each.
   static Future<int> claimReferral(String code) async {
     final res = await _api.post('/me/referral', data: {'code': normalizeReferralCode(code)});
-    return res['reward'] as int? ?? referralReward;
+    return res['reward'] as int;
   }
 
   /// Remaining reward budget for the rolling 24h window. Advisory: the SSV

@@ -67,17 +67,28 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ReferralSheet(
-            referralCode: 'REF-ABC234',
-            onClaim: (code) async {
-              captured = code;
-              return 100;
-            },
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                builder: (_) => ReferralSheet(
+                  referralCode: 'REF-ABC234',
+                  onClaim: (code) async {
+                    captured = code;
+                    return 137;
+                  },
+                ),
+              ),
+              child: const Text('Open referral'),
+            ),
           ),
         ),
       ),
     );
     await tester.pump();
+    await tester.tap(find.text('Open referral'));
+    await tester.pumpAndSettle();
 
     await tester.enterText(find.byKey(const Key('referral-code-field')), ' ref-abc234 ');
     await tester.tap(find.byKey(const Key('referral-claim-button')));
@@ -85,6 +96,10 @@ void main() {
 
     expect(captured, 'REF-ABC234');
     expect(find.text('Invalid referral code'), findsNothing);
+    expect(
+      find.text('You and your friend earned 137 coins each'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('claim rejects a malformed code without calling the API', (

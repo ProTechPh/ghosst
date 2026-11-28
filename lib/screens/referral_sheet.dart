@@ -65,11 +65,11 @@ class _ReferralSheetState extends State<ReferralSheet> {
       _error = '';
     });
     try {
-      await widget.onClaim(normalized);
+      final reward = await widget.onClaim(normalized);
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Your friend earned 100 coins')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('You and your friend earned $reward coins each')),
+      );
       Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
