@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 
 enum ApiErrorKind {
@@ -5,6 +8,7 @@ enum ApiErrorKind {
   timeout,
   unauthorized,
   forbidden,
+  blocked,
   notFound,
   conflict,
   rateLimited,
@@ -23,6 +27,7 @@ class ApiException implements Exception {
     this.status,
     this.retryAfter,
     this.requestId = '',
+    this.diagnostic = '',
   });
 
   final ApiErrorKind kind;
@@ -32,6 +37,9 @@ class ApiException implements Exception {
   final Duration? retryAfter;
   final String requestId;
 
+  /// Redacted transport/HTTP detail for debug logs, never shown as the UI message.
+  final String diagnostic;
+
   bool get retryable =>
       kind == ApiErrorKind.network ||
       kind == ApiErrorKind.timeout ||
@@ -40,37 +48,41 @@ class ApiException implements Exception {
 
   /// What the user reads. Short, calm, never a stack trace.
   String get userMessage => switch (kind) {
-        ApiErrorKind.network =>
-          'No internet connection. If this keeps happening, set your '
-          'Private DNS to one.one.one.one (Cloudflare) or install the '
-          'Warp VPN app, then try again.',
-        ApiErrorKind.timeout => 'The response is taking too long. Try again.',
-        ApiErrorKind.unauthorized => 'Your session has expired. Sign in again.',
-        ApiErrorKind.forbidden => switch (code) {
-          'account_banned' =>
-            'Your account has been suspended. Contact support if you think this is a mistake.',
-          'not_owner' => 'This item does not belong to your account.',
-          'reels_post_banned' =>
-            'You cannot post reels right now. You can still browse and chat.',
-          _ => 'You do not have access to this. '
-              'If you use a VPN or Private DNS, turn it off and try again.',
-        },
-        ApiErrorKind.notFound => 'This item is no longer available.',
-        ApiErrorKind.conflict => message,
-        ApiErrorKind.rateLimited => 'Too many requests. Try again in a bit.',
-        ApiErrorKind.quotaExceeded =>
-          'The server quota is full for today. Come back tomorrow — your coins are safe.',
-        ApiErrorKind.server => switch (code) {
-          'server_busy' => 'The server is full right now. Try again in a bit.',
-          'server_schema' => 'The server is missing some setup. Please tell an admin.',
-          _ => 'There is a problem with the server. Try again.',
-        },
-        ApiErrorKind.badResponse => 'The server response could not be understood.',
-      };
+    ApiErrorKind.network =>
+      'Could not connect to Ghosst. Check your Wi-Fi or mobile data and try again.',
+    ApiErrorKind.timeout => 'The response is taking too long. Try again.',
+    ApiErrorKind.unauthorized => 'Your session has expired. Sign in again.',
+    ApiErrorKind.forbidden => switch (code) {
+      'account_banned' =>
+        'Your account has been suspended. Contact support if you think this is a mistake.',
+      'not_owner' => 'This item does not belong to your account.',
+      'reels_post_banned' =>
+        'You cannot post reels right now. You can still browse and chat.',
+      _ =>
+        message.isNotEmpty && message != 'HTTP 403'
+            ? message
+            : 'You do not have permission to do that.',
+    },
+    ApiErrorKind.blocked =>
+      'Ghosst was blocked by the server or network security service. Try another Wi-Fi or mobile data.',
+    ApiErrorKind.notFound => 'This item is no longer available.',
+    ApiErrorKind.conflict => message,
+    ApiErrorKind.rateLimited => 'Too many requests. Try again in a bit.',
+    ApiErrorKind.quotaExceeded =>
+      'The server quota is full for today. Come back tomorrow — your coins are safe.',
+    ApiErrorKind.server => switch (code) {
+      'server_busy' => 'The server is full right now. Try again in a bit.',
+      'server_schema' =>
+        'The server is missing some setup. Please tell an admin.',
+      _ => 'There is a problem with the server. Try again.',
+    },
+    ApiErrorKind.badResponse => 'The server response could not be understood.',
+  };
 
   int? get retryAfterSeconds => retryAfter?.inSeconds;
 
   factory ApiException.fromDio(DioException e) {
+    final diagnostic = describeDioException(e);
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
@@ -79,16 +91,25 @@ class ApiException implements Exception {
           kind: ApiErrorKind.timeout,
           message: e.message ?? 'Timeout',
           retryAfter: const Duration(seconds: 2),
+          diagnostic: diagnostic,
         );
       case DioExceptionType.connectionError:
-        return ApiException(kind: ApiErrorKind.network, message: e.message ?? 'Network error');
+        return ApiException(
+          kind: ApiErrorKind.network,
+          message: e.message ?? 'Network error',
+          diagnostic: diagnostic,
+        );
       default:
         break;
     }
 
     final response = e.response;
     if (response == null) {
-      return ApiException(kind: ApiErrorKind.network, message: e.message ?? '$e');
+      return ApiException(
+        kind: ApiErrorKind.network,
+        message: e.message ?? 'Network error',
+        diagnostic: diagnostic,
+      );
     }
 
     final status = response.statusCode;
@@ -96,21 +117,10 @@ class ApiException implements Exception {
     final requestId = _header(response, 'x-request-id') ?? '';
     final retryAfter = _parseRetryAfter(_header(response, 'retry-after'));
 
-    // 1) Cloudflare edge errors (1027 daily limit, 1015, 1102 CPU) arrive as
-    //    HTML, not our JSON envelope — sometimes with 429, sometimes 503.
-    if (data is String && _isCloudflarePage(data)) {
-      return ApiException(
-        kind: ApiErrorKind.quotaExceeded,
-        message: 'Cloudflare limit',
-        status: status,
-        retryAfter: retryAfter,
-        requestId: requestId,
-      );
-    }
-
-    // 2) R2 answers presigned PUT/GET failures with S3 XML.
+    // R2 answers presigned PUT/GET failures with S3 XML.
     if (data is String && data.contains('<Error>')) {
-      final code = RegExp(r'<Code>([^<]+)</Code>').firstMatch(data)?.group(1) ?? '';
+      final code =
+          RegExp(r'<Code>([^<]+)</Code>').firstMatch(data)?.group(1) ?? '';
       return ApiException(
         kind: code == 'SignatureDoesNotMatch' || code == 'AccessDenied'
             ? ApiErrorKind.forbidden
@@ -118,10 +128,36 @@ class ApiException implements Exception {
         message: code.isEmpty ? 'Storage error' : code,
         code: code,
         status: status,
+        diagnostic: diagnostic,
       );
     }
 
-    // 3) Our envelope: { ok: false, error: { code, message, requestId } }
+    // A 403 without our JSON error envelope is an edge/host block, not a
+    // permission failure from PHP (including empty and plain-text responses).
+    if (status == 403 && !(data is Map && data['error'] is Map)) {
+      return ApiException(
+        kind: ApiErrorKind.blocked,
+        message: 'Blocked by server security',
+        code: 'gateway_blocked',
+        status: status,
+        requestId: requestId,
+        diagnostic: diagnostic,
+      );
+    }
+
+    // Cloudflare quota/CPU pages arrive as HTML with 429 or 503.
+    if (data is String && _isCloudflarePage(data)) {
+      return ApiException(
+        kind: ApiErrorKind.quotaExceeded,
+        message: 'Cloudflare limit',
+        status: status,
+        retryAfter: retryAfter,
+        requestId: requestId,
+        diagnostic: diagnostic,
+      );
+    }
+
+    // Our envelope: { ok: false, error: { code, message, requestId } }
     if (data is Map && data['error'] is Map) {
       final error = data['error'] as Map;
       return ApiException(
@@ -131,6 +167,7 @@ class ApiException implements Exception {
         status: status,
         retryAfter: retryAfter,
         requestId: (error['requestId'] as String?) ?? requestId,
+        diagnostic: diagnostic,
       );
     }
 
@@ -141,6 +178,7 @@ class ApiException implements Exception {
         status: status,
         retryAfter: retryAfter ?? const Duration(seconds: 30),
         requestId: requestId,
+        diagnostic: diagnostic,
       );
     }
 
@@ -150,18 +188,19 @@ class ApiException implements Exception {
       status: status,
       retryAfter: retryAfter,
       requestId: requestId,
+      diagnostic: diagnostic,
     );
   }
 
   static ApiErrorKind _kindFor(int? status) => switch (status) {
-        401 => ApiErrorKind.unauthorized,
-        403 => ApiErrorKind.forbidden,
-        404 => ApiErrorKind.notFound,
-        409 || 402 => ApiErrorKind.conflict,
-        429 => ApiErrorKind.rateLimited,
-        final s? when s >= 500 => ApiErrorKind.server,
-        _ => ApiErrorKind.badResponse,
-      };
+    401 => ApiErrorKind.unauthorized,
+    403 => ApiErrorKind.forbidden,
+    404 => ApiErrorKind.notFound,
+    409 || 402 => ApiErrorKind.conflict,
+    429 => ApiErrorKind.rateLimited,
+    final s? when s >= 500 => ApiErrorKind.server,
+    _ => ApiErrorKind.badResponse,
+  };
 
   static bool _isCloudflarePage(String body) {
     final lower = body.toLowerCase();
@@ -195,5 +234,65 @@ class ApiException implements Exception {
   }
 
   @override
-  String toString() => requestId.isEmpty ? userMessage : '$userMessage (ref $requestId)';
+  String toString() =>
+      requestId.isEmpty ? userMessage : '$userMessage (ref $requestId)';
+}
+
+/// Safe, structured detail for debug logs. Request/response bodies are never
+/// logged wholesale: auth envelopes are allowlisted and other maps are redacted.
+String describeDioException(DioException error) {
+  final parts = <String>['dio=${error.type.name}'];
+  final cause = error.error;
+  if (cause is SocketException) {
+    parts.add('cause=SocketException message=${cause.message}');
+    if (cause.osError != null) {
+      parts.add(
+        'osError=${cause.osError?.errorCode}:${cause.osError?.message}',
+      );
+    }
+  } else if (cause is HandshakeException) {
+    parts.add('cause=HandshakeException message=${cause.message}');
+    if (cause.osError != null) {
+      parts.add(
+        'osError=${cause.osError?.errorCode}:${cause.osError?.message}',
+      );
+    }
+  } else if (cause != null) {
+    parts.add('cause=${cause.runtimeType}');
+  }
+
+  final response = error.response;
+  if (response != null) {
+    parts.add('status=${response.statusCode}');
+    final requestId = ApiException._header(response, 'x-request-id');
+    if (requestId != null) parts.add('requestId=$requestId');
+    final cfRay = ApiException._header(response, 'cf-ray');
+    if (cfRay != null) parts.add('cfRay=$cfRay');
+    final body = _diagnosticBody(response.data);
+    if (body.isNotEmpty) parts.add('body=$body');
+  }
+  return parts.join(' ');
+}
+
+String _diagnosticBody(Object? data) {
+  if (data is String) {
+    final lower = data.toLowerCase();
+    final edgeCode = RegExp(r'error\s*code\s*[:#]?\s*(\d{3,4})', caseSensitive: false)
+        .firstMatch(data)
+        ?.group(1);
+    if (edgeCode != null) return 'gatewayError=$edgeCode';
+    if (lower.contains('<html') || lower.contains('cloudflare')) {
+      return 'htmlResponse';
+    }
+    return 'textResponse';
+  }
+  if (data is Map && data['error'] is Map) {
+    final error = data['error'] as Map;
+    return jsonEncode({
+      'code': error['code'],
+      'requestId': error['requestId'],
+    });
+  }
+  if (data != null) return '<redacted ${data.runtimeType}>';
+  return '';
 }

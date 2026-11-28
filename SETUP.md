@@ -155,7 +155,14 @@ Symptom → sanhi:
 |---|---|
 | `Google sign-in is not available right now` | Kulang ang Android OAuth client para sa package + SHA-1 (release vs debug), o walang Google Play services |
 | `ApiException: Google sign-in failed` | `aud` ng ID token ay hindi tugma sa `GOOGLE_CLIENT_ID` (magkaibang project ang web client ng app at ng API) |
+| Blocked by the server/network security service | HTTP 403 mula sa Cloudflare/hosting edge; tingnan ang `api_error` log (`status`, `cf-ray`, request ID) at Cloudflare Security Events. Hindi ito PHP VPN filter. |
 | Pumasok pero bagong account na 0 coins | Ibang email ang Google account kaysa sa app account — gamitin ang email sign-in |
+
+Ang API socket ay sumusubok muna sa system DNS, tapos Cloudflare/Google DoH
+kung DNS/TCP/TLS ang failure. Pinapanatili ng TLS ang original hostname para sa
+SNI at certificate validation. Hindi ginagamit ang DoH para lumampas sa HTTP 403.
+Ang edge/WAF runbook at ang narrow Cloudflare BIC rule ay nasa
+`docs/network-auth-waf.md` at `docs/cloudflare/ghosst-app-bic-skip.json`.
 
 ## 3. AdMob
 
