@@ -717,44 +717,56 @@ class _ReelsScreenState extends State<ReelsScreen> {
         separatorBuilder: (_, _) => const SizedBox(height: AppSpace.md),
         itemBuilder: (_, i) {
           final t = _tutorials[i];
-          return GlowCard(
-            key: ValueKey('reel-tutorial-${t.id}'),
-            onTap: widget.onOpenTutorial != null
-                ? () => widget.onOpenTutorial!(t)
-                : () => unawaited(_openTutorial(t)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TutorialThumb(videoUrl: t.videoUrl),
-                Padding(
-                  padding: const EdgeInsets.all(AppSpace.md),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (t.category.isNotEmpty)
-                        Text(
-                          t.category.toUpperCase(),
-                          style: AppText.label.copyWith(
-                            fontSize: 10,
-                            color: AppColors.cyan,
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: GlowCard(
+                key: ValueKey('reel-tutorial-${t.id}'),
+                onTap: widget.onOpenTutorial != null
+                    ? () => widget.onOpenTutorial!(t)
+                    : () => unawaited(_openTutorial(t)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TutorialThumb(videoUrl: t.videoUrl),
+                    Padding(
+                      padding: const EdgeInsets.all(AppSpace.md),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (t.category.isNotEmpty)
+                            Text(
+                              t.category.toUpperCase(),
+                              style: AppText.label.copyWith(
+                                fontSize: 10,
+                                color: AppColors.cyan,
+                              ),
+                            ),
+                          const SizedBox(height: AppSpace.xs),
+                          Text(
+                            t.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppText.subtitle.copyWith(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        ),
-                      const SizedBox(height: AppSpace.xs),
-                      Text(
-                        t.title,
-                        style: AppText.subtitle.copyWith(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
+                          if (t.content.isNotEmpty) ...[
+                            const SizedBox(height: AppSpace.sm),
+                            Text(
+                              t.content,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppText.body,
+                            ),
+                          ],
+                        ],
                       ),
-                      if (t.content.isNotEmpty) ...[
-                        const SizedBox(height: AppSpace.sm),
-                        Text(t.content, style: AppText.body),
-                      ],
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           );
         },
