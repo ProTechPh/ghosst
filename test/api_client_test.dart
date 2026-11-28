@@ -4,44 +4,32 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ghosst/api/api_client.dart';
 
 void main() {
-  group('ApiClient.preferredApiAddress', () {
-    test('prefers IPv4 when a resolver returns IPv6 first', () async {
+  group('ApiClient.orderedApiAddresses', () {
+    test('orders IPv4 answers before IPv6 answers', () {
       final ipv6 = InternetAddress('2606:4700:3033::6815:428e');
       final ipv4 = InternetAddress('104.21.66.142');
 
-      final address = await ApiClient.preferredApiAddress(
-        'ghossthub.com',
-        resolve: (_) async => [ipv6, ipv4],
-      );
+      final addresses = ApiClient.orderedApiAddresses([ipv6, ipv4]);
 
-      expect(address, same(ipv4));
+      expect(addresses, [ipv4, ipv6]);
     });
 
-    test('keeps IPv6 when the network has no IPv4 answer', () async {
+    test('keeps every address in resolver order within each family', () {
+      final ipv4a = InternetAddress('104.21.66.142');
+      final ipv4b = InternetAddress('172.67.204.135');
       final ipv6 = InternetAddress('2606:4700:3033::6815:428e');
 
-      final address = await ApiClient.preferredApiAddress(
-        'ghossthub.com',
-        resolve: (_) async => [ipv6],
-      );
+      final addresses = ApiClient.orderedApiAddresses([ipv6, ipv4a, ipv4b]);
 
-      expect(address, same(ipv6));
+      expect(addresses, [ipv4a, ipv4b, ipv6]);
     });
 
-    test('fails clearly when DNS returns no addresses', () async {
-      await expectLater(
-        ApiClient.preferredApiAddress(
-          'ghossthub.com',
-          resolve: (_) async => const [],
-        ),
-        throwsA(
-          isA<SocketException>().having(
-            (error) => error.message,
-            'message',
-            contains('No address for ghossthub.com'),
-          ),
-        ),
-      );
+    test('keeps IPv6 when the network has no IPv4 answer', () {
+      final ipv6 = InternetAddress('2606:4700:3033::6815:428e');
+
+      final addresses = ApiClient.orderedApiAddresses([ipv6]);
+
+      expect(addresses, [ipv6]);
     });
   });
 }

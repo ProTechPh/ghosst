@@ -159,36 +159,124 @@ class ApiClient {
   }
 
   static HttpClient _apiHttpClient() {
-    final client = HttpClient();
-    client.connectionFactory = (url, proxyHost, proxyPort) async {
-      final address = await preferredApiAddress(proxyHost ?? url.host);
-      final tcp = await Socket.startConnect(address, proxyPort ?? url.port);
-      final socket = await tcp.socket;
-      if (url.scheme != 'https' || proxyHost != null) return tcp;
-
-      Socket? current = socket;
-      final secure = SecureSocket.secure(socket, host: url.host).then((value) {
-        current = value;
-        return value;
-      });
-      return ConnectionTask.fromSocket(secure, () => current?.close());
-    };
+    final client = HttpClient()..idleTimeout = const Duration(seconds: 3);
+    client.connectionFactory = (url, proxyHost, proxyPort) => connectApiSocket(
+      url,
+      proxyHost: proxyHost,
+      proxyPort: proxyPort,
+    );
     return client;
   }
 
   @visibleForTesting
-  static Future<InternetAddress> preferredApiAddress(
-    String host, {
+  static Future<ConnectionTask<Socket>> connectApiSocket(
+    Uri url, {
+    String? proxyHost,
+    int? proxyPort,
     Future<List<InternetAddress>> Function(String)? resolve,
+    Future<ConnectionTask<Socket>> Function(InternetAddress, int)? startConnect,
+    Future<SecureSocket> Function(Socket, String)? secure,
   }) async {
-    final addresses = await (resolve ?? InternetAddress.lookup)(host);
-    if (addresses.isEmpty) {
-      throw SocketException('No address for $host');
+    final host = proxyHost ?? url.host;
+    final port = proxyPort ?? url.port;
+    final resolver = resolve ?? InternetAddress.lookup;
+    final connector = startConnect ?? Socket.startConnect;
+    final secureSocket = secure ??
+        (Socket socket, String host) => SecureSocket.secure(socket, host: host);
+
+    var cancelled = false;
+    ConnectionTask<Socket>? tcpTask;
+    Socket? currentSocket;
+    final result = Completer<Socket>();
+
+    void cancelTcp() {
+      final task = tcpTask;
+      if (task == null) return;
+      unawaited(task.socket.then<void>(
+        (_) {},
+        onError: (Object _, StackTrace _) {},
+      ));
+      task.cancel();
     }
-    for (final address in addresses) {
-      if (address.type == InternetAddressType.IPv4) return address;
+
+    void cancel() {
+      if (cancelled) return;
+      cancelled = true;
+      cancelTcp();
+      currentSocket?.close();
+      if (!result.isCompleted) {
+        result.completeError(const SocketException('Connection cancelled'));
+      }
     }
-    return addresses.first;
+
+    Future<Socket> connect() async {
+      final addresses = orderedApiAddresses(await resolver(host));
+      if (addresses.isEmpty) throw SocketException('No address for $host');
+
+      Object? lastError;
+      for (final address in addresses) {
+        if (cancelled) throw const SocketException('Connection cancelled');
+        tcpTask = null;
+        currentSocket = null;
+        try {
+          final task = await connector(address, port);
+          tcpTask = task;
+          if (cancelled) {
+            cancelTcp();
+            throw const SocketException('Connection cancelled');
+          }
+
+          final socket = await task.socket;
+          currentSocket = socket;
+          if (cancelled) {
+            socket.close();
+            throw const SocketException('Connection cancelled');
+          }
+
+          if (url.scheme == 'https' && proxyHost == null) {
+            final secure = await secureSocket(socket, url.host);
+            currentSocket = secure;
+            if (cancelled) {
+              secure.close();
+              throw const SocketException('Connection cancelled');
+            }
+            tcpTask = null;
+            return secure;
+          }
+
+          tcpTask = null;
+          return socket;
+        } catch (error) {
+          cancelTcp();
+          tcpTask = null;
+          currentSocket?.close();
+          currentSocket = null;
+          if (cancelled) throw const SocketException('Connection cancelled');
+          lastError = error;
+        }
+      }
+      throw lastError ?? SocketException('Could not connect to $host:$port');
+    }
+
+    unawaited(connect().then(
+      (socket) {
+        if (!result.isCompleted) result.complete(socket);
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (!result.isCompleted) result.completeError(error, stackTrace);
+      },
+    ));
+
+    return ConnectionTask.fromSocket(result.future, cancel);
+  }
+
+  @visibleForTesting
+  static List<InternetAddress> orderedApiAddresses(
+    List<InternetAddress> addresses,
+  ) {
+    final ipv4 = addresses.where((address) => address.type == InternetAddressType.IPv4);
+    final other = addresses.where((address) => address.type != InternetAddressType.IPv4);
+    return [...ipv4, ...other];
   }
 
   static Map<String, dynamic> _asMap(dynamic data) =>

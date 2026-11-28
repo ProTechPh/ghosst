@@ -153,6 +153,14 @@ git commit -m "fix: use ghossthub.com as the only API host"
 - Consumes: Tasks 6–7.
 
 - [ ] Owner: distribute the verified main-only APK.
-- [x] Check PHP device logs for successful `host=ghossthub.com` requests from the new app.
-- [x] Check Cloudflare security analytics for new `/api/v1/` 403s or mitigations.
-- [x] Report any regression immediately; there is no origin-host fallback by design.
+- [x] Preflight: check PHP device logs for successful `host=ghossthub.com` requests.
+- [x] Preflight: check Cloudflare security analytics for current `/api/v1/` errors or mitigations.
+- [ ] Post-distribution: observe PHP device logs and Cloudflare security analytics for 24 hours.
+- [ ] Roll back or restore an origin path immediately if new `/api/v1/` 403s or transport failures spike; there is no origin-host fallback by design.
+
+### Final review fixes
+
+- [x] Important: try every resolved address, IPv4 first, instead of only the first answer.
+- [x] Important: return a cancellable connection task before TCP/TLS complete.
+- [x] Minor: preserve Dio's three-second idle timeout.
+- [ ] Minor (deferred): add CI adapter-level TLS/AAAA integration coverage; live production-adapter smoke passed.
